@@ -13,6 +13,11 @@ Frida, recovery, and research-session evidence.
 Runtime dependencies and Apple-provided SRD requirements are documented in the
 repository [`REQUIREMENTS.md`](../REQUIREMENTS.md).
 
+In the binary application, **Install All 0-Sky Requirements** runs a guided
+Terminal workflow for Homebrew Python 3.12, `dpkg`/`dpkg-deb`, USB/build tools,
+and the isolated pinned Python environment. Source builds require a separately
+supplied, integrity-checked Kit/wheelhouse as described below.
+
 ## Build and test
 
 ```sh

@@ -72,6 +72,7 @@ struct BridgeCoreTestRunner {
             ("process cancellation", processCancellation),
             ("normalized event bus", normalizedEventBus),
             ("safe log clearing", safeLogClearing),
+            ("complete dependency requirements", completeDependencyRequirements),
             ("SRD lifecycle state machine", srdLifecycleStateMachine),
             ("first failing dependency graph", firstFailingDependencyGraph),
             ("human-facing Cryptex label", cryptexDisplayLabel),
@@ -100,6 +101,17 @@ struct BridgeCoreTestRunner {
         }
         print("BRIDGE_CORE_TESTS total=\(tests.count) passed=\(assertions) failed=\(failures)")
         if failures > 0 { exit(1) }
+    }
+
+    private static func completeDependencyRequirements() async throws {
+        let formulae = Set(DependencyManager.requiredHomebrewFormulae)
+        try expect(formulae.contains("python@3.12"),
+                   "the guided installer omitted the required Python runtime")
+        try expect(formulae.contains("dpkg"),
+                   "the guided installer omitted dpkg")
+        try expect(DependencyManager.hostPythonCandidates.allSatisfy {
+            $0.contains("3.12")
+        }, "a non-3.12 interpreter was accepted as the 0-Sky host runtime")
     }
 
     private static func deviceParsing() async throws {

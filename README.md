@@ -17,6 +17,11 @@ See [`REQUIREMENTS.md`](REQUIREMENTS.md) for complete host, SDK, dependency,
 device, signing, and runtime requirements. Each component also has its own
 README with exact build commands.
 
+The binary Bridge release provides **Install All 0-Sky Requirements** in the
+GUI. Its guided Terminal installer provisions native Python 3.12,
+`dpkg`/`dpkg-deb`, USB/build tools, and the isolated pinned runtime instead of
+requiring end users to assemble those prerequisites manually.
+
 ## Quick source checks
 
 ```sh

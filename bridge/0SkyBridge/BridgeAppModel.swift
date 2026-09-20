@@ -638,7 +638,7 @@ final class BridgeAppModel: ObservableObject {
                     "Terminal could not open the dependency installer."
                 )
             }
-            statusMessage = "Dependency installer opened in Terminal. Return here when it finishes; status refreshes automatically."
+            statusMessage = "0-Sky Requirements Installer opened in Terminal. It installs Python 3.12, dpkg, USB tools, and the pinned environment; status refreshes automatically."
         } catch {
             lastError = "Could not open dependency installer: \(error.localizedDescription)"
         }

@@ -8,7 +8,7 @@
   "source_publication": "PII-sanitized",
   "pii_audit": "PASS",
   "bridge_build": "PASS",
-  "bridge_tests": "26/26 PASS",
+  "bridge_tests": "27/27 PASS",
   "link_build": "PASS",
   "control_build": "PASS",
   "control_tests": "10/10 PASS",

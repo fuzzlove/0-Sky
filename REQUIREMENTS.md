@@ -36,8 +36,9 @@ Developer ID Application/Installer certificates and Apple notarization.
 
 - Xcode command-line tools: `xcrun`, `clang`, `codesign`, `lipo`, `hdiutil`,
   `plutil`, and `swift`.
-- Homebrew dependencies: `python@3.12`, `libusbmuxd` (`iproxy`), `zstd`,
-  `dpkg`, and `ldid`.
+- Homebrew dependencies: `python@3.12`, `dpkg` (`dpkg` and `dpkg-deb`),
+  `libusbmuxd` (`iproxy`), `zstd`, `ldid`, `autoconf`, `automake`, and
+  `pkgconf`.
 - OpenSSH client utilities and standard macOS tools (`ssh`, `ssh-keygen`,
   `nc`, `lsof`, `tar`, `ditto`, `shasum`, and `launchctl`).
 - Python device tooling is installed into a private virtual environment. The
@@ -48,6 +49,13 @@ Developer ID Application/Installer certificates and Apple notarization.
 - The complete-project controller source is bundled with Bridge source builds, but
   its signed device payload Kit remains external and must include a valid
   `SHA256SUMS` manifest.
+
+Binary-release users should select **Install All 0-Sky Requirements** in
+0-Sky Bridge. The guided installer detects Apple Silicon and Intel Homebrew,
+can invoke Homebrew's official interactive bootstrap, explicitly installs
+Python 3.12 and dpkg, and creates the isolated pinned environment from the
+release wheelhouse. Apple's `/usr/bin/python3` may start the bootstrap but is
+not accepted as the completed 0-Sky runtime.
 
 ## 0-Sky Link — iOS/SRD
 

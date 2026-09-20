@@ -279,7 +279,7 @@ struct DependencyCard: View {
     @ObservedObject var model: BridgeAppModel
     var body: some View {
         Card("Dependencies", icon: "shippingbox") {
-            ForEach(model.dependencies.prefix(8)) { dependency in
+            ForEach(model.dependencies) { dependency in
                 HStack {
                     Image(systemName: dependency.available ? "checkmark.circle.fill" : "xmark.circle.fill")
                         .foregroundStyle(dependency.available ? .green : (dependency.required ? .red : .orange))
@@ -288,7 +288,10 @@ struct DependencyCard: View {
                 }
             }
             if model.hasMissingDependencies {
-                Button("Install Missing Dependencies") {
+                Text("One guided installer adds Homebrew Python 3.12, dpkg, USB tooling, and the pinned offline 0-Sky environment.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Button("Install All 0-Sky Requirements") {
                     model.installMissingDependencies()
                 }
                 .buttonStyle(.borderedProminent)
@@ -851,7 +854,7 @@ struct SettingsView: View {
                 Toggle("Automatically reconnect devices", isOn: $model.automaticReconnect)
                 Button("Open Setup Assistant") { model.openSetupAssistant() }
                 if model.hasMissingDependencies {
-                    Button("Install Missing Dependencies") { model.installMissingDependencies() }
+                    Button("Install All 0-Sky Requirements") { model.installMissingDependencies() }
                 }
             }
             Section("Devices") {
@@ -914,9 +917,9 @@ struct SetupAssistantView: View {
             Label(steps[step], systemImage: "\(step + 1).circle.fill").font(.title2)
             Text(instruction).foregroundStyle(.secondary)
             if step == 1 && model.hasMissingDependencies {
-                Button("Install Missing Dependencies") { model.installMissingDependencies() }
+                Button("Install All 0-Sky Requirements") { model.installMissingDependencies() }
                     .buttonStyle(.borderedProminent)
-                Text("The installer opens in Terminal so Homebrew and Apple can display their normal prompts.")
+                Text("Installs Python 3.12, dpkg, USB tools, and the isolated 0-Sky Python environment. Terminal keeps Apple and Homebrew prompts visible.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if step == 7 {
