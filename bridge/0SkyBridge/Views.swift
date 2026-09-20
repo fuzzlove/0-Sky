@@ -305,6 +305,7 @@ struct DevicesView: View {
     @ObservedObject var model: BridgeAppModel
     let addressRequiredAction: () -> Void
     @State private var confirmHostKeyRepair = false
+    @State private var removalCandidate: SkyDevice?
     var body: some View {
         HSplitView {
             List(model.devices, selection: Binding(
@@ -328,6 +329,10 @@ struct DevicesView: View {
                         requestHostKeyRepair: {
                             model.select(device.udid)
                             confirmHostKeyRepair = true
+                        },
+                        requestRemoval: {
+                            model.select(device.udid)
+                            removalCandidate = device
                         }
                     )
                 }
@@ -363,6 +368,15 @@ struct DevicesView: View {
                                 .disabled((!model.selectedHasProfile && !device.usbConnected) || model.isBusy)
                             if model.isBusy { Button("Cancel") { model.cancelCurrentOperations() } }
                         }
+                        Divider()
+                        HStack {
+                            Button("Remove Device from 0-Sky Bridge…", role: .destructive) {
+                                removalCandidate = device
+                            }
+                            .disabled(model.isBusy)
+                            Text("Removes this Mac's enrollment and owned services only. It does not erase or modify the Apple device.")
+                                .font(.caption).foregroundStyle(.secondary)
+                        }
                     } else { ContentUnavailableView("No Device", systemImage: "iphone.slash") }
                 }.padding(24)
             }
@@ -380,6 +394,23 @@ struct DevicesView: View {
         } message: {
             Text("Use only after confirming the selected UDID is physically connected by USB. Automatic recovery never replaces this trust pin.")
         }
+        .confirmationDialog(
+            "Remove this device from 0-Sky Bridge?",
+            isPresented: Binding(
+                get: { removalCandidate != nil },
+                set: { if !$0 { removalCandidate = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Remove from This Mac", role: .destructive) {
+                guard let device = removalCandidate else { return }
+                removalCandidate = nil
+                model.removeDeviceFromBridge(device)
+            }
+            Button("Cancel", role: .cancel) { removalCandidate = nil }
+        } message: {
+            Text("This stops and deletes only this device's 0-Sky-owned Mac services, local enrollment, host-key receipt, and cached transport capability. Research sessions, diagnostic evidence, shared SSH keys, and the Apple device are preserved. The device can be set up again after reconnecting it.")
+        }
     }
 }
 
@@ -389,6 +420,7 @@ struct DeviceContextActions: View {
     let openDetails: () -> Void
     let addressIssues: () -> Void
     let requestHostKeyRepair: () -> Void
+    let requestRemoval: () -> Void
 
     private var hasProfile: Bool { device.instanceName != nil }
 
@@ -458,6 +490,10 @@ struct DeviceContextActions: View {
             requestHostKeyRepair()
         }
         .disabled(!hasProfile || !device.usbConnected || model.isBusy)
+        Button("Remove Device from 0-Sky Bridge…", systemImage: "trash", role: .destructive) {
+            requestRemoval()
+        }
+        .disabled(model.isBusy)
     }
 }
 

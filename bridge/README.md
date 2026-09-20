@@ -54,3 +54,13 @@ and limitations. Unmeasured checks are explicitly `NOT_RUN`, never `PASS`.
 Exports include machine-readable and human-readable disclosure, normalized
 health, collection policy, and SHA-256 hashes without credentials, key material,
 tokens, or pairing records. See [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
+
+## Remove a device from this Mac
+
+The Devices detail panel and both device context menus provide **Remove Device
+from 0-Sky Bridge…** behind an explicit destructive-action confirmation. It
+removes only the exact device's validated Mac-side enrollment, owned
+instance-scoped LaunchAgents, and cached trust/transport receipts. It never
+contacts or modifies the Apple device and preserves research evidence,
+diagnostics, shared SSH keys, unrelated processes, and other device profiles.
+An active research session blocks removal.

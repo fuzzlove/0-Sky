@@ -13,7 +13,7 @@ private actor BridgeDaemonRuntime {
         let srdHealth: [String: SRDHealthReport]
     }
 
-    static let version = "1.1.1"
+    static let version = "1.1.2"
     private let startedAt = Date()
     private let environment = BridgeEnvironment()
     private var devices: [SkyDevice] = []
@@ -128,6 +128,26 @@ private actor BridgeDaemonRuntime {
         return result
     }
 
+    func removeDevice(deviceID: String) async throws -> DeviceRemovalResult {
+        _ = try BridgeValidation.validateUDID(deviceID)
+        if let session = await environment.sessions.current(),
+           session.manifest.deviceIdentifier == deviceID {
+            throw BridgeCoreError.operationFailed(
+                "Stop the active research session before removing this device. Evidence was preserved."
+            )
+        }
+        guard let profile = await environment.registry.profile(for: deviceID) else {
+            throw BridgeCoreError.operationFailed("The selected device has no Mac-side enrollment to remove.")
+        }
+        let result = try await environment.deviceRemoval.remove(profile: profile)
+        health.removeValue(forKey: deviceID)
+        srdHealth.removeValue(forKey: deviceID)
+        await environment.states.remove(deviceID: deviceID)
+        await environment.transports.remove(deviceID: deviceID)
+        await refreshDiscovery()
+        return result
+    }
+
     func startSession(name: String, deviceID: String) async throws -> ResearchSession {
         _ = try BridgeValidation.validateUDID(deviceID)
         await refreshDiscovery()
@@ -174,6 +194,9 @@ private final class BridgeDaemonObject: NSObject, BridgeDaemonProtocol, @uncheck
     }
     func recover(deviceID: String, reply: @escaping (Data?, String?) -> Void) {
         respond(reply) { try JSONEncoder.sky.encode(try await self.runtime.recover(deviceID: deviceID)) }
+    }
+    func removeDevice(deviceID: String, reply: @escaping (Data?, String?) -> Void) {
+        respond(reply) { try JSONEncoder.sky.encode(try await self.runtime.removeDevice(deviceID: deviceID)) }
     }
     func startResearchSession(name: String, deviceID: String, reply: @escaping (Data?, String?) -> Void) {
         respond(reply) { try JSONEncoder.sky.encode(try await self.runtime.startSession(name: name, deviceID: deviceID)) }

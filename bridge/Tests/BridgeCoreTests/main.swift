@@ -89,6 +89,7 @@ struct BridgeCoreTestRunner {
             ("session crash collection", sessionCrashCollection),
             ("wireless capability persistence", wirelessCapabilityPersistence),
             ("multiple trusted Macs", multipleTrustedMacs),
+            ("safe Mac-side device removal", safeDeviceRemoval),
         ]
         var failures = 0
         var assertions = 0
@@ -952,6 +953,105 @@ struct BridgeCoreTestRunner {
         )
         try expect(roundTrip.pairedHostCount == 3,
                    "multiple trusted-Mac count was not preserved")
+    }
+
+    private static func safeDeviceRemoval() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("0sky-remove-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let support = root.appendingPathComponent("support")
+        let agents = root.appendingPathComponent("LaunchAgents")
+        let instance = "iphone-srd-00000001"
+        let udid = "00000000-0000000000000001"
+        let profile = DeviceProfile(
+            udid: udid, instanceName: instance, localPort: 2222,
+            sshHostAlias: "0sky-device-aaaaaaaaaaaaaaaaaaaaaaaa",
+            sshKeyPath: root.appendingPathComponent("shared-key").path,
+            knownHostsPath: support.appendingPathComponent("instances/\(instance)/device-known-hosts").path
+        )
+        let fm = FileManager.default
+        for directory in [
+            support.appendingPathComponent("instances/\(instance)"),
+            support.appendingPathComponent("bridge-profiles"),
+            support.appendingPathComponent("state/\(instance)"),
+            support.appendingPathComponent("trusted-devices"),
+            support.appendingPathComponent("trusted-device-capabilities"),
+            support.appendingPathComponent("research_sessions/preserved-session"),
+            support.appendingPathComponent("instances/unrelated-device"), agents,
+        ] {
+            try fm.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
+        let config: [String: Any] = [
+            "udid": udid, "instance": instance, "ssh_port": 2222,
+            "ssh_host_alias": profile.sshHostAlias, "ssh_key": profile.sshKeyPath,
+        ]
+        try JSONSerialization.data(withJSONObject: config).write(
+            to: support.appendingPathComponent("instances/\(instance)/config.json")
+        )
+        let digest = SHA256.hash(data: Data(udid.utf8))
+            .map { String(format: "%02x", $0) }.joined().prefix(24)
+        let files = [
+            support.appendingPathComponent("bridge-profiles/\(instance).json"),
+            support.appendingPathComponent("state/\(instance)/runtime"),
+            support.appendingPathComponent("trusted-devices/\(digest).json"),
+            support.appendingPathComponent("trusted-device-capabilities/\(digest).json"),
+            support.appendingPathComponent("research_sessions/preserved-session/manifest.json"),
+            support.appendingPathComponent("instances/unrelated-device/keep"),
+            root.appendingPathComponent("shared-key"),
+        ]
+        for file in files { try Data("fixture".utf8).write(to: file) }
+        for role in ["usbmux", "worker", "device-bridge", "bluetooth"] {
+            try Data("fixture".utf8).write(to: agents.appendingPathComponent(
+                "com.liquidskysecurity.crypstore-\(role).\(instance).plist"
+            ))
+        }
+        let unrelatedAgent = agents.appendingPathComponent("com.example.keep.plist")
+        try Data("keep".utf8).write(to: unrelatedAgent)
+
+        let events = EventBus()
+        let registry = DeviceRegistry(supportURL: support)
+        _ = try await registry.reload()
+        let manager = DeviceRemovalManager(
+            runner: ScriptRunner(), paths: BridgePaths(repositoryRoot: nil, supportRoot: support, bundledKitRoot: nil),
+            registry: registry, coordinator: OperationCoordinator(), events: events,
+            launchAgentsRoot: agents, launchctlURL: nil
+        )
+        let result = try await manager.remove(profile: profile)
+        try expect(result.researchEvidencePreserved && !result.deviceModified,
+                   "device removal reported mutation or evidence deletion")
+        try expect(!fm.fileExists(atPath: support.appendingPathComponent("instances/\(instance)").path),
+                   "exact device instance was not removed")
+        try expect(fm.fileExists(atPath: files[4].path)
+                   && fm.fileExists(atPath: files[5].path)
+                   && fm.fileExists(atPath: files[6].path)
+                   && fm.fileExists(atPath: unrelatedAgent.path),
+                   "device removal deleted evidence, a shared key, or unrelated configuration")
+        let removedProfile = await registry.profile(for: udid)
+        try expect(removedProfile == nil,
+                   "removed device remained in the registry")
+        let eventNames = await events.events(deviceID: udid).map(\.event)
+        try expect(eventNames.contains(.deviceRemovalStarted) && eventNames.contains(.deviceRemoved),
+                   "device removal did not publish normalized lifecycle events")
+
+        // A malicious instance symlink must be unlinked without following it.
+        let outside = root.appendingPathComponent("outside")
+        try fm.createDirectory(at: outside, withIntermediateDirectories: true)
+        let outsideMarker = outside.appendingPathComponent("keep")
+        try Data("keep".utf8).write(to: outsideMarker)
+        let symlinkInstance = "iphone-srd-00000002"
+        try fm.createSymbolicLink(
+            at: support.appendingPathComponent("instances/\(symlinkInstance)"),
+            withDestinationURL: outside
+        )
+        let symlinkProfile = DeviceProfile(
+            udid: "00000000-0000000000000002", instanceName: symlinkInstance,
+            localPort: 2223, sshHostAlias: "0sky-device-bbbbbbbbbbbbbbbbbbbbbbbb",
+            sshKeyPath: root.appendingPathComponent("shared-key").path,
+            knownHostsPath: support.appendingPathComponent("instances/\(symlinkInstance)/known").path
+        )
+        _ = try await manager.remove(profile: symlinkProfile)
+        try expect(fm.fileExists(atPath: outsideMarker.path),
+                   "device removal followed a malicious instance symlink")
     }
 
     private static func wirelessCapabilityPersistence() async throws {

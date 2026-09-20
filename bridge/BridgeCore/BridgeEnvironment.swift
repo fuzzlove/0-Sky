@@ -19,6 +19,7 @@ public struct BridgeEnvironment: Sendable {
     public let ssh: SSHManager
     public let pairing: PairingManager
     public let enrollment: DeviceEnrollmentManager
+    public let deviceRemoval: DeviceRemovalManager
     public let iosComponents: IOSComponentSetupManager
     public let wireless: WirelessPairingManager
     public let services: ServiceManager
@@ -87,6 +88,10 @@ public struct BridgeEnvironment: Sendable {
         self.pairing = pairing
         self.enrollment = DeviceEnrollmentManager(
             runner: runner, paths: paths, registry: registry, coordinator: coordinator
+        )
+        self.deviceRemoval = DeviceRemovalManager(
+            runner: runner, paths: paths, registry: registry,
+            coordinator: coordinator, events: events
         )
         self.iosComponents = IOSComponentSetupManager(
             runner: runner, paths: paths, coordinator: coordinator, events: events

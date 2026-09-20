@@ -63,6 +63,10 @@ final class BridgeAppModel: ObservableObject {
     private var refreshCount = 0
     private var previousConnections: [String: ConnectionKind] = [:]
     private var previousHealthStates: [String: HealthState] = [:]
+    /// Keeps a physically attached device out of the current Devices list
+    /// after the user removes it. The entry is released after a real detach,
+    /// allowing an intentional reconnect and new setup later.
+    private var dismissedConnectedDeviceIDs: Set<String> = []
     private var activeOperationTask: Task<Void, Never>?
     private var activeOperationToken: UUID?
 
@@ -206,9 +210,12 @@ final class BridgeAppModel: ObservableObject {
     func refresh(runHealth: Bool = false) async {
         dependencies = DependencyManager().inspect(paths: environment.paths)
         let serviceSnapshot = try? await daemonClient.snapshot(refresh: true)
-        let found: [SkyDevice]
-        if let serviceSnapshot { found = serviceSnapshot.devices }
-        else { found = await environment.discovery.discover() }
+        let discovered: [SkyDevice]
+        if let serviceSnapshot { discovered = serviceSnapshot.devices }
+        else { discovered = await environment.discovery.discover() }
+        let discoveredIDs = Set(discovered.map(\.udid))
+        dismissedConnectedDeviceIDs.formIntersection(discoveredIDs)
+        let found = discovered.filter { !dismissedConnectedDeviceIDs.contains($0.udid) }
         bridgeServiceStatus = serviceSnapshot == nil ? BridgeDaemonClient.registrationStatus() : "Connected"
         let oldConnections = previousConnections
         devices = found
@@ -393,6 +400,74 @@ final class BridgeAppModel: ObservableObject {
             }
             }
         }
+    }
+
+    func removeDeviceFromBridge(_ device: SkyDevice) {
+        let deviceID = device.udid
+        if activeResearchSession?.manifest.deviceIdentifier == deviceID {
+            lastError = "Stop the active research session before removing this device. Existing evidence will be preserved."
+            return
+        }
+        launchTrackedOperation("Remove Device from 0-Sky Bridge") { [weak self] in
+            guard let self else { return }
+            do {
+                var completionMessage: String
+                self.reconnectTasks[deviceID]?.cancel()
+                self.reconnectTasks.removeValue(forKey: deviceID)
+                if let profile = await self.environment.registry.profile(for: deviceID) {
+                    let result: DeviceRemovalResult
+                    let serviceVersion = self.bridgeServiceStatus == "Connected"
+                        ? try? await self.daemonClient.version() : nil
+                    if serviceVersion.map(Self.supportsServiceDeviceRemoval) == true {
+                        result = try await self.daemonClient.removeDevice(deviceID: deviceID)
+                        _ = try await self.environment.registry.reload()
+                    } else {
+                        result = try await self.environment.deviceRemoval.remove(profile: profile)
+                    }
+                    completionMessage = result.serviceStopFailures.isEmpty
+                        ? "Device removed from this Mac. Research evidence was preserved; the Apple device was not modified."
+                        : "Device removed from this Mac. Some already-stopped services could not be booted out; their definitions were removed."
+                } else {
+                    await self.environment.events.publish(BridgeEvent(
+                        event: .deviceRemoved, deviceID: deviceID,
+                        component: "device_manager",
+                        message: "Unenrolled connected device dismissed from the current Devices list.",
+                        observed: ["had_local_enrollment": .bool(false)],
+                        expected: ["device_modified": .bool(false)],
+                        evidence: ["research_evidence_preserved": .bool(true)]
+                    ))
+                    completionMessage = "Connected device removed from the current list. It can reappear after it is unplugged and reconnected."
+                }
+                self.dismissedConnectedDeviceIDs.insert(deviceID)
+                await self.environment.states.remove(deviceID: deviceID)
+                await self.environment.transports.remove(deviceID: deviceID)
+                self.previousConnections.removeValue(forKey: deviceID)
+                self.previousHealthStates.removeValue(forKey: deviceID)
+                self.health = nil
+                self.srdHealthReport = nil
+                self.services = []
+                self.connectionMetrics = nil
+                self.selectedHasProfile = false
+                self.selectedPairedHostCount = 0
+                self.selectedDeviceID = nil
+                await self.refresh(runHealth: false)
+                self.statusMessage = completionMessage
+                await self.environment.logs.append(
+                    category: .device, level: .info,
+                    message: "Removed exact device from this Mac; device state and research evidence were preserved.",
+                    deviceID: deviceID
+                )
+            } catch {
+                self.lastError = "Device removal failed: \(DiagnosticRedactor.redact(error.localizedDescription))"
+                self.statusMessage = "Device was not removed. Existing configuration and evidence were preserved."
+            }
+        }
+    }
+
+    private static func supportsServiceDeviceRemoval(_ version: String) -> Bool {
+        let values = version.split(separator: ".").prefix(3).map { Int($0) ?? 0 }
+        let padded = values + Array(repeating: 0, count: max(0, 3 - values.count))
+        return (padded[0], padded[1], padded[2]) >= (1, 1, 2)
     }
 
     func setupCompleteIOSProject() {

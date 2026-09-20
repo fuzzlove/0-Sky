@@ -726,6 +726,8 @@ public actor TransportCoordinator {
     }
 
     public func status(deviceID: String) -> ConnectionMetrics? { metrics[deviceID] }
+
+    public func remove(deviceID: String) { metrics.removeValue(forKey: deviceID) }
 }
 
 public struct OwnedProcess: Codable, Hashable, Sendable {

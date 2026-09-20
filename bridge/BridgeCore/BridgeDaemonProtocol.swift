@@ -30,6 +30,7 @@ private final class XPCReplyGate<Value: Sendable>: @unchecked Sendable {
     func serviceVersion(reply: @escaping (String) -> Void)
     func snapshot(refresh: Bool, reply: @escaping (Data?, String?) -> Void)
     func recover(deviceID: String, reply: @escaping (Data?, String?) -> Void)
+    func removeDevice(deviceID: String, reply: @escaping (Data?, String?) -> Void)
     func startResearchSession(name: String, deviceID: String,
                               reply: @escaping (Data?, String?) -> Void)
     func stopResearchSession(reply: @escaping (Data?, String?) -> Void)
@@ -106,6 +107,16 @@ public final class BridgeDaemonClient: @unchecked Sendable {
             }
         }
         return try JSONDecoder.sky.decode(BridgeHealthSnapshot.self, from: data)
+    }
+
+    public func removeDevice(deviceID: String) async throws -> DeviceRemovalResult {
+        _ = try BridgeValidation.validateUDID(deviceID)
+        let data: Data = try await withProxy(timeoutSeconds: 90) { proxy, finish in
+            proxy.removeDevice(deviceID: deviceID) { data, error in
+                finish(Self.result(data: data, error: error))
+            }
+        }
+        return try JSONDecoder.sky.decode(DeviceRemovalResult.self, from: data)
     }
 
     public func startResearchSession(name: String, deviceID: String) async throws -> ResearchSession {

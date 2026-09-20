@@ -25,6 +25,7 @@ struct RootView: View {
     @ObservedObject var model: BridgeAppModel
     @State private var section: BridgeSection? = .dashboard
     @State private var pendingHostKeyRepairDeviceID: String?
+    @State private var pendingDeviceRemoval: SkyDevice?
 
     var body: some View {
         NavigationSplitView {
@@ -67,6 +68,10 @@ struct RootView: View {
                                 requestHostKeyRepair: {
                                     model.select(device.udid)
                                     pendingHostKeyRepairDeviceID = device.udid
+                                },
+                                requestRemoval: {
+                                    model.select(device.udid)
+                                    pendingDeviceRemoval = device
                                 }
                             )
                         }
@@ -131,6 +136,23 @@ struct RootView: View {
             Button("Cancel", role: .cancel) { pendingHostKeyRepairDeviceID = nil }
         } message: {
             Text("Use only after confirming the selected UDID is physically connected by USB. Automatic recovery never replaces this trust pin.")
+        }
+        .confirmationDialog(
+            "Remove this device from 0-Sky Bridge?",
+            isPresented: Binding(
+                get: { pendingDeviceRemoval != nil },
+                set: { if !$0 { pendingDeviceRemoval = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Remove from This Mac", role: .destructive) {
+                guard let device = pendingDeviceRemoval else { return }
+                pendingDeviceRemoval = nil
+                model.removeDeviceFromBridge(device)
+            }
+            Button("Cancel", role: .cancel) { pendingDeviceRemoval = nil }
+        } message: {
+            Text("Only the exact device's Mac-side 0-Sky enrollment, owned services, and cached trust/capability receipts are removed. Research evidence and the Apple device are preserved.")
         }
         .alert("0-Sky Bridge", isPresented: Binding(
             get: { model.lastError != nil },

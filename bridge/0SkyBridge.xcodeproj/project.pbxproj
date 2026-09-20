@@ -46,6 +46,9 @@
 		4E7D7EA521A2134EFC0895DD = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeviceRegistry.swift"; sourceTree = "<group>";
 		};
+		DCCFD1BE2D44CE34241EEB0D = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeviceRemovalManager.swift"; sourceTree = "<group>";
+		};
 		633EBD606EB8C8ED3D746BAF = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiagnosticExporter.swift"; sourceTree = "<group>";
 		};
@@ -217,6 +220,9 @@
 		33FA21958B718B6A7B7E04C0 = {
 			isa = PBXBuildFile; fileRef = 4E7D7EA521A2134EFC0895DD;
 		};
+		E574AB26AC7F41077E8D27E7 = {
+			isa = PBXBuildFile; fileRef = DCCFD1BE2D44CE34241EEB0D;
+		};
 		13EBC74D4DA9E585386D62A0 = {
 			isa = PBXBuildFile; fileRef = 633EBD606EB8C8ED3D746BAF;
 		};
@@ -360,6 +366,7 @@
 				01831E430EACFF630C3BE347 /* DeviceDiscoveryManager.swift */,
 				729080F1FBD645F6185C378E /* DeviceEnrollmentManager.swift */,
 				4E7D7EA521A2134EFC0895DD /* DeviceRegistry.swift */,
+				DCCFD1BE2D44CE34241EEB0D /* DeviceRemovalManager.swift */,
 				633EBD606EB8C8ED3D746BAF /* DiagnosticExporter.swift */,
 				39F683293B29312AB8758B9B /* DiagnosticRedactor.swift */,
 				AF6BBEE5EB210377CFEBA6D8 /* HealthArchitecture.swift */,
@@ -472,6 +479,7 @@
 				F2B7B88BE6A024C85918B27C,
 				E101497ABF61E26B6330BA65,
 				33FA21958B718B6A7B7E04C0,
+				E574AB26AC7F41077E8D27E7,
 				13EBC74D4DA9E585386D62A0,
 				0581095264EAA5A0F3FCED31,
 				3E39404237212A86161F7FD4,
