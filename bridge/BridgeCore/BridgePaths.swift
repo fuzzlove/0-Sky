@@ -140,19 +140,21 @@ public struct BridgePaths: Sendable {
         let safeNames: Set<String> = [
             "pair.py", "install.py", "refresh.py", "audit_device.py",
             "bootstrap_device.py", "apple_device_transport.py", "uninstall.py",
+            "multi_host_pairing.py",
         ]
         guard safeNames.contains(name) else { throw BridgeCoreError.invalidPath(name) }
         // Pairing/trust logic is security-sensitive and must use the audited
         // application/repository revision. Per-instance copies remain the
         // compatibility fallback for other lifecycle scripts, but an old
         // pair.py must not erase a newer durable wireless proof.
-        if name == "pair.py", let repositoryRoot {
+        let requiresCurrentRevision = name == "pair.py" || name == "multi_host_pairing.py"
+        if requiresCurrentRevision, let repositoryRoot {
             let source = repositoryRoot.appendingPathComponent(
                 "exploitdev/srdsh-work/components/zero-sky/kit/host-mac/\(name)"
             )
             if FileManager.default.isReadableFile(atPath: source.path) { return source }
         }
-        if name == "pair.py", let bundledKitRoot {
+        if requiresCurrentRevision, let bundledKitRoot {
             let bundled = bundledKitRoot.appendingPathComponent("host-mac/\(name)")
             if FileManager.default.isReadableFile(atPath: bundled.path) { return bundled }
         }

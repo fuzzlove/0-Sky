@@ -80,7 +80,9 @@ public actor DeviceRegistry {
                 sshKeyPath: config["ssh_key"] as? String ?? "",
                 knownHostsPath: config["ssh_known_hosts"] as? String
                     ?? directory.appendingPathComponent("device-known-hosts").path,
-                macIdentityFingerprint: pairing?["mac_identity_fingerprint"] as? String
+                macIdentityFingerprint: pairing?["mac_identity_fingerprint"] as? String,
+                pairedHostCount: (pairing?["paired_host_count"] as? NSNumber)?.intValue
+                    ?? (pairing?["verified"] as? Bool == true ? 1 : 0)
             )
             loaded[udid] = profile
         }

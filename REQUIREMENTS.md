@@ -114,3 +114,15 @@ The following are intentionally distributed separately or generated locally:
 - Prebuilt IPAs, DEBs, DMGs, PKGs, Frida binaries, Python wheels, and Procursus
   bootstrap archives.
 - Device logs, crash reports, screenshots, research evidence, and user state.
+
+## Multi-computer pairing requirements
+
+- Each Mac must independently complete Apple's physical Trust/Developer Paired
+  Macs approval and have its own local 0-Sky instance, SSH key, and Mac identity.
+- The initial additional-Mac authorization requires the exact SRD connected by
+  USB to an already paired Mac. Network trust-on-first-use is not allowed.
+- Signed public-only requests expire after seven days and are limited to one
+  device; private keys, Lockdown pairing records, bridge tokens, and passwords
+  must not be transferred.
+- A device accepts at most 16 0-Sky Mac identities. The registry migrates legacy
+  single-Mac markers and preserves existing entries atomically.

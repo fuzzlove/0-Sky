@@ -6,6 +6,7 @@ import AppKit
 import OSLog
 import ServiceManagement
 import UserNotifications
+import UniformTypeIdentifiers
 
 struct PairingWorkflowStep: Identifiable {
     enum State: Equatable { case complete, active, pending, failed }
@@ -37,6 +38,7 @@ final class BridgeAppModel: ObservableObject {
     @Published var automaticReconnect = true
     @Published var startAtLogin = false
     @Published var selectedHasProfile = false
+    @Published var selectedPairedHostCount = 0
     @Published var workflowActive = false
     @Published var connectionMetrics: ConnectionMetrics?
     @Published var activeResearchSession: ResearchSession?
@@ -283,10 +285,12 @@ final class BridgeAppModel: ObservableObject {
             services = []
             health = nil
             selectedHasProfile = false
+            selectedPairedHostCount = 0
             workflowActive = selectedDevice != nil
             return
         }
         selectedHasProfile = true
+        selectedPairedHostCount = profile.pairedHostCount
         workflowActive = true
         async let serviceValues = environment.services.allStatuses(profile: profile)
         async let healthValue = environment.health.check(device: device, profile: profile)
@@ -479,7 +483,7 @@ final class BridgeAppModel: ObservableObject {
     }
 
     func verifyPairing() { runPairing(mode: .verify, name: "Verify Pairing") }
-    func pairDevice() { runPairing(mode: .pair, name: "Pair Device") }
+    func pairDevice() { runPairing(mode: .pair, name: "Pair This Mac") }
     func repairPinnedHostKey() {
         runPairing(mode: .repairHostKey, name: "Repair Pinned Device Host Key")
     }
@@ -508,6 +512,77 @@ final class BridgeAppModel: ObservableObject {
             let state: BridgeState = self.lastError == nil ? .paired : .waitingForTrust
             await self.environment.states.restore(deviceID: device.udid, state: state)
             self.updateDisplayedState(device.udid, state)
+            if self.lastError == nil {
+                _ = try? await self.environment.registry.reload()
+                await self.refreshDetails()
+            }
+        }
+    }
+
+    func exportAdditionalMacPairingRequest() {
+        guard let device = selectedDevice else { return }
+        let panel = NSSavePanel()
+        panel.title = "Create Pairing Request for This Mac"
+        panel.nameFieldStringValue = "0sky-additional-mac-pairing-request.json"
+        panel.allowedContentTypes = [.json]
+        guard panel.runModal() == .OK, let destination = panel.url else { return }
+        launchTrackedOperation("Create Additional Mac Pairing Request") { [weak self] in
+            guard let self else { return }
+            await self.perform("Create Additional Mac Pairing Request") {
+                try await self.environment.pairing.exportAdditionalMacRequest(
+                    deviceID: device.udid, destination: destination
+                ) { event in
+                    Task { await self.environment.logs.append(
+                        category: .pairing,
+                        level: event.stream == .stderr ? .warning : .info,
+                        message: DiagnosticRedactor.redact(event.line),
+                        deviceID: device.udid
+                    ) }
+                }
+            }
+            if self.lastError == nil {
+                self.statusMessage = "Public-only pairing request created. Transfer it to an already paired Mac for approval."
+            }
+        }
+    }
+
+    func approveAdditionalMacPairingRequest() {
+        guard let device = selectedDevice, device.usbConnected else {
+            lastError = "Connect the selected device by USB before authorizing another Mac."
+            return
+        }
+        let panel = NSOpenPanel()
+        panel.title = "Choose Additional Mac Pairing Request"
+        panel.allowedContentTypes = [.json]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let request = panel.url else { return }
+        let alert = NSAlert()
+        alert.messageText = "Authorize an additional computer?"
+        alert.informativeText = "This adds the signed request's public SSH key to the selected USB-connected device. Existing paired computers remain authorized."
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: "Authorize Additional Computer")
+        alert.addButton(withTitle: "Cancel")
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        launchTrackedOperation("Authorize Additional Mac") { [weak self] in
+            guard let self else { return }
+            await self.perform("Authorize Additional Mac") {
+                guard let profile = await self.environment.registry.profile(for: device.udid) else {
+                    throw BridgeCoreError.operationFailed("This device has no existing trusted-Mac profile.")
+                }
+                return try await self.environment.pairing.approveAdditionalMacRequest(
+                    profile: profile, request: request
+                ) { event in
+                    Task { await self.environment.logs.append(
+                        category: .pairing,
+                        level: event.stream == .stderr ? .warning : .info,
+                        message: DiagnosticRedactor.redact(event.line),
+                        deviceID: device.udid
+                    ) }
+                }
+            }
+            if self.lastError == nil {
+                self.statusMessage = "Additional computer authorized. On that Mac, connect this device over USB and choose Set Up New Device, then Pair This Mac."
+            }
         }
     }
 

@@ -125,6 +125,7 @@ public struct DeviceProfile: Codable, Hashable, Sendable {
     public var sshKeyPath: String
     public var knownHostsPath: String
     public var macIdentityFingerprint: String?
+    public var pairedHostCount: Int
 
     public init(
         udid: String, name: String? = nil, productType: String? = nil,
@@ -133,7 +134,8 @@ public struct DeviceProfile: Codable, Hashable, Sendable {
         wirelessEnabled: Bool = false, lastSeen: Date = Date(),
         sshHost: String = "127.0.0.1", sshHostAlias: String,
         sshKeyPath: String, knownHostsPath: String,
-        macIdentityFingerprint: String? = nil
+        macIdentityFingerprint: String? = nil,
+        pairedHostCount: Int = 0
     ) {
         self.udid = udid
         self.name = name
@@ -150,6 +152,34 @@ public struct DeviceProfile: Codable, Hashable, Sendable {
         self.sshKeyPath = sshKeyPath
         self.knownHostsPath = knownHostsPath
         self.macIdentityFingerprint = macIdentityFingerprint
+        self.pairedHostCount = pairedHostCount
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case udid, name, productType, osVersion, buildVersion, instanceName
+        case localPort, pairingVerified, wirelessEnabled, lastSeen, sshHost
+        case sshHostAlias, sshKeyPath, knownHostsPath, macIdentityFingerprint
+        case pairedHostCount
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        udid = try values.decode(String.self, forKey: .udid)
+        name = try values.decodeIfPresent(String.self, forKey: .name)
+        productType = try values.decodeIfPresent(String.self, forKey: .productType)
+        osVersion = try values.decodeIfPresent(String.self, forKey: .osVersion)
+        buildVersion = try values.decodeIfPresent(String.self, forKey: .buildVersion)
+        instanceName = try values.decode(String.self, forKey: .instanceName)
+        localPort = try values.decode(Int.self, forKey: .localPort)
+        pairingVerified = try values.decode(Bool.self, forKey: .pairingVerified)
+        wirelessEnabled = try values.decode(Bool.self, forKey: .wirelessEnabled)
+        lastSeen = try values.decode(Date.self, forKey: .lastSeen)
+        sshHost = try values.decode(String.self, forKey: .sshHost)
+        sshHostAlias = try values.decode(String.self, forKey: .sshHostAlias)
+        sshKeyPath = try values.decode(String.self, forKey: .sshKeyPath)
+        knownHostsPath = try values.decode(String.self, forKey: .knownHostsPath)
+        macIdentityFingerprint = try values.decodeIfPresent(String.self, forKey: .macIdentityFingerprint)
+        pairedHostCount = try values.decodeIfPresent(Int.self, forKey: .pairedHostCount) ?? 0
     }
 }
 

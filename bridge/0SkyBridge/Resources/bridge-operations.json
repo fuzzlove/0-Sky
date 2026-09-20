@@ -1,11 +1,45 @@
 {
   "schema": 1,
   "operations": [
-    {"id":"pair-device","script":"kit/host-mac/pair.py","privilege":"user"},
-    {"id":"verify-pairing","script":"kit/host-mac/pair.py","privilege":"user"},
-    {"id":"enable-wireless","script":"kit/host-mac/apple_device_transport.py","privilege":"user"},
-    {"id":"verify-wireless","script":"kit/host-mac/apple_device_transport.py","privilege":"user"},
-    {"id":"audit-device","script":"kit/host-mac/audit_device.py","privilege":"device-root-over-pinned-ssh"},
-    {"id":"repair-fleet","script":"tools/zero_sky_fleet.py","privilege":"user"}
+    {
+      "id": "pair-device",
+      "script": "kit/host-mac/pair.py",
+      "privilege": "user"
+    },
+    {
+      "id": "verify-pairing",
+      "script": "kit/host-mac/pair.py",
+      "privilege": "user"
+    },
+    {
+      "id": "export-additional-mac-pairing-request",
+      "script": "kit/host-mac/multi_host_pairing.py",
+      "privilege": "user"
+    },
+    {
+      "id": "authorize-additional-mac",
+      "script": "kit/host-mac/multi_host_pairing.py",
+      "privilege": "device-root-over-pinned-ssh-user-confirmed"
+    },
+    {
+      "id": "enable-wireless",
+      "script": "kit/host-mac/apple_device_transport.py",
+      "privilege": "user"
+    },
+    {
+      "id": "verify-wireless",
+      "script": "kit/host-mac/apple_device_transport.py",
+      "privilege": "user"
+    },
+    {
+      "id": "audit-device",
+      "script": "kit/host-mac/audit_device.py",
+      "privilege": "device-root-over-pinned-ssh"
+    },
+    {
+      "id": "repair-fleet",
+      "script": "tools/zero_sky_fleet.py",
+      "privilege": "user"
+    }
   ]
 }

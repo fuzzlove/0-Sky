@@ -60,3 +60,13 @@ and attribution in [`control/LICENSE`](control/LICENSE). Other bundled or
 external dependencies retain their respective upstream licenses. Publication
 of source does not redistribute Apple SDKs, Apple SRD tooling, private keys,
 provisioning profiles, or third-party binary payloads.
+
+## Multiple trusted Macs per SRD
+
+0-Sky Bridge supports up to 16 independent computers for one authorized SRD.
+On a new Mac, choose **Devices > Multiple Computers > Create Request for This
+Mac…**. On an already paired Mac, connect the exact device by USB and choose
+**Authorize Another Computer…**. Then complete Apple's Trust/Developer Paired
+Macs flow and **Pair This Mac** on the new computer. The signed transfer request
+is device-bound, expires after seven days, and contains public keys only;
+existing Mac registrations are preserved during the schema-2 migration.

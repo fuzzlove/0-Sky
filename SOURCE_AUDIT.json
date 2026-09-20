@@ -8,7 +8,7 @@
   "source_publication": "PII-sanitized",
   "pii_audit": "PASS",
   "bridge_build": "PASS",
-  "bridge_tests": "28/28 PASS",
+  "bridge_tests": "29/29 PASS",
   "link_build": "PASS",
   "control_build": "PASS",
   "control_tests": "10/10 PASS",
@@ -16,5 +16,7 @@
   "credentials_excluded": true,
   "pairing_records_excluded": true,
   "device_evidence_excluded": true,
-  "requirements_documented": true
+  "requirements_documented": true,
+  "multi_mac_pairing_tests": "22/22 PASS",
+  "multi_mac_pairing": "PUBLIC_ONLY_SIGNED_REQUESTS_AND_BOUNDED_REGISTRY"
 }

@@ -87,6 +87,7 @@ struct BridgeCoreTestRunner {
             ("default credential detection", defaultCredentialDetection),
             ("session crash collection", sessionCrashCollection),
             ("wireless capability persistence", wirelessCapabilityPersistence),
+            ("multiple trusted Macs", multipleTrustedMacs),
         ]
         var failures = 0
         var assertions = 0
@@ -875,6 +876,20 @@ struct BridgeCoreTestRunner {
         try expect(names.contains(.crashDetected) && names.contains(.artifactCaptured),
                    "crash collection did not publish normalized events")
         _ = try await recorder.stop()
+    }
+
+    private static func multipleTrustedMacs() async throws {
+        let legacy = #"{"udid":"00000000-0000000000000001","instanceName":"fixture","localPort":2222,"pairingVerified":true,"wirelessEnabled":false,"lastSeen":"2026-09-20T12:00:00Z","sshHost":"127.0.0.1","sshHostAlias":"0sky-device-aaaaaaaaaaaaaaaaaaaaaaaa","sshKeyPath":"/tmp/key","knownHostsPath":"/tmp/known"}"#
+        let oldProfile = try JSONDecoder.sky.decode(DeviceProfile.self, from: Data(legacy.utf8))
+        try expect(oldProfile.pairedHostCount == 0,
+                   "legacy profiles without a paired-host count did not migrate")
+        var current = oldProfile
+        current.pairedHostCount = 3
+        let roundTrip = try JSONDecoder.sky.decode(
+            DeviceProfile.self, from: JSONEncoder.sky.encode(current)
+        )
+        try expect(roundTrip.pairedHostCount == 3,
+                   "multiple trusted-Mac count was not preserved")
     }
 
     private static func wirelessCapabilityPersistence() async throws {

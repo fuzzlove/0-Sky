@@ -341,13 +341,14 @@ struct DevicesView: View {
                         }
                         DeviceCard(device: device)
                         PairingWorkflowView(steps: model.pairingWorkflow)
+                        MultiMacPairingCard(model: model, device: device)
                         HealthDetails(snapshot: model.health)
                         HStack {
                             if !model.selectedHasProfile {
                                 Button("Set Up New Device") { model.enrollSelectedDevice() }
                                     .buttonStyle(.borderedProminent)
                             }
-                            Button("Pair Device") { model.pairDevice() }
+                            Button("Pair This Mac") { model.pairDevice() }
                                 .disabled(!model.selectedHasProfile)
                             Button("Verify Pairing") { model.verifyPairing() }
                                 .disabled(!model.selectedHasProfile)
@@ -422,11 +423,21 @@ struct DeviceContextActions: View {
         }
         .disabled(!hasProfile || model.isBusy)
         Divider()
-        Button("Pair Device", systemImage: "link") {
+        Button("Pair This Mac (Keep Existing)", systemImage: "link") {
             model.select(device.udid)
             model.pairDevice()
         }
         .disabled(!hasProfile || model.isBusy)
+        Button("Create Pairing Request for This Mac…", systemImage: "doc.badge.plus") {
+            model.select(device.udid)
+            model.exportAdditionalMacPairingRequest()
+        }
+        .disabled(model.isBusy)
+        Button("Authorize Additional Computer…", systemImage: "desktopcomputer.and.arrow.down") {
+            model.select(device.udid)
+            model.approveAdditionalMacPairingRequest()
+        }
+        .disabled(!hasProfile || !device.usbConnected || model.isBusy)
         Button("Verify Pairing", systemImage: "checkmark.shield") {
             model.select(device.udid)
             model.verifyPairing()
@@ -447,6 +458,37 @@ struct DeviceContextActions: View {
             requestHostKeyRepair()
         }
         .disabled(!hasProfile || !device.usbConnected || model.isBusy)
+    }
+}
+
+struct MultiMacPairingCard: View {
+    @ObservedObject var model: BridgeAppModel
+    let device: SkyDevice
+
+    var body: some View {
+        Card("Trusted Computers", icon: "desktopcomputer.and.arrow.down") {
+            KeyValue(
+                "Paired Macs",
+                model.selectedPairedHostCount > 0
+                    ? String(model.selectedPairedHostCount)
+                    : (model.selectedHasProfile ? "1 (legacy)" : "Not configured")
+            )
+            Text("Up to 16 computers can be authorized independently. Pairing this Mac preserves every existing Mac. Private keys and Apple pairing records are never transferred.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                Button("Create Request for This Mac…") {
+                    model.exportAdditionalMacPairingRequest()
+                }
+                Button("Authorize Another Computer…") {
+                    model.approveAdditionalMacPairingRequest()
+                }
+                .disabled(!model.selectedHasProfile || !device.usbConnected)
+            }
+            Text("New Mac: create a request. Already paired Mac: connect the device by USB and authorize that request. Then finish setup and select Pair This Mac on the new computer.")
+                .font(.caption2)
+                .foregroundStyle(.secondary)
+        }
     }
 }
 
@@ -591,7 +633,7 @@ struct BridgeControlView: View {
                 GroupBox("Approved Researcher Operations") {
                     VStack(alignment: .leading, spacing: 8) {
                         HStack {
-                            Button("Pair Device") { model.pairDevice() }
+                            Button("Pair This Mac") { model.pairDevice() }
                             Button("Verify Pairing") { model.verifyPairing() }
                             Button("Enable Wi-Fi") { model.enableWireless() }
                             Button("Test Wi-Fi") { model.verifyWireless() }
@@ -861,6 +903,11 @@ struct SettingsView: View {
                 KeyValue("Known devices", String(model.devices.count))
                 Text("Each device retains an independent UDID, host-key pin, forwarding port, services, logs and diagnostics.")
             }
+            Section("Multiple Computers") {
+                Text("A device can retain up to 16 independently authorized Macs. Use Create Request on the additional Mac, then Authorize Another Computer from an existing paired Mac while the device is connected by USB.")
+                Text("Adding a Mac preserves existing pairings. No private key or Apple pairing record is exported.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Bridge") {
                 KeyValue("Privileged Helper", model.host.helperState)
                 Button("Register Privileged Helper") { model.registerPrivilegedHelper() }
@@ -908,7 +955,7 @@ struct SetupAssistantView: View {
     @State private var confirmIOSComponentSetup = false
     private let steps = [
         "Mac Compatibility", "Required Components", "Bridge Services",
-        "Connect Device", "Trust Mac", "Pair Device", "Enable Wireless Pairing",
+        "Connect Device", "Trust Mac", "Pair This Mac", "Enable Wireless Pairing",
         "Set Up iOS Components", "Verify 0-Sky Link", "Verify 0-Sky Control", "Complete",
     ]
 
@@ -1031,7 +1078,7 @@ struct SetupAssistantView: View {
         case 2: "The app inspects instance-scoped USB, worker, bridge, and Bluetooth services."
         case 3: "Connect and unlock an authorized iPhone or iPad. Discovery runs continuously."
         case 4: "Approve this Mac using Apple's normal Trust This Computer and Developer Paired Macs workflows."
-        case 5: "Use Pair Device. The operation binds Apple trust, the exact UDID, and pinned SSH identity."
+        case 5: "Use Pair This Mac. The operation adds this computer to the device's bounded trusted-Mac registry without replacing existing computers."
         case 6: "Enable wireless pairing while USB remains connected."
         case 7: "Install the complete device-side 0-Sky Project—including Link and Control—with one reviewed, instance-scoped operation. Detailed output is retained in the researcher console and logs."
         case 8: "0-Sky Link is verified over the authenticated, pinned device connection."
