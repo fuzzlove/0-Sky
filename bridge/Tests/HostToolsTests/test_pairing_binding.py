@@ -140,6 +140,8 @@ class PairingBindingTests(unittest.TestCase):
         marker_path = root / "pairing.json"
         token = b"device-local-test-token"
         token_path.write_bytes(token)
+        bridge_path = root / "trollstorelite-srd-bridge.py"
+        bridge_path.write_text("PAIRING_REGISTRY_SCHEMA = 2\n")
         legacy = {
             "schema": 1, "device_udid": "device-1",
             "host_key_fingerprint": "SHA256:ssh-one",
@@ -171,6 +173,8 @@ class PairingBindingTests(unittest.TestCase):
                 '"/var/jb/etc/trollstorelite-srd-bridge.token"', repr(str(token_path))
             ).replace(
                 '"/var/jb/var/lib/0-sky/pairing.json"', repr(str(marker_path))
+            ).replace(
+                '"/var/jb/usr/local/libexec/trollstorelite-srd-bridge.py"', repr(str(bridge_path))
             ).replace("os.chown(temporary,0,0);", "")
             completed = subprocess.run(
                 [sys.executable, "-c", program], input=json.dumps(payload),

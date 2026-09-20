@@ -275,6 +275,11 @@ def write_marker(base: list[str], payload: dict) -> None:
     program = r'''import hashlib,hmac,json,os,sys,time
 token=open("/var/jb/etc/trollstorelite-srd-bridge.token","rb").read().strip()
 if len(token)<16: raise SystemExit("privileged bridge token is missing or invalid")
+bridge_path="/var/jb/usr/local/libexec/trollstorelite-srd-bridge.py"
+try: bridge_source=open(bridge_path,encoding="utf-8").read(512*1024)
+except OSError: raise SystemExit("Runtime Manager 2.4.10 or later is required; run Set Up iOS Components first")
+if "PAIRING_REGISTRY_SCHEMA = 2" not in bridge_source:
+ raise SystemExit("Runtime Manager 2.4.10 or later is required; run Set Up iOS Components first")
 body=json.load(sys.stdin)
 path="/var/jb/var/lib/0-sky/pairing.json"
 required=("device_udid","host_key_fingerprint","mac_identity_fingerprint")
