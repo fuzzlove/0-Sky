@@ -1,0 +1,8 @@
+--- !tapi-tbd
+tbd-version: 4
+targets: [ arm64-ios ]
+install-name: '/System/Library/PrivateFrameworks/BackBoardServices.framework/BackBoardServices'
+exports:
+  - targets: [ arm64-ios ]
+    symbols: [ '_BKSActivateForEventOptionTypeBackgroundContentFetching', '_BKSOpenApplicationOptionKeyActivateForEvent', '_BKSTerminateApplicationForReasonAndReportWithDescription' ]
+...

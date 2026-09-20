@@ -1,0 +1,6 @@
+0-Sky iOS 17+ SRD research PoC
+Credits: 0-Sky Project
+
+Third-party components retain their original copyright, author, and license
+notices. The 0-Sky credit identifies this integration and research chain; it
+does not erase or replace upstream attribution.

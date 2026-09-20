@@ -1,0 +1,8 @@
+--- !tapi-tbd
+tbd-version:     4
+targets:         [ arm64-ios ]
+install-name:    '/System/Library/PrivateFrameworks/MobileContainerManager.framework/MobileContainerManager'
+exports:
+  - targets:         [ arm64-ios ]
+    symbols:         [ '_OBJC_CLASS_$_MCMAppContainer', '_OBJC_CLASS_$_MCMSharedDataContainer', '_OBJC_CLASS_$_MCMSystemDataContainer' ]
+...

@@ -1,0 +1,20 @@
+{
+  "schema": 1,
+  "scope": [
+    "0-Sky Bridge",
+    "0-Sky Link",
+    "0-Sky Control"
+  ],
+  "source_publication": "PII-sanitized",
+  "pii_audit": "PASS",
+  "bridge_build": "PASS",
+  "bridge_tests": "26/26 PASS",
+  "link_build": "PASS",
+  "control_build": "PASS",
+  "control_tests": "10/10 PASS",
+  "binary_payloads_excluded": true,
+  "credentials_excluded": true,
+  "pairing_records_excluded": true,
+  "device_evidence_excluded": true,
+  "requirements_documented": true
+}

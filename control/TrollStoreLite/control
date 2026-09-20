@@ -1,0 +1,9 @@
+Package: com.opa334.trollstorelite
+Name: 0-Sky Control
+Version: 3.4.4
+Architecture: iphoneos-arm
+Description: 0-Sky Control provides package management, device diagnostics, privacy and network controls, automation, recovery, and system management for the 0-Sky platform.
+Depends: ldid
+Maintainer: 0-Sky Project
+Author: opa334; 0-Sky iOS 27 integration by 0-Sky Project
+Section: Applications

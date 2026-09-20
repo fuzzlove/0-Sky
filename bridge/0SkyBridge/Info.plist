@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleDevelopmentRegion</key><string>en</string>
+  <key>CFBundleDisplayName</key><string>0-Sky Bridge</string>
+  <key>CFBundleExecutable</key><string>0SkyBridge</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundleIdentifier</key><string>com.liquidsky.0sky.bridge</string>
+  <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+  <key>CFBundleName</key><string>0-Sky Bridge</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.0.0</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.developer-tools</string>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSBluetoothAlwaysUsageDescription</key><string>0-Sky Bridge uses Bluetooth only as an authenticated fallback transport for enrolled research devices.</string>
+  <key>NSLocalNetworkUsageDescription</key><string>0-Sky Bridge discovers and reconnects trusted research devices over the local network.</string>
+</dict>
+</plist>

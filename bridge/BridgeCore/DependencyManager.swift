@@ -1,0 +1,66 @@
+import Foundation
+
+public struct DependencyManager: Sendable {
+    public init() {}
+
+    public func inspect(paths: BridgePaths) -> [DependencyStatus] {
+        let fileManager = FileManager.default
+        let candidates: [(String, [String], Bool)] = [
+            ("Xcode CLI Tools", ["/usr/bin/xcrun"], true),
+            ("SSH", ["/usr/bin/ssh"], true),
+            ("launchctl", ["/bin/launchctl"], true),
+            ("iproxy", ["/opt/homebrew/bin/iproxy", "/usr/local/bin/iproxy"], true),
+            ("dpkg-deb", ["/opt/homebrew/bin/dpkg-deb", "/usr/local/bin/dpkg-deb"], true),
+            ("ldid", ["/opt/homebrew/bin/ldid", "/usr/local/bin/ldid"], true),
+            ("zstd", ["/opt/homebrew/bin/zstd", "/usr/local/bin/zstd"], true),
+            ("Homebrew", ["/opt/homebrew/bin/brew", "/usr/local/bin/brew"], false),
+        ]
+        var statuses = candidates.map { name, possiblePaths, required in
+            let path = possiblePaths.first { fileManager.isExecutableFile(atPath: $0) }
+            return DependencyStatus(
+                name: name, path: path, required: required,
+                available: path != nil,
+                detail: path != nil ? "Available" : (required
+                    ? "Missing — select Install Missing Dependencies"
+                    : "Not installed; the dependency installer can add it when needed")
+            )
+        }
+        let sharedPython = paths.supportRoot.appendingPathComponent("venv/bin/python3")
+        let instances = paths.supportRoot.appendingPathComponent("instances")
+        let instancePython = ((try? fileManager.contentsOfDirectory(
+            at: instances, includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )) ?? []).map { $0.appendingPathComponent("venv/bin/python3") }
+            .first(where: { fileManager.isExecutableFile(atPath: $0.path) })
+        let python = fileManager.isExecutableFile(atPath: sharedPython.path)
+            ? sharedPython : instancePython
+        statuses.append(DependencyStatus(
+            name: "Pinned Python environment", path: python?.path, required: true,
+            available: python != nil,
+            detail: python == nil
+                ? "Missing — installed offline by Install Missing Dependencies"
+                : "Available"
+        ))
+        let coreDeviceCandidates = [
+            "/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl",
+            "/Applications/Xcode.app/Contents/Developer/Library/PrivateFrameworks/CoreDevice.framework/Versions/A/Resources/bin/devicectl",
+        ]
+        let coreDevice = coreDeviceCandidates.first {
+            fileManager.isExecutableFile(atPath: $0)
+        }
+        statuses.append(DependencyStatus(
+            name: "CoreDevice/devicectl", path: coreDevice, required: false,
+            available: coreDevice != nil,
+            detail: coreDevice == nil
+                ? "Optional devicectl executable is unavailable; usbmux fallback remains active"
+                : "Available"
+        ))
+        let kit = try? paths.hostScript("pair.py")
+        statuses.append(DependencyStatus(
+            name: "0-Sky bridge components", path: kit?.path, required: true,
+            available: kit != nil,
+            detail: kit == nil ? "Host bridge kit was not found" : "Available"
+        ))
+        return statuses
+    }
+}

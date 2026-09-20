@@ -1,0 +1,15 @@
+name: Source privacy audit
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  pii-audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 tools/pii_audit.py .

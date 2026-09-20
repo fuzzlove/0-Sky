@@ -1,0 +1,937 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 77;
+	objects = {
+		028DC4D0553E62D1A7CF413F = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgeDaemonProtocol.swift"; sourceTree = "<group>";
+		};
+		CE2F43BC81128085895A5B81 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgeEnvironment.swift"; sourceTree = "<group>";
+		};
+		A1835C61088F55F5DE082FE4 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgeLogStore.swift"; sourceTree = "<group>";
+		};
+		56600C2DE81BF221AF2EE3BB = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgeOperation.swift"; sourceTree = "<group>";
+		};
+		3998F37997D3FB98B051BEA7 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgePaths.swift"; sourceTree = "<group>";
+		};
+		53FE7209B93B15461F5C56E8 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgeStateMachine.swift"; sourceTree = "<group>";
+		};
+		F99924863DC455197A75928A = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CodeIdentityValidator.swift"; sourceTree = "<group>";
+		};
+		222C9957E5AC567B40ACD1D3 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ConnectionManager.swift"; sourceTree = "<group>";
+		};
+		3CAC31B8FDEAA125F5865500 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ControlPlane.swift"; sourceTree = "<group>";
+		};
+		8A1BAA3758386340537727A2 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "CrashCollector.swift"; sourceTree = "<group>";
+		};
+		9DB5978FB7625BCE593AE6B9 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DependencyManager.swift"; sourceTree = "<group>";
+		};
+		01831E430EACFF630C3BE347 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeviceDiscoveryManager.swift"; sourceTree = "<group>";
+		};
+		729080F1FBD645F6185C378E = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeviceEnrollmentManager.swift"; sourceTree = "<group>";
+		};
+		4E7D7EA521A2134EFC0895DD = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DeviceRegistry.swift"; sourceTree = "<group>";
+		};
+		633EBD606EB8C8ED3D746BAF = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiagnosticExporter.swift"; sourceTree = "<group>";
+		};
+		39F683293B29312AB8758B9B = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "DiagnosticRedactor.swift"; sourceTree = "<group>";
+		};
+		AF6BBEE5EB210377CFEBA6D8 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthArchitecture.swift"; sourceTree = "<group>";
+		};
+		D1EE4B2D8827DA93B6BE7FBC = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthMonitor.swift"; sourceTree = "<group>";
+		};
+		E92BB904637973EFBF25440F = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "KeychainStore.swift"; sourceTree = "<group>";
+		};
+		6ABC4EB0CDC4547F5BCE32AE = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models.swift"; sourceTree = "<group>";
+		};
+		D3A0C0ED2AA60B5705072CEC = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "OperationCoordinator.swift"; sourceTree = "<group>";
+		};
+		DB1C94A21DBA3A0BA2D76355 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PairingManager.swift"; sourceTree = "<group>";
+		};
+		0FFBDA101DBDF6686FC0C66E = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PlatformModels.swift"; sourceTree = "<group>";
+		};
+		C8C36B7D3F733EBF647A5419 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PortForwardManager.swift"; sourceTree = "<group>";
+		};
+		E04D40FCDFC9DB30C8602084 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PrivilegedHelperClient.swift"; sourceTree = "<group>";
+		};
+		D379831ADC10587022C9BF10 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "PrivilegedHelperProtocol.swift"; sourceTree = "<group>";
+		};
+		C7520BA995850D0D5ADCDEFF = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RecoveryManager.swift"; sourceTree = "<group>";
+		};
+		B2AE1D8B8DAE33F329069431 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ResearchSessionRecorder.swift"; sourceTree = "<group>";
+		};
+		38D462EFF25087409E1C61C5 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ResearcherOperationsManager.swift"; sourceTree = "<group>";
+		};
+		56707BBF982A6031F3741F24 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SRDHealthEngine.swift"; sourceTree = "<group>";
+		};
+		F256E1E55F8FD46CEB4352A2 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SSHManager.swift"; sourceTree = "<group>";
+		};
+		A93E8BF68683E4177F5895AA = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScriptRunner.swift"; sourceTree = "<group>";
+		};
+		B423C99BD0368180DC70AD5F = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ServiceManager.swift"; sourceTree = "<group>";
+		};
+		CDE914FF5802FD1CCFC333B9 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "StructuredEventLog.swift"; sourceTree = "<group>";
+		};
+		FE6AB59CF0EBB74E211EAF27 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Validation.swift"; sourceTree = "<group>";
+		};
+		9349B7FC53399B915A766032 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "WirelessPairingManager.swift"; sourceTree = "<group>";
+		};
+		3E307C2CDED6ABDD06A64698 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgeAppModel.swift"; sourceTree = "<group>";
+		};
+		D826BC01065492F019E2B7C8 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootView.swift"; sourceTree = "<group>";
+		};
+		02DB1066CFD0472BF3BB7CC6 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Views.swift"; sourceTree = "<group>";
+		};
+		7015A470938F6A3F38146E7F = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ZeroSkyBridgeApp.swift"; sourceTree = "<group>";
+		};
+		A9991FE2388E6D09C8E09AD2 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "main.swift"; sourceTree = "<group>";
+		};
+		EA1055DB70E761664D9809D1 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "main.swift"; sourceTree = "<group>";
+		};
+		1D9FBC53E7826EE5F929CC24 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgeScreenSmokeTests.swift"; sourceTree = "<group>";
+		};
+		E54980C0CA0B50527337EAA3 = {
+			isa = PBXFileReference; lastKnownFileType = text.json; path = "Resources/bridge-operations.json"; sourceTree = "<group>";
+		};
+		0C08D1DBDBB552121C4ECBEA = {
+			isa = PBXFileReference; lastKnownFileType = image.icns; path = "Resources/AppIcon.icns"; sourceTree = "<group>";
+		};
+		4F907049016F7651498295C5 = {
+			isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/com.liquidsky.0sky.bridge.helper.plist"; sourceTree = "<group>";
+		};
+		9F693C2E96029315647FDDDC = {
+			isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/com.liquidsky.0sky.bridge.service.plist"; sourceTree = "<group>";
+		};
+		B6CDB6E5D160E013280D3C68 = {
+			isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = 0SkyBridge.app; sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		CC5FAD0E1F627EEC79BCB8EE = {
+			isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = 0SkyBridgeHelper; sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		9D3A9971001C68058B7035DC = {
+			isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = 0SkyBridgeService; sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		797E92F9BC7CD81F430FA27D = {
+			isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = libBridgeCore.a; sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		57F95CD7FCEFE62FE15F2656 = {
+			isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = 0SkyBridgeScreenSmokeTests.xctest; sourceTree = BUILT_PRODUCTS_DIR;
+		};
+		EC04038D08A24696CC668A5C = {
+			isa = PBXBuildFile; fileRef = 028DC4D0553E62D1A7CF413F;
+		};
+		7F1DA0D6FCB4CBBFDB1D712D = {
+			isa = PBXBuildFile; fileRef = CE2F43BC81128085895A5B81;
+		};
+		4D3F3FE602CDECB48F0CEDB9 = {
+			isa = PBXBuildFile; fileRef = A1835C61088F55F5DE082FE4;
+		};
+		CE91961B9066B463AAF159B9 = {
+			isa = PBXBuildFile; fileRef = 56600C2DE81BF221AF2EE3BB;
+		};
+		88AE066879691B4BC0D8E922 = {
+			isa = PBXBuildFile; fileRef = 3998F37997D3FB98B051BEA7;
+		};
+		A999376DEA815D18FACDF330 = {
+			isa = PBXBuildFile; fileRef = 53FE7209B93B15461F5C56E8;
+		};
+		777AD3B744E88A1C427B64C1 = {
+			isa = PBXBuildFile; fileRef = F99924863DC455197A75928A;
+		};
+		152DE4BDE8D4F07191A84AFB = {
+			isa = PBXBuildFile; fileRef = 222C9957E5AC567B40ACD1D3;
+		};
+		4FAD65F56061EAFE3DB189AF = {
+			isa = PBXBuildFile; fileRef = 3CAC31B8FDEAA125F5865500;
+		};
+		6A5BFD28C856BA12699C83AE = {
+			isa = PBXBuildFile; fileRef = 8A1BAA3758386340537727A2;
+		};
+		2A874E7897484A0E1DCFBC2E = {
+			isa = PBXBuildFile; fileRef = 9DB5978FB7625BCE593AE6B9;
+		};
+		F2B7B88BE6A024C85918B27C = {
+			isa = PBXBuildFile; fileRef = 01831E430EACFF630C3BE347;
+		};
+		E101497ABF61E26B6330BA65 = {
+			isa = PBXBuildFile; fileRef = 729080F1FBD645F6185C378E;
+		};
+		33FA21958B718B6A7B7E04C0 = {
+			isa = PBXBuildFile; fileRef = 4E7D7EA521A2134EFC0895DD;
+		};
+		13EBC74D4DA9E585386D62A0 = {
+			isa = PBXBuildFile; fileRef = 633EBD606EB8C8ED3D746BAF;
+		};
+		0581095264EAA5A0F3FCED31 = {
+			isa = PBXBuildFile; fileRef = 39F683293B29312AB8758B9B;
+		};
+		3E39404237212A86161F7FD4 = {
+			isa = PBXBuildFile; fileRef = AF6BBEE5EB210377CFEBA6D8;
+		};
+		856E3578FF08E680EFD61117 = {
+			isa = PBXBuildFile; fileRef = D1EE4B2D8827DA93B6BE7FBC;
+		};
+		A04DD83C804E7D2E4C301846 = {
+			isa = PBXBuildFile; fileRef = E92BB904637973EFBF25440F;
+		};
+		58258788FD601C53A5E9913C = {
+			isa = PBXBuildFile; fileRef = 6ABC4EB0CDC4547F5BCE32AE;
+		};
+		98D4F5714F14368E5BDBED04 = {
+			isa = PBXBuildFile; fileRef = D3A0C0ED2AA60B5705072CEC;
+		};
+		966783071B9A6E07D6352C27 = {
+			isa = PBXBuildFile; fileRef = DB1C94A21DBA3A0BA2D76355;
+		};
+		FB6C46B577ECECBEE1214563 = {
+			isa = PBXBuildFile; fileRef = 0FFBDA101DBDF6686FC0C66E;
+		};
+		7CF251E541DBCBAF47520E1C = {
+			isa = PBXBuildFile; fileRef = C8C36B7D3F733EBF647A5419;
+		};
+		AF7159B3C8698BDAC9C94C43 = {
+			isa = PBXBuildFile; fileRef = E04D40FCDFC9DB30C8602084;
+		};
+		6C2C723CD39326E970913B35 = {
+			isa = PBXBuildFile; fileRef = D379831ADC10587022C9BF10;
+		};
+		F0944360312298B60EFB44C3 = {
+			isa = PBXBuildFile; fileRef = C7520BA995850D0D5ADCDEFF;
+		};
+		C244198A581248BD6F755626 = {
+			isa = PBXBuildFile; fileRef = B2AE1D8B8DAE33F329069431;
+		};
+		A2EFEE2B99EE67E00ABF94A2 = {
+			isa = PBXBuildFile; fileRef = 38D462EFF25087409E1C61C5;
+		};
+		768D00D5E8553AA2F34B1769 = {
+			isa = PBXBuildFile; fileRef = 56707BBF982A6031F3741F24;
+		};
+		B8E11ED100825576B0ADDDB1 = {
+			isa = PBXBuildFile; fileRef = F256E1E55F8FD46CEB4352A2;
+		};
+		3F7BF450FB034B4666272AF8 = {
+			isa = PBXBuildFile; fileRef = A93E8BF68683E4177F5895AA;
+		};
+		7065A184F120522FD5E7F95C = {
+			isa = PBXBuildFile; fileRef = B423C99BD0368180DC70AD5F;
+		};
+		6B2E09C804FFC560642A2917 = {
+			isa = PBXBuildFile; fileRef = CDE914FF5802FD1CCFC333B9;
+		};
+		1246BD6E5EEDD2A72B517144 = {
+			isa = PBXBuildFile; fileRef = FE6AB59CF0EBB74E211EAF27;
+		};
+		6DBE704C5D01D251168BE218 = {
+			isa = PBXBuildFile; fileRef = 9349B7FC53399B915A766032;
+		};
+		2FDC3E4335221CE2E45C63DC = {
+			isa = PBXBuildFile; fileRef = 3E307C2CDED6ABDD06A64698;
+		};
+		BF3C0CDA9D827E27024D4A86 = {
+			isa = PBXBuildFile; fileRef = D826BC01065492F019E2B7C8;
+		};
+		F878E101703F185B6E5DEAD3 = {
+			isa = PBXBuildFile; fileRef = 02DB1066CFD0472BF3BB7CC6;
+		};
+		774E7F91F00A8D43EBF36B40 = {
+			isa = PBXBuildFile; fileRef = 7015A470938F6A3F38146E7F;
+		};
+		6A80F949E46EA88B9585AE37 = {
+			isa = PBXBuildFile; fileRef = A9991FE2388E6D09C8E09AD2;
+		};
+		3A818709F00C32F0FC9F72B2 = {
+			isa = PBXBuildFile; fileRef = EA1055DB70E761664D9809D1;
+		};
+		89A6ED80CBFA229F2933636B = {
+			isa = PBXBuildFile; fileRef = 1D9FBC53E7826EE5F929CC24;
+		};
+		CDE6DFFD9BA5F8B289CB1D0A = {
+			isa = PBXBuildFile; fileRef = E54980C0CA0B50527337EAA3;
+		};
+		F24C52D804BF040F4304704D = {
+			isa = PBXBuildFile; fileRef = 0C08D1DBDBB552121C4ECBEA;
+		};
+		F503316A17247AD0481F12E9 = {
+			isa = PBXBuildFile; fileRef = 797E92F9BC7CD81F430FA27D;
+		};
+		292DD1C12E404932C88F5C8F = {
+			isa = PBXBuildFile; fileRef = 797E92F9BC7CD81F430FA27D;
+		};
+		C4152886D64986E1896DF5A8 = {
+			isa = PBXBuildFile; fileRef = CC5FAD0E1F627EEC79BCB8EE; settings = {ATTRIBUTES = (CodeSignOnCopy, ); };
+		};
+		BD37B7D41CA45B27B60EC272 = {
+			isa = PBXBuildFile; fileRef = 9D3A9971001C68058B7035DC; settings = {ATTRIBUTES = (CodeSignOnCopy, ); };
+		};
+		018160ACCE55BB86EDFED425 = {
+			isa = PBXBuildFile; fileRef = 4F907049016F7651498295C5;
+		};
+		318D9D459C0FFFB92B7E25C0 = {
+			isa = PBXBuildFile; fileRef = 9F693C2E96029315647FDDDC;
+		};
+		BD10A9D6B3CA63E949AB3579 = {
+			isa = PBXGroup;
+			children = (
+				028DC4D0553E62D1A7CF413F /* BridgeDaemonProtocol.swift */,
+				CE2F43BC81128085895A5B81 /* BridgeEnvironment.swift */,
+				A1835C61088F55F5DE082FE4 /* BridgeLogStore.swift */,
+				56600C2DE81BF221AF2EE3BB /* BridgeOperation.swift */,
+				3998F37997D3FB98B051BEA7 /* BridgePaths.swift */,
+				53FE7209B93B15461F5C56E8 /* BridgeStateMachine.swift */,
+				F99924863DC455197A75928A /* CodeIdentityValidator.swift */,
+				222C9957E5AC567B40ACD1D3 /* ConnectionManager.swift */,
+				3CAC31B8FDEAA125F5865500 /* ControlPlane.swift */,
+				8A1BAA3758386340537727A2 /* CrashCollector.swift */,
+				9DB5978FB7625BCE593AE6B9 /* DependencyManager.swift */,
+				01831E430EACFF630C3BE347 /* DeviceDiscoveryManager.swift */,
+				729080F1FBD645F6185C378E /* DeviceEnrollmentManager.swift */,
+				4E7D7EA521A2134EFC0895DD /* DeviceRegistry.swift */,
+				633EBD606EB8C8ED3D746BAF /* DiagnosticExporter.swift */,
+				39F683293B29312AB8758B9B /* DiagnosticRedactor.swift */,
+				AF6BBEE5EB210377CFEBA6D8 /* HealthArchitecture.swift */,
+				D1EE4B2D8827DA93B6BE7FBC /* HealthMonitor.swift */,
+				E92BB904637973EFBF25440F /* KeychainStore.swift */,
+				6ABC4EB0CDC4547F5BCE32AE /* Models.swift */,
+				D3A0C0ED2AA60B5705072CEC /* OperationCoordinator.swift */,
+				DB1C94A21DBA3A0BA2D76355 /* PairingManager.swift */,
+				0FFBDA101DBDF6686FC0C66E /* PlatformModels.swift */,
+				C8C36B7D3F733EBF647A5419 /* PortForwardManager.swift */,
+				E04D40FCDFC9DB30C8602084 /* PrivilegedHelperClient.swift */,
+				D379831ADC10587022C9BF10 /* PrivilegedHelperProtocol.swift */,
+				C7520BA995850D0D5ADCDEFF /* RecoveryManager.swift */,
+				B2AE1D8B8DAE33F329069431 /* ResearchSessionRecorder.swift */,
+				38D462EFF25087409E1C61C5 /* ResearcherOperationsManager.swift */,
+				56707BBF982A6031F3741F24 /* SRDHealthEngine.swift */,
+				F256E1E55F8FD46CEB4352A2 /* SSHManager.swift */,
+				A93E8BF68683E4177F5895AA /* ScriptRunner.swift */,
+				B423C99BD0368180DC70AD5F /* ServiceManager.swift */,
+				CDE914FF5802FD1CCFC333B9 /* StructuredEventLog.swift */,
+				FE6AB59CF0EBB74E211EAF27 /* Validation.swift */,
+				9349B7FC53399B915A766032 /* WirelessPairingManager.swift */,
+			);
+			path = BridgeCore;
+			sourceTree = "<group>";
+		};
+		0057A21958F47074EFDD414B = {
+			isa = PBXGroup;
+			children = (
+				3E307C2CDED6ABDD06A64698 /* BridgeAppModel.swift */,
+				D826BC01065492F019E2B7C8 /* RootView.swift */,
+				02DB1066CFD0472BF3BB7CC6 /* Views.swift */,
+				7015A470938F6A3F38146E7F /* ZeroSkyBridgeApp.swift */,
+				E54980C0CA0B50527337EAA3 /* bridge-operations.json */,
+				0C08D1DBDBB552121C4ECBEA /* AppIcon.icns */,
+				4F907049016F7651498295C5 /* com.liquidsky.0sky.bridge.helper.plist */,
+				9F693C2E96029315647FDDDC /* com.liquidsky.0sky.bridge.service.plist */,
+			);
+			path = 0SkyBridge;
+			sourceTree = "<group>";
+		};
+		08ED5AF26C0240ACECFB9376 = {
+			isa = PBXGroup;
+			children = (
+				A9991FE2388E6D09C8E09AD2 /* main.swift */,
+			);
+			path = 0SkyBridgeHelper;
+			sourceTree = "<group>";
+		};
+		95A0CFE2BF33EDFDCC4BA598 = {
+			isa = PBXGroup;
+			children = (
+				EA1055DB70E761664D9809D1 /* main.swift */,
+			);
+			path = 0SkyBridgeService;
+			sourceTree = "<group>";
+		};
+		A35930B7604BD308B36A6ED7 = {
+			isa = PBXGroup;
+			children = (
+				1D9FBC53E7826EE5F929CC24 /* BridgeScreenSmokeTests.swift */,
+			);
+			path = Tests/BridgeScreenSmokeTests;
+			sourceTree = "<group>";
+		};
+		5151B46607EBC8890D8DFCC2 = {
+			isa = PBXGroup;
+			children = (
+				B6CDB6E5D160E013280D3C68,
+				CC5FAD0E1F627EEC79BCB8EE,
+				9D3A9971001C68058B7035DC,
+				797E92F9BC7CD81F430FA27D,
+				57F95CD7FCEFE62FE15F2656,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		ADCF10F76EBF2A74473E9DC4 = {
+			isa = PBXGroup;
+			children = (
+				0057A21958F47074EFDD414B,
+				08ED5AF26C0240ACECFB9376,
+				95A0CFE2BF33EDFDCC4BA598,
+				BD10A9D6B3CA63E949AB3579,
+				A35930B7604BD308B36A6ED7,
+				5151B46607EBC8890D8DFCC2,
+			);
+			sourceTree = "<group>";
+		};
+		9C861E65C97F11E95C72BE31 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				EC04038D08A24696CC668A5C,
+				7F1DA0D6FCB4CBBFDB1D712D,
+				4D3F3FE602CDECB48F0CEDB9,
+				CE91961B9066B463AAF159B9,
+				88AE066879691B4BC0D8E922,
+				A999376DEA815D18FACDF330,
+				777AD3B744E88A1C427B64C1,
+				152DE4BDE8D4F07191A84AFB,
+				4FAD65F56061EAFE3DB189AF,
+				6A5BFD28C856BA12699C83AE,
+				2A874E7897484A0E1DCFBC2E,
+				F2B7B88BE6A024C85918B27C,
+				E101497ABF61E26B6330BA65,
+				33FA21958B718B6A7B7E04C0,
+				13EBC74D4DA9E585386D62A0,
+				0581095264EAA5A0F3FCED31,
+				3E39404237212A86161F7FD4,
+				856E3578FF08E680EFD61117,
+				A04DD83C804E7D2E4C301846,
+				58258788FD601C53A5E9913C,
+				98D4F5714F14368E5BDBED04,
+				966783071B9A6E07D6352C27,
+				FB6C46B577ECECBEE1214563,
+				7CF251E541DBCBAF47520E1C,
+				AF7159B3C8698BDAC9C94C43,
+				6C2C723CD39326E970913B35,
+				F0944360312298B60EFB44C3,
+				C244198A581248BD6F755626,
+				A2EFEE2B99EE67E00ABF94A2,
+				768D00D5E8553AA2F34B1769,
+				B8E11ED100825576B0ADDDB1,
+				3F7BF450FB034B4666272AF8,
+				7065A184F120522FD5E7F95C,
+				6B2E09C804FFC560642A2917,
+				1246BD6E5EEDD2A72B517144,
+				6DBE704C5D01D251168BE218,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5AF333056A6D3EEDC310E4D6 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		BC64CDF7B38423A12AFF1BAF = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				2FDC3E4335221CE2E45C63DC,
+				BF3C0CDA9D827E27024D4A86,
+				F878E101703F185B6E5DEAD3,
+				774E7F91F00A8D43EBF36B40,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		9B77D21FBAE90C5A5F038315 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F503316A17247AD0481F12E9,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		707544ECC1C19E7624F9D604 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				CDE6DFFD9BA5F8B289CB1D0A,
+				F24C52D804BF040F4304704D,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		119CD2B8927B127DF4D33D1C = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6A80F949E46EA88B9585AE37,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EA9AB9D695F076F189F2EE7C = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				292DD1C12E404932C88F5C8F,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		DCAA796ACC4B9CC598E6E24E = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3A818709F00C32F0FC9F72B2,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		60B0A196241A165994460D2B = {
+			isa = PBXBuildFile; fileRef = 797E92F9BC7CD81F430FA27D;
+		};
+		89CF7435DAB2D9C48C4A2758 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				60B0A196241A165994460D2B,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		43FC91D64E87EFD7A4887260 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				89A6ED80CBFA229F2933636B,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		7E6B9D9FCE37598625AEF8BE = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		99EA030F65B87591FF9350EB = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "Contents/Library/LaunchServices";
+			dstSubfolderSpec = 1;
+			name = "Embed Privileged Helper";
+			files = (
+				C4152886D64986E1896DF5A8,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		6FB48EAE804B9C991C063FFB = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "Contents/Library/LaunchDaemons";
+			dstSubfolderSpec = 1;
+			name = "Embed Helper Registration";
+			files = (
+				018160ACCE55BB86EDFED425,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		861F853C77135E20E0408414 = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "Contents/MacOS";
+			dstSubfolderSpec = 1;
+			name = "Embed Bridge Service";
+			files = (
+				BD37B7D41CA45B27B60EC272,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E166734C8DFAA006A92EF352 = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "Contents/Library/LaunchAgents";
+			dstSubfolderSpec = 1;
+			name = "Embed Bridge Service Registration";
+			files = (
+				318D9D459C0FFFB92B7E25C0,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A210DC273204B0690137D28B = {
+			isa = PBXShellScriptBuildPhase;
+			alwaysOutOfDate = 1;
+			buildActionMask = 2147483647;
+			files = ();
+			inputPaths = ();
+			name = "Embed Verified Enrollment Kit";
+			outputPaths = ();
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = "/bin/zsh";
+			shellScript = "KIT=\"${SRCROOT}/exploitdev/srdsh-work/components/zero-sky/kit\"\n[[ -d \"${KIT}/host-mac\" ]] || KIT=\"${SRCROOT}/kit\"\n[[ -d \"${KIT}/host-mac\" ]] || KIT=\"${SRCROOT}/../kit\"\n[[ -d \"${KIT}/host-mac\" ]] || { echo 'verified 0-Sky kit not found' >&2; exit 1; }\nHOST=\"${SRCROOT}\"\n[[ -f \"${HOST}/macos_host_setup.py\" ]] || HOST=\"${SRCROOT}/..\"\n[[ -f \"${HOST}/macos_host_setup.py\" ]] || { echo 'macOS host setup sources not found' >&2; exit 1; }\nRES=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources\"\nmkdir -p \"${RES}/Kit\" \"${RES}/Scripts\"\n/usr/bin/ditto --noqtn \"${KIT}\" \"${RES}/Kit\"\n/usr/bin/ditto --noqtn \"${HOST}/macos_host_setup.py\" \"${RES}/Scripts/macos_host_setup.py\"\n/usr/bin/ditto --noqtn \"${HOST}/zero_sky_user_config.py\" \"${RES}/Scripts/zero_sky_user_config.py\"\n/usr/bin/ditto --noqtn \"${SRCROOT}/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command\" \"${RES}/Scripts/Install 0-Sky Dependencies.command\"\nchmod -R u=rwX,go=rX \"${RES}\"";
+		};
+		93B61FCED3133927BCF46DF7 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = F11EED822EBD4996DAF631B0;
+			remoteInfo = BridgeCore;
+		};
+		8BD5F3BB1546A85A26DA367F = {
+			isa = PBXTargetDependency; target = F11EED822EBD4996DAF631B0; targetProxy = 93B61FCED3133927BCF46DF7;
+		};
+		DEA08AB7FC423B6EA50F2DC4 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = 5F16293E885C967A1ED5294D;
+			remoteInfo = 0SkyBridgeHelper;
+		};
+		F23BEFF401E10EDDFAC6A512 = {
+			isa = PBXTargetDependency; target = 5F16293E885C967A1ED5294D; targetProxy = DEA08AB7FC423B6EA50F2DC4;
+		};
+		E29483F7576190907808B3AF = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = 575E6574A9FD2B1569F17B21;
+			remoteInfo = 0SkyBridgeService;
+		};
+		9A6946C16EF47C9C8D0D3A1F = {
+			isa = PBXTargetDependency; target = 575E6574A9FD2B1569F17B21; targetProxy = E29483F7576190907808B3AF;
+		};
+		927ED922C78FDF44C3FA96A5 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = F11EED822EBD4996DAF631B0;
+			remoteInfo = BridgeCore;
+		};
+		34F2D6B6510C9A1DF5E4768E = {
+			isa = PBXTargetDependency; target = F11EED822EBD4996DAF631B0; targetProxy = 927ED922C78FDF44C3FA96A5;
+		};
+		DA1C61CF37F60E8E746F4EF3 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = F11EED822EBD4996DAF631B0;
+			remoteInfo = BridgeCore;
+		};
+		0FDA90C751FEEF315CDA1AD6 = {
+			isa = PBXTargetDependency; target = F11EED822EBD4996DAF631B0; targetProxy = DA1C61CF37F60E8E746F4EF3;
+		};
+		494FCF2AED4E590587A94ABD = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 98F54143AB4E86B28C3AFEE0;
+			proxyType = 1;
+			remoteGlobalIDString = 29C7B681C8D62CBAC94D51C0;
+			remoteInfo = 0SkyBridge;
+		};
+		C75246FEC40649BD1B71D087 = {
+			isa = PBXTargetDependency; target = 29C7B681C8D62CBAC94D51C0; targetProxy = 494FCF2AED4E590587A94ABD;
+		};
+		877A6BA951A2EA0025A2ABE8 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		959134B361DD7E21ADEA3164 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				MACOSX_DEPLOYMENT_TARGET = 15.0;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 6.0;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		12D04D787E90C9B967248BFD = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				877A6BA951A2EA0025A2ABE8,
+				959134B361DD7E21ADEA3164,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		701F7798550A194E2BEE45AB = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DEFINES_MODULE = YES;
+				MACH_O_TYPE = staticlib;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge.core;
+				PRODUCT_NAME = BridgeCore;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		8EEE7810075F95622C8C6667 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				DEFINES_MODULE = YES;
+				MACH_O_TYPE = staticlib;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge.core;
+				PRODUCT_NAME = BridgeCore;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		D5FF34D4D49F38638F715FC6 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				701F7798550A194E2BEE45AB,
+				8EEE7810075F95622C8C6667,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3CF6A4F2E05B3AAE7E2CBFEE = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "0SkyBridge/0SkyBridge.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "0SkyBridge/Info.plist";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge;
+				PRODUCT_NAME = 0SkyBridge;
+			};
+			name = Debug;
+		};
+		23FB2CAEB38545C3793097DD = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "0SkyBridge/0SkyBridge.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = "0SkyBridge/Info.plist";
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge;
+				PRODUCT_NAME = 0SkyBridge;
+			};
+			name = Release;
+		};
+		32995943DE67267A65D32CA9 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3CF6A4F2E05B3AAE7E2CBFEE,
+				23FB2CAEB38545C3793097DD,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		B6CE7757DAE2D6B78433A0C4 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "0SkyBridgeHelper/0SkyBridgeHelper.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge.helper;
+				PRODUCT_NAME = 0SkyBridgeHelper;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		3E432768B85F5C5F9DBA8681 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "0SkyBridgeHelper/0SkyBridgeHelper.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge.helper;
+				PRODUCT_NAME = 0SkyBridgeHelper;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		B1DD902516B1CC1A6DEC9678 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B6CE7757DAE2D6B78433A0C4,
+				3E432768B85F5C5F9DBA8681,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E2335DA8CC21E93E911A33B7 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "0SkyBridgeService/0SkyBridgeService.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge.service;
+				PRODUCT_NAME = 0SkyBridgeService;
+				SKIP_INSTALL = YES;
+			};
+			name = Debug;
+		};
+		C24C2EE5FFA690FD39FFA74C = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "0SkyBridgeService/0SkyBridgeService.entitlements";
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/../../Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge.service;
+				PRODUCT_NAME = 0SkyBridgeService;
+				SKIP_INSTALL = YES;
+			};
+			name = Release;
+		};
+		1B5BA066FFF1779966AB21A7 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E2335DA8CC21E93E911A33B7,
+				C24C2EE5FFA690FD39FFA74C,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		87847F444E1B99FE213C5044 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge.screen-smoke-tests;
+				PRODUCT_NAME = 0SkyBridgeScreenSmokeTests;
+				TEST_TARGET_NAME = 0SkyBridge;
+			};
+			name = Debug;
+		};
+		14FFDE5C3B39E38CDA35F13A = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.liquidsky.0sky.bridge.screen-smoke-tests;
+				PRODUCT_NAME = 0SkyBridgeScreenSmokeTests;
+				TEST_TARGET_NAME = 0SkyBridge;
+			};
+			name = Release;
+		};
+		833384D9B05A67BC8AF2B497 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				87847F444E1B99FE213C5044,
+				14FFDE5C3B39E38CDA35F13A,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F11EED822EBD4996DAF631B0 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D5FF34D4D49F38638F715FC6;
+			buildPhases = (9C861E65C97F11E95C72BE31, 5AF333056A6D3EEDC310E4D6, );
+			buildRules = ();
+			dependencies = ();
+			name = BridgeCore;
+			productName = BridgeCore;
+			productReference = 797E92F9BC7CD81F430FA27D;
+			productType = "com.apple.product-type.library.static";
+		};
+		5F16293E885C967A1ED5294D = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = B1DD902516B1CC1A6DEC9678;
+			buildPhases = (119CD2B8927B127DF4D33D1C, EA9AB9D695F076F189F2EE7C, );
+			buildRules = ();
+			dependencies = (34F2D6B6510C9A1DF5E4768E, );
+			name = 0SkyBridgeHelper;
+			productName = 0SkyBridgeHelper;
+			productReference = CC5FAD0E1F627EEC79BCB8EE;
+			productType = "com.apple.product-type.tool";
+		};
+		575E6574A9FD2B1569F17B21 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1B5BA066FFF1779966AB21A7;
+			buildPhases = (DCAA796ACC4B9CC598E6E24E, 89CF7435DAB2D9C48C4A2758, );
+			buildRules = ();
+			dependencies = (0FDA90C751FEEF315CDA1AD6, );
+			name = 0SkyBridgeService;
+			productName = 0SkyBridgeService;
+			productReference = 9D3A9971001C68058B7035DC;
+			productType = "com.apple.product-type.tool";
+		};
+		29C7B681C8D62CBAC94D51C0 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 32995943DE67267A65D32CA9;
+			buildPhases = (BC64CDF7B38423A12AFF1BAF, 9B77D21FBAE90C5A5F038315, 707544ECC1C19E7624F9D604, 99EA030F65B87591FF9350EB, 6FB48EAE804B9C991C063FFB, 861F853C77135E20E0408414, E166734C8DFAA006A92EF352, A210DC273204B0690137D28B, );
+			buildRules = ();
+			dependencies = (8BD5F3BB1546A85A26DA367F, F23BEFF401E10EDDFAC6A512, 9A6946C16EF47C9C8D0D3A1F, );
+			name = 0SkyBridge;
+			productName = 0SkyBridge;
+			productReference = B6CDB6E5D160E013280D3C68;
+			productType = "com.apple.product-type.application";
+		};
+		531B454365F9A5E8B7CEF388 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 833384D9B05A67BC8AF2B497;
+			buildPhases = (43FC91D64E87EFD7A4887260, 7E6B9D9FCE37598625AEF8BE, );
+			buildRules = ();
+			dependencies = (C75246FEC40649BD1B71D087, );
+			name = 0SkyBridgeScreenSmokeTests;
+			productName = 0SkyBridgeScreenSmokeTests;
+			productReference = 57F95CD7FCEFE62FE15F2656;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+		98F54143AB4E86B28C3AFEE0 = {
+			isa = PBXProject;
+			attributes = { BuildIndependentTargetsInParallel = 1; LastSwiftUpdateCheck = 2660; LastUpgradeCheck = 2660; TargetAttributes = { 531B454365F9A5E8B7CEF388 = { TestTargetID = 29C7B681C8D62CBAC94D51C0; }; }; };
+			buildConfigurationList = 12D04D787E90C9B967248BFD;
+			compatibilityVersion = "Xcode 16.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (en, Base, );
+			mainGroup = ADCF10F76EBF2A74473E9DC4;
+			productRefGroup = 5151B46607EBC8890D8DFCC2;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (29C7B681C8D62CBAC94D51C0, 5F16293E885C967A1ED5294D, 575E6574A9FD2B1569F17B21, F11EED822EBD4996DAF631B0, 531B454365F9A5E8B7CEF388, );
+		};
+	};
+	rootObject = 98F54143AB4E86B28C3AFEE0;
+}
