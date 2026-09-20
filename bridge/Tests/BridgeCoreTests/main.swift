@@ -73,6 +73,7 @@ struct BridgeCoreTestRunner {
             ("normalized event bus", normalizedEventBus),
             ("safe log clearing", safeLogClearing),
             ("complete dependency requirements", completeDependencyRequirements),
+            ("license agreement metadata", licenseAgreementMetadata),
             ("SRD lifecycle state machine", srdLifecycleStateMachine),
             ("first failing dependency graph", firstFailingDependencyGraph),
             ("human-facing Cryptex label", cryptexDisplayLabel),
@@ -112,6 +113,25 @@ struct BridgeCoreTestRunner {
         try expect(DependencyManager.hostPythonCandidates.allSatisfy {
             $0.contains("3.12")
         }, "a non-3.12 interpreter was accepted as the 0-Sky host runtime")
+    }
+
+    private static func licenseAgreementMetadata() async throws {
+        try expect(LicenseAgreementMetadata.currentVersion == "1.0",
+                   "unexpected agreement version")
+        try expect(LicenseAgreementMetadata.effectiveDate == "September 20, 2026",
+                   "unexpected agreement effective date")
+        try expect(!LicenseAgreementMetadata.isCurrent(acceptedVersion: nil),
+                   "missing acceptance was treated as current")
+        try expect(!LicenseAgreementMetadata.isCurrent(acceptedVersion: "0.9"),
+                   "an earlier agreement version was treated as current")
+        try expect(LicenseAgreementMetadata.isCurrent(acceptedVersion: "1.0"),
+                   "current agreement acceptance was rejected")
+        let encoded = try JSONEncoder().encode(LicenseAcceptanceRecord())
+        let fields = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        try expect(fields?["agreementVersion"] as? String == "1.0",
+                   "acceptance record omitted the agreement version")
+        try expect(fields?.keys.contains("device_id") != true,
+                   "acceptance record unexpectedly included a device identifier")
     }
 
     private static func deviceParsing() async throws {

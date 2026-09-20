@@ -58,8 +58,14 @@
 		D1EE4B2D8827DA93B6BE7FBC = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthMonitor.swift"; sourceTree = "<group>";
 		};
+		13764FF4978809044DB2C88F = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSComponentSetupManager.swift"; sourceTree = "<group>";
+		};
 		E92BB904637973EFBF25440F = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "KeychainStore.swift"; sourceTree = "<group>";
+		};
+		668CD6153D7BA7BBAC2ED9C4 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LicenseAgreement.swift"; sourceTree = "<group>";
 		};
 		6ABC4EB0CDC4547F5BCE32AE = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "Models.swift"; sourceTree = "<group>";
@@ -115,6 +121,9 @@
 		3E307C2CDED6ABDD06A64698 = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "BridgeAppModel.swift"; sourceTree = "<group>";
 		};
+		FB3C3FE7EA58196688AFB447 = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "LicenseAgreementView.swift"; sourceTree = "<group>";
+		};
 		D826BC01065492F019E2B7C8 = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "RootView.swift"; sourceTree = "<group>";
 		};
@@ -138,6 +147,9 @@
 		};
 		0C08D1DBDBB552121C4ECBEA = {
 			isa = PBXFileReference; lastKnownFileType = image.icns; path = "Resources/AppIcon.icns"; sourceTree = "<group>";
+		};
+		545629D26189033A7D09826B = {
+			isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "Resources/EULA.md"; sourceTree = "<group>";
 		};
 		4F907049016F7651498295C5 = {
 			isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/com.liquidsky.0sky.bridge.helper.plist"; sourceTree = "<group>";
@@ -214,8 +226,14 @@
 		856E3578FF08E680EFD61117 = {
 			isa = PBXBuildFile; fileRef = D1EE4B2D8827DA93B6BE7FBC;
 		};
+		14BD99BE1CBDDFCD3AADD7E6 = {
+			isa = PBXBuildFile; fileRef = 13764FF4978809044DB2C88F;
+		};
 		A04DD83C804E7D2E4C301846 = {
 			isa = PBXBuildFile; fileRef = E92BB904637973EFBF25440F;
+		};
+		005FDEF164F8162187B61265 = {
+			isa = PBXBuildFile; fileRef = 668CD6153D7BA7BBAC2ED9C4;
 		};
 		58258788FD601C53A5E9913C = {
 			isa = PBXBuildFile; fileRef = 6ABC4EB0CDC4547F5BCE32AE;
@@ -271,6 +289,9 @@
 		2FDC3E4335221CE2E45C63DC = {
 			isa = PBXBuildFile; fileRef = 3E307C2CDED6ABDD06A64698;
 		};
+		5B2ED8F3013364CE3EA20D2A = {
+			isa = PBXBuildFile; fileRef = FB3C3FE7EA58196688AFB447;
+		};
 		BF3C0CDA9D827E27024D4A86 = {
 			isa = PBXBuildFile; fileRef = D826BC01065492F019E2B7C8;
 		};
@@ -294,6 +315,9 @@
 		};
 		F24C52D804BF040F4304704D = {
 			isa = PBXBuildFile; fileRef = 0C08D1DBDBB552121C4ECBEA;
+		};
+		3A735E70E8559E3AB8732375 = {
+			isa = PBXBuildFile; fileRef = 545629D26189033A7D09826B;
 		};
 		F503316A17247AD0481F12E9 = {
 			isa = PBXBuildFile; fileRef = 797E92F9BC7CD81F430FA27D;
@@ -334,7 +358,9 @@
 				39F683293B29312AB8758B9B /* DiagnosticRedactor.swift */,
 				AF6BBEE5EB210377CFEBA6D8 /* HealthArchitecture.swift */,
 				D1EE4B2D8827DA93B6BE7FBC /* HealthMonitor.swift */,
+				13764FF4978809044DB2C88F /* IOSComponentSetupManager.swift */,
 				E92BB904637973EFBF25440F /* KeychainStore.swift */,
+				668CD6153D7BA7BBAC2ED9C4 /* LicenseAgreement.swift */,
 				6ABC4EB0CDC4547F5BCE32AE /* Models.swift */,
 				D3A0C0ED2AA60B5705072CEC /* OperationCoordinator.swift */,
 				DB1C94A21DBA3A0BA2D76355 /* PairingManager.swift */,
@@ -360,11 +386,13 @@
 			isa = PBXGroup;
 			children = (
 				3E307C2CDED6ABDD06A64698 /* BridgeAppModel.swift */,
+				FB3C3FE7EA58196688AFB447 /* LicenseAgreementView.swift */,
 				D826BC01065492F019E2B7C8 /* RootView.swift */,
 				02DB1066CFD0472BF3BB7CC6 /* Views.swift */,
 				7015A470938F6A3F38146E7F /* ZeroSkyBridgeApp.swift */,
 				E54980C0CA0B50527337EAA3 /* bridge-operations.json */,
 				0C08D1DBDBB552121C4ECBEA /* AppIcon.icns */,
+				545629D26189033A7D09826B /* EULA.md */,
 				4F907049016F7651498295C5 /* com.liquidsky.0sky.bridge.helper.plist */,
 				9F693C2E96029315647FDDDC /* com.liquidsky.0sky.bridge.service.plist */,
 			);
@@ -441,7 +469,9 @@
 				0581095264EAA5A0F3FCED31,
 				3E39404237212A86161F7FD4,
 				856E3578FF08E680EFD61117,
+				14BD99BE1CBDDFCD3AADD7E6,
 				A04DD83C804E7D2E4C301846,
+				005FDEF164F8162187B61265,
 				58258788FD601C53A5E9913C,
 				98D4F5714F14368E5BDBED04,
 				966783071B9A6E07D6352C27,
@@ -474,6 +504,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				2FDC3E4335221CE2E45C63DC,
+				5B2ED8F3013364CE3EA20D2A,
 				BF3C0CDA9D827E27024D4A86,
 				F878E101703F185B6E5DEAD3,
 				774E7F91F00A8D43EBF36B40,
@@ -494,6 +525,7 @@
 			files = (
 				CDE6DFFD9BA5F8B289CB1D0A,
 				F24C52D804BF040F4304704D,
+				3A735E70E8559E3AB8732375,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

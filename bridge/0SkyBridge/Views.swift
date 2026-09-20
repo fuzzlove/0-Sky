@@ -885,6 +885,15 @@ struct SettingsView: View {
             Section("Security") {
                 Text("Passwords, bridge tokens, private keys, and Keychain contents are excluded from configuration and diagnostic exports.")
             }
+            Section("Legal") {
+                KeyValue("Agreement", "Version \(LicenseAgreementMetadata.currentVersion)")
+                Text("Authorized security research only. Use 0-Sky only on devices and systems you own or are explicitly authorized to test.")
+                Button("View License Agreement") {
+                    if !LicenseAgreementDocument.openExternally() {
+                        model.lastError = "The bundled license agreement could not be opened. Reinstall 0-Sky Bridge."
+                    }
+                }
+            }
             Section("Advanced") {
                 Text("Per-device operations are serialized. Different devices may run independent operations concurrently.")
             }

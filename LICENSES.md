@@ -1,5 +1,10 @@
 # Licensing and attribution
 
+Installation, access, and use of 0-Sky are governed by the
+[`0-Sky End User License Agreement and Authorized Security Research Terms`](EULA.md).
+Separate open-source components remain governed by their respective licenses
+as stated below.
+
 `control/` is derived from TrollStore and is distributed under the license in
 `control/LICENSE`; upstream authorship notices are retained in the source.
 The vendored `control/ChOma/src` source retains its own upstream notices and

@@ -21,6 +21,7 @@ ui_tests = ["Tests/BridgeScreenSmokeTests/BridgeScreenSmokeTests.swift"]
 resources = [
     "0SkyBridge/Resources/bridge-operations.json",
     "0SkyBridge/Resources/AppIcon.icns",
+    "0SkyBridge/Resources/EULA.md",
 ]
 daemon = "0SkyBridge/Resources/com.liquidsky.0sky.bridge.helper.plist"
 agent = "0SkyBridge/Resources/com.liquidsky.0sky.bridge.service.plist"
@@ -43,6 +44,7 @@ for path in all_files:
         ".json": "text.json",
         ".plist": "text.plist.xml",
         ".icns": "image.icns",
+        ".md": "net.daringfireball.markdown",
     }[ext]
     relative_name = ("Resources/" + Path(path).name
                      if path.startswith("0SkyBridge/Resources/") else Path(path).name)

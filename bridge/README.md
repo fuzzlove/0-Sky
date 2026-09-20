@@ -4,6 +4,12 @@ Native macOS GUI and persistent service for device discovery, pairing/trust,
 USB/Wi-Fi transport, RemoteXPC, SSH, developer services, DDI/debugserver,
 Frida, recovery, and research-session evidence.
 
+The version 1.0 agreement in [`../EULA.md`](../EULA.md) is bundled into the
+application. On first launch—or after a future agreement version change—the
+Bridge blocks device discovery and service startup until the user accepts the
+agreement and separately certifies device/system ownership or explicit
+authorization. Only the accepted version and timestamp are stored locally.
+
 ## Requirements
 
 - macOS 15+

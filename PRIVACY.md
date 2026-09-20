@@ -14,6 +14,10 @@ Synthetic all-zero device identifiers and loopback addresses used by tests and
 local IPC are not device data. Public upstream attribution and copyright notices
 are retained as required by their licenses.
 
+The Bridge agreement acceptance record is local to the Mac and contains only
+the agreement version and acceptance timestamp. It does not include a device
+identifier, account, credential, pairing secret, or research artifact.
+
 Run the mandatory audit before every push:
 
 ```sh

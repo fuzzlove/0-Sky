@@ -7,6 +7,11 @@ repository publishes the source for the three first-party applications:
 - [`link/`](link/) — 0-Sky Link for iOS/SRD
 - [`control/`](control/) — 0-Sky Control for iOS/SRD
 
+Installation, access, and use are governed by the
+[`0-Sky End User License Agreement and Authorized Security Research Terms`](EULA.md),
+version 1.0, effective September 20, 2026. The Bridge installer and first-run
+application flow require explicit agreement and authorization certification.
+
 The source tree deliberately excludes device identifiers, pairing records,
 credentials, tokens, SSH keys, provisioning profiles, certificates, research
 sessions, logs, compiled applications, and device-derived evidence.
