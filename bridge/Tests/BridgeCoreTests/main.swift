@@ -428,6 +428,24 @@ struct BridgeCoreTestRunner {
         catch BridgeCoreError.cancelled { }
         catch BridgeCoreError.timeout { throw TestFailure.failed("cancellation waited for timeout") }
         catch { /* Process termination can surface as a task-group cancellation. */ }
+
+        // A terminated parent may leave a descendant holding inherited stdout
+        // and stderr descriptors. Cancellation must resolve the collectors
+        // rather than waiting for that descendant to close the pipes.
+        let descendant = Task {
+            try await runner.run(ScriptSpecification(
+                identifier: "test.cancel-descendant",
+                executableURL: URL(fileURLWithPath: "/usr/bin/python3"),
+                arguments: ["-c", "import subprocess,time; subprocess.Popen(['/bin/sleep','2']); print('ready',flush=True); time.sleep(20)"],
+                timeout: .seconds(30)
+            ))
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        let cancelStarted = Date()
+        await runner.cancelAll()
+        _ = try? await descendant.value
+        try expect(Date().timeIntervalSince(cancelStarted) < 1,
+                   "descendant-held output pipes made cancellation hang")
     }
 
     private static func normalizedEventBus() async throws {

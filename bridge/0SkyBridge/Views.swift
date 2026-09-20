@@ -970,6 +970,10 @@ struct SetupAssistantView: View {
                             Button("Cancel Setup", role: .destructive) {
                                 model.cancelCurrentOperations()
                             }
+                            Button("Force Stop & Close", role: .destructive) {
+                                model.forceStopCurrentOperation()
+                                dismiss()
+                            }
                         }
                     }
                     if !model.iosSetupProgress.isEmpty {

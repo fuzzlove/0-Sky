@@ -3,7 +3,25 @@ import OSLog
 
 private final class ProcessBox: @unchecked Sendable {
     let process: Process
-    init(_ process: Process) { self.process = process }
+    private let stdoutCollector: ProcessPipeCollector
+    private let stderrCollector: ProcessPipeCollector
+    private let stdoutHandle: FileHandle
+    private let stderrHandle: FileHandle
+
+    init(_ process: Process, stdoutCollector: ProcessPipeCollector,
+         stderrCollector: ProcessPipeCollector, stdoutHandle: FileHandle,
+         stderrHandle: FileHandle) {
+        self.process = process
+        self.stdoutCollector = stdoutCollector
+        self.stderrCollector = stderrCollector
+        self.stdoutHandle = stdoutHandle
+        self.stderrHandle = stderrHandle
+    }
+
+    func cancelIO() {
+        stdoutCollector.cancel(handle: stdoutHandle)
+        stderrCollector.cancel(handle: stderrHandle)
+    }
 }
 
 /// Drains a process pipe from Foundation's readability source rather than by
@@ -88,6 +106,12 @@ private final class ProcessPipeCollector: @unchecked Sendable {
         pending?.resume(returning: result)
     }
 
+    func cancel(handle: FileHandle) {
+        handle.readabilityHandler = nil
+        try? handle.close()
+        finish()
+    }
+
     private func emit(_ line: String) {
         onEvent(ScriptOutputEvent(
             operationID: operationID, stream: stream,
@@ -105,6 +129,7 @@ public actor ScriptRunner {
     private let sessions: ResearchSessionRecorder?
     private let ownedProcesses: OwnedProcessRegistry?
     private var active: [UUID: ProcessBox] = [:]
+    private var cancelled: Set<UUID> = []
     private let logger = Logger(subsystem: "com.liquidsky.0sky.bridge", category: "script")
 
     public init(
@@ -219,7 +244,20 @@ public actor ScriptRunner {
         let stderrPipe = Pipe()
         process.standardOutput = stdoutPipe
         process.standardError = stderrPipe
-        let box = ProcessBox(process)
+        let stdoutCollector = ProcessPipeCollector(
+            operationID: operationID, stream: .stdout,
+            maximumBytes: specification.maximumOutputBytes, onEvent: onEvent
+        )
+        let stderrCollector = ProcessPipeCollector(
+            operationID: operationID, stream: .stderr,
+            maximumBytes: specification.maximumOutputBytes, onEvent: onEvent
+        )
+        let box = ProcessBox(
+            process, stdoutCollector: stdoutCollector,
+            stderrCollector: stderrCollector,
+            stdoutHandle: stdoutPipe.fileHandleForReading,
+            stderrHandle: stderrPipe.fileHandleForReading
+        )
         active[operationID] = box
         logger.info("Starting approved operation \(specification.identifier, privacy: .public)")
 
@@ -236,27 +274,15 @@ public actor ScriptRunner {
             )
         }
 
-        async let stdout = Self.consume(
-            stdoutPipe.fileHandleForReading,
-            operationID: operationID,
-            stream: .stdout,
-            maximumBytes: specification.maximumOutputBytes,
-            onEvent: onEvent
-        )
-        async let stderr = Self.consume(
-            stderrPipe.fileHandleForReading,
-            operationID: operationID,
-            stream: .stderr,
-            maximumBytes: specification.maximumOutputBytes,
-            onEvent: onEvent
-        )
+        async let stdout = stdoutCollector.collect(from: stdoutPipe.fileHandleForReading)
+        async let stderr = stderrCollector.collect(from: stderrPipe.fileHandleForReading)
 
         let status = await Self.wait(for: box)
         let output = await stdout
         let errors = await stderr
         active.removeValue(forKey: operationID)
         await ownedProcesses?.remove(pid: process.processIdentifier)
-        let wasCancelled = Task.isCancelled
+        let wasCancelled = Task.isCancelled || cancelled.remove(operationID) != nil
         logger.info(
             "Finished approved operation \(specification.identifier, privacy: .public) status=\(status)"
         )
@@ -291,6 +317,7 @@ public actor ScriptRunner {
 
     public func cancel(_ operationID: UUID) {
         guard let box = active[operationID] else { return }
+        cancelled.insert(operationID)
         if box.process.isRunning {
             box.process.terminate()
             let process = box.process
@@ -299,6 +326,10 @@ public actor ScriptRunner {
                 if process.isRunning { kill(process.processIdentifier, SIGKILL) }
             }
         }
+        // A descendant can inherit a pipe and keep it open after its parent is
+        // terminated. Resolve both collectors explicitly so cancellation can
+        // never leave the Bridge UI waiting indefinitely for EOF.
+        box.cancelIO()
     }
 
     public func cancelAll() {
@@ -313,16 +344,4 @@ public actor ScriptRunner {
         }
     }
 
-    private static func consume(
-        _ handle: FileHandle,
-        operationID: UUID,
-        stream: ScriptStream,
-        maximumBytes: Int,
-        onEvent: @escaping EventHandler
-    ) async -> String {
-        await ProcessPipeCollector(
-            operationID: operationID, stream: stream,
-            maximumBytes: maximumBytes, onEvent: onEvent
-        ).collect(from: handle)
-    }
 }

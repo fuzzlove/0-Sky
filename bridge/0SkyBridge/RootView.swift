@@ -91,10 +91,23 @@ struct RootView: View {
                 case .settings: SettingsView(model: model)
                 }
             }
+            .safeAreaInset(edge: .top, spacing: 0) {
+                if model.activeOperationName != nil {
+                    ActiveOperationBanner(model: model)
+                }
+            }
             .toolbar {
                 ToolbarItemGroup {
-                    if model.isBusy { ProgressView().controlSize(.small) }
-                    Button { Task { await model.refresh(runHealth: true) } } label: {
+                    if model.isBusy {
+                        ProgressView().controlSize(.small)
+                        Button(model.cancellationInProgress ? "Stopping…" : "Stop") {
+                            model.cancelCurrentOperations()
+                        }
+                        .disabled(model.cancellationInProgress)
+                        .keyboardShortcut(.cancelAction)
+                        .help("Stop the active operation (Escape)")
+                    }
+                    Button { model.manualRefresh() } label: {
                         Label("Refresh", systemImage: "arrow.clockwise")
                     }
                     .disabled(model.isBusy)
@@ -127,5 +140,44 @@ struct RootView: View {
         } message: {
             Text(DiagnosticRedactor.redact(model.lastError ?? "Unknown error"))
         }
+    }
+}
+
+private struct ActiveOperationBanner: View {
+    @ObservedObject var model: BridgeAppModel
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ProgressView().controlSize(.small)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model.activeOperationName ?? "Operation in progress")
+                    .font(.callout.bold())
+                TimelineView(.periodic(from: .now, by: 1)) { context in
+                    let elapsed = context.date.timeIntervalSince(
+                        model.activeOperationStartedAt ?? context.date
+                    )
+                    Text("Elapsed \(Self.duration(elapsed)) — \(DiagnosticRedactor.redact(model.statusMessage))")
+                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                }
+            }
+            Spacer()
+            Button(model.cancellationInProgress ? "Stopping…" : "Stop Gracefully") {
+                model.cancelCurrentOperations()
+            }
+            .disabled(model.cancellationInProgress)
+            .keyboardShortcut(.cancelAction)
+            Button("Force Stop & Return", role: .destructive) {
+                model.forceStopCurrentOperation()
+            }
+            .help("Cancels the Swift task, terminates only 0-Sky-owned processes, and immediately releases the interface.")
+        }
+        .padding(.horizontal, 16).padding(.vertical, 9)
+        .background(.orange.opacity(0.12))
+        .overlay(alignment: .bottom) { Divider() }
+    }
+
+    private static func duration(_ interval: TimeInterval) -> String {
+        let seconds = max(0, Int(interval))
+        return String(format: "%02d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60)
     }
 }

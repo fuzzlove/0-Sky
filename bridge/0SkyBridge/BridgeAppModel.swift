@@ -48,6 +48,9 @@ final class BridgeAppModel: ObservableObject {
     @Published var iosSetupCompleted = false
     @Published var iosSetupStartedAt: Date?
     @Published var iosSetupLastActivity: Date?
+    @Published var activeOperationName: String?
+    @Published var activeOperationStartedAt: Date?
+    @Published var cancellationInProgress = false
 
     let environment: BridgeEnvironment
     let daemonClient = BridgeDaemonClient()
@@ -58,6 +61,8 @@ final class BridgeAppModel: ObservableObject {
     private var refreshCount = 0
     private var previousConnections: [String: ConnectionKind] = [:]
     private var previousHealthStates: [String: HealthState] = [:]
+    private var activeOperationTask: Task<Void, Never>?
+    private var activeOperationToken: UUID?
 
     init(environment: BridgeEnvironment = BridgeEnvironment()) {
         self.environment = environment
@@ -341,9 +346,39 @@ final class BridgeAppModel: ObservableObject {
         await reloadLogs()
     }
 
+    @discardableResult
+    private func launchTrackedOperation(
+        _ name: String,
+        action: @escaping @MainActor () async -> Void
+    ) -> Bool {
+        guard activeOperationTask == nil else {
+            lastError = "\(activeOperationName ?? "Another operation") is already running. Stop it before starting a new operation."
+            return false
+        }
+        let token = UUID()
+        activeOperationToken = token
+        activeOperationName = name
+        activeOperationStartedAt = Date()
+        cancellationInProgress = false
+        isBusy = true
+        activeOperationTask = Task { [weak self] in
+            await action()
+            guard let self, self.activeOperationToken == token else { return }
+            self.activeOperationTask = nil
+            self.activeOperationToken = nil
+            self.activeOperationName = nil
+            self.activeOperationStartedAt = nil
+            self.cancellationInProgress = false
+            self.isBusy = false
+        }
+        return true
+    }
+
     func enrollSelectedDevice() {
         guard let device = selectedDevice else { return }
-        Task { await perform("Set Up New Device") { [environment] in
+        launchTrackedOperation("Set Up New Device") { [weak self] in
+            guard let self else { return }
+            await self.perform("Set Up New Device") { [environment] in
             try await environment.enrollment.enroll(device: device) { event in
                 Task { await environment.logs.append(
                     category: .pairing,
@@ -352,7 +387,8 @@ final class BridgeAppModel: ObservableObject {
                     deviceID: device.udid
                 ) }
             }
-        } }
+            }
+        }
     }
 
     func setupCompleteIOSProject() {
@@ -361,21 +397,25 @@ final class BridgeAppModel: ObservableObject {
             return
         }
         guard !iosSetupActive else { return }
+        guard activeOperationTask == nil else {
+            lastError = "\(activeOperationName ?? "Another operation") is already running. Stop it before starting iOS setup."
+            return
+        }
         iosSetupActive = true
         iosSetupCompleted = false
         iosSetupError = nil
         iosSetupProgress = ["Preflight: validating the selected USB SRD and bundled project kit…"]
         iosSetupStartedAt = Date()
         iosSetupLastActivity = Date()
-        isBusy = true
         lastError = nil
         statusMessage = "Install Complete 0-Sky iOS Project…"
 
-        Task {
+        launchTrackedOperation("Install Complete 0-Sky iOS Project") { [weak self] in
+            guard let self else { return }
             do {
-                let setup = try await environment.iosComponents.setupCompleteProject(
+                let setup = try await self.environment.iosComponents.setupCompleteProject(
                     device: device, confirmed: true
-                ) { [weak self, environment] event in
+                ) { [weak self, environment = self.environment] event in
                     let line = DiagnosticRedactor.redact(event.line)
                     Task { @MainActor [weak self] in
                         self?.appendIOSSetupProgress(line)
@@ -389,34 +429,33 @@ final class BridgeAppModel: ObservableObject {
                         )
                     }
                 }
-                operations.append(setup)
+                self.operations.append(setup)
                 if setup.succeeded {
-                    _ = try? await environment.registry.reload()
-                    appendIOSSetupProgress("Complete project installation and postcondition checks passed.")
-                    iosSetupCompleted = true
-                    statusMessage = "Install Complete 0-Sky iOS Project completed."
+                    _ = try? await self.environment.registry.reload()
+                    self.appendIOSSetupProgress("Complete project installation and postcondition checks passed.")
+                    self.iosSetupCompleted = true
+                    self.statusMessage = "Install Complete 0-Sky iOS Project completed."
                 } else {
                     let detail = setup.stderr.isEmpty ? setup.stdout : setup.stderr
                     let message = DiagnosticRedactor.redact(detail).trimmingCharacters(in: .whitespacesAndNewlines)
-                    iosSetupError = message.isEmpty
+                    self.iosSetupError = message.isEmpty
                         ? "The setup controller exited with status \(setup.exitCode)."
                         : message
-                    appendIOSSetupProgress("Setup stopped with exit status \(setup.exitCode).")
-                    statusMessage = "Install Complete 0-Sky iOS Project failed."
+                    self.appendIOSSetupProgress("Setup stopped with exit status \(setup.exitCode).")
+                    self.statusMessage = "Install Complete 0-Sky iOS Project failed."
                 }
             } catch {
                 let message = DiagnosticRedactor.redact(error.localizedDescription)
-                iosSetupError = message
-                appendIOSSetupProgress("Setup failed: \(message)")
-                statusMessage = "Install Complete 0-Sky iOS Project failed."
+                self.iosSetupError = message
+                self.appendIOSSetupProgress("Setup failed: \(message)")
+                self.statusMessage = "Install Complete 0-Sky iOS Project failed."
             }
-            iosSetupActive = false
-            isBusy = false
+            self.iosSetupActive = false
 
             // A full health pass can take tens of seconds. Do not keep the
             // installer UI in its busy state while post-install health is
             // measured; report setup completion first and refresh separately.
-            if iosSetupCompleted {
+            if self.iosSetupCompleted {
                 Task { await self.refresh(runHealth: true) }
             }
         }
@@ -447,10 +486,11 @@ final class BridgeAppModel: ObservableObject {
 
     private func runPairing(mode: PairingManager.Mode, name: String) {
         guard let device = selectedDevice else { return }
-        Task {
-            await environment.states.restore(deviceID: device.udid, state: .pairing)
-            updateDisplayedState(device.udid, .pairing)
-            await perform(name) { [environment] in
+        launchTrackedOperation(name) { [weak self] in
+            guard let self else { return }
+            await self.environment.states.restore(deviceID: device.udid, state: .pairing)
+            self.updateDisplayedState(device.udid, .pairing)
+            await self.perform(name) { [environment = self.environment] in
             guard let profile = await environment.registry.profile(for: device.udid) else {
                 throw BridgeCoreError.operationFailed("This device has no 0-Sky profile.")
             }
@@ -465,9 +505,9 @@ final class BridgeAppModel: ObservableObject {
                 ) }
             }
             }
-            let state: BridgeState = lastError == nil ? .paired : .waitingForTrust
-            await environment.states.restore(deviceID: device.udid, state: state)
-            updateDisplayedState(device.udid, state)
+            let state: BridgeState = self.lastError == nil ? .paired : .waitingForTrust
+            await self.environment.states.restore(deviceID: device.udid, state: state)
+            self.updateDisplayedState(device.udid, state)
         }
     }
 
@@ -476,10 +516,11 @@ final class BridgeAppModel: ObservableObject {
 
     private func runWireless(_ operation: WirelessPairingManager.Operation, name: String) {
         guard let device = selectedDevice else { return }
-        Task {
-            await environment.states.restore(deviceID: device.udid, state: .enablingWireless)
-            updateDisplayedState(device.udid, .enablingWireless)
-            await perform(name) { [environment] in
+        launchTrackedOperation(name) { [weak self] in
+            guard let self else { return }
+            await self.environment.states.restore(deviceID: device.udid, state: .enablingWireless)
+            self.updateDisplayedState(device.udid, .enablingWireless)
+            await self.perform(name) { [environment = self.environment] in
             guard let profile = await environment.registry.profile(for: device.udid) else {
                 throw BridgeCoreError.operationFailed("This device has no 0-Sky profile.")
             }
@@ -490,49 +531,50 @@ final class BridgeAppModel: ObservableObject {
                 usbTrustVerified: profile.pairingVerified
             )
             }
-            let state: BridgeState = lastError == nil
-                ? (health?.state == .healthy ? .connected : .connecting) : .degraded
-            await environment.states.restore(deviceID: device.udid, state: state)
-            updateDisplayedState(device.udid, state)
-            if operation == .enable, lastError == nil, device.usbConnected {
-                statusMessage = "Wi-Fi pairing is enabled. Disconnect USB, then select Verify Wi-Fi Connection."
+            let state: BridgeState = self.lastError == nil
+                ? (self.health?.state == .healthy ? .connected : .connecting) : .degraded
+            await self.environment.states.restore(deviceID: device.udid, state: state)
+            self.updateDisplayedState(device.udid, state)
+            if operation == .enable, self.lastError == nil, device.usbConnected {
+                self.statusMessage = "Wi-Fi pairing is enabled. Disconnect USB, then select Verify Wi-Fi Connection."
             }
         }
     }
 
     func reconnect() {
         guard let device = selectedDevice else { return }
-        Task {
-            isBusy = true
-            defer { isBusy = false }
-            guard let profile = await environment.registry.profile(for: device.udid) else { return }
-            let connected = await environment.connection.reconnect(profile: profile)
-            statusMessage = connected ? "Connection restored." : "Reconnection is still in periodic health-check mode."
-            await refreshDetails()
+        launchTrackedOperation("Reconnect") { [weak self] in
+            guard let self,
+                  let profile = await self.environment.registry.profile(for: device.udid) else { return }
+            let connected = await self.environment.connection.reconnect(profile: profile)
+            self.statusMessage = connected ? "Connection restored." : "Reconnection is still in periodic health-check mode."
+            await self.refreshDetails()
         }
     }
 
     func fixBridge() {
         guard let device = selectedDevice else { return }
-        Task {
-            isBusy = true
-            defer { isBusy = false }
-            if let serviceHealth = try? await daemonClient.recover(deviceID: device.udid) {
-                health = serviceHealth
+        launchTrackedOperation("Run Safe Recovery") { [weak self] in
+            guard let self else { return }
+            if let serviceHealth = try? await self.daemonClient.recover(deviceID: device.udid) {
+                self.health = serviceHealth
             } else {
-                guard let profile = await environment.registry.profile(for: device.udid) else { return }
-                health = await environment.recovery.fix(device: device, profile: profile)
+                guard let profile = await self.environment.registry.profile(for: device.udid) else { return }
+                self.health = await self.environment.recovery.fix(device: device, profile: profile)
             }
-            statusMessage = health?.state == .healthy
+            self.statusMessage = self.health?.state == .healthy
                 ? "The affected bridge component was repaired and verified."
-                : "Repair stopped at \(HealthResult.displayName(for: health?.firstFailingTransition ?? "an unknown transition"))."
-            await reloadLogs()
+                : "Repair stopped at \(HealthResult.displayName(for: self.health?.firstFailingTransition ?? "an unknown transition"))."
+            await self.reloadLogs()
         }
     }
 
     func serviceAction(_ action: String, service: ServiceManager.Kind) {
         guard let device = selectedDevice else { return }
-        Task { await perform("\(action.capitalized) \(service.rawValue)") { [environment] in
+        let name = "\(action.capitalized) \(service.rawValue)"
+        launchTrackedOperation(name) { [weak self] in
+            guard let self else { return }
+            await self.perform(name) { [environment = self.environment] in
             guard let profile = await environment.registry.profile(for: device.udid) else {
                 throw BridgeCoreError.operationFailed("This device has no 0-Sky profile.")
             }
@@ -541,10 +583,21 @@ final class BridgeAppModel: ObservableObject {
             case "stop": return try await environment.services.stop(kind: service, profile: profile)
             default: return try await environment.services.restart(kind: service, profile: profile)
             }
-        } }
+            }
+        }
     }
 
-    func runDiagnostics() { Task { await refresh(runHealth: true) } }
+    func runDiagnostics() {
+        launchTrackedOperation("Run Diagnostics") { [weak self] in
+            await self?.refresh(runHealth: true)
+        }
+    }
+
+    func manualRefresh() {
+        launchTrackedOperation("Refresh Devices and Health") { [weak self] in
+            await self?.refresh(runHealth: true)
+        }
+    }
 
     func addressRequiredAction() {
         verboseLogging = true
@@ -552,28 +605,27 @@ final class BridgeAppModel: ObservableObject {
     }
 
     func clearLogs() {
-        Task {
-            isBusy = true
-            defer { isBusy = false }
+        launchTrackedOperation("Clear Logs") { [weak self] in
+            guard let self else { return }
             var serviceWarning: String?
             do {
                 // Ask the persistent owner to close out its in-memory view and
                 // clear shared files first, then clear this GUI client's view.
-                try await daemonClient.clearLogs()
+                try await self.daemonClient.clearLogs()
             } catch {
                 // The shared files and GUI view can still be safely cleared if
                 // the persistent service is temporarily unavailable.
                 serviceWarning = DiagnosticRedactor.redact(error.localizedDescription)
             }
             do {
-                await environment.logs.clear()
-                _ = try await environment.structuredLog.clear()
-                logEntries = []
-                statusMessage = serviceWarning == nil
+                await self.environment.logs.clear()
+                _ = try await self.environment.structuredLog.clear()
+                self.logEntries = []
+                self.statusMessage = serviceWarning == nil
                     ? "0-Sky Bridge logs cleared. Research-session evidence was preserved."
                     : "Local logs cleared; the persistent service was unavailable. Research-session evidence was preserved."
             } catch {
-                lastError = "Could not clear 0-Sky Bridge logs: \(DiagnosticRedactor.redact(error.localizedDescription))"
+                self.lastError = "Could not clear 0-Sky Bridge logs: \(DiagnosticRedactor.redact(error.localizedDescription))"
             }
         }
     }
@@ -593,59 +645,98 @@ final class BridgeAppModel: ObservableObject {
     }
 
     func cancelCurrentOperations() {
-        Task {
-            if iosSetupActive {
-                appendIOSSetupProgress("Cancellation requested; stopping the owned setup process…")
-                statusMessage = "Cancelling iOS component setup…"
-            }
-            await environment.runner.cancelAll()
-            if !iosSetupActive {
-                isBusy = false
-                statusMessage = "Operation cancelled. Owned processes were terminated."
+        guard let token = activeOperationToken else {
+            Task { await environment.runner.cancelAll() }
+            isBusy = false
+            statusMessage = "No active operation remains."
+            return
+        }
+        cancellationInProgress = true
+        if iosSetupActive {
+            appendIOSSetupProgress("Cancellation requested; stopping the owned setup process…")
+        }
+        statusMessage = "Stopping \(activeOperationName ?? "active operation")…"
+        activeOperationTask?.cancel()
+        Task { [weak self] in
+            guard let self else { return }
+            await self.environment.runner.cancelAll()
+            try? await Task.sleep(for: .seconds(3))
+            guard self.activeOperationToken == token else { return }
+            self.forceStopCurrentOperation()
+        }
+    }
+
+    func forceStopCurrentOperation() {
+        activeOperationTask?.cancel()
+        activeOperationTask = nil
+        activeOperationToken = nil
+        let name = activeOperationName ?? "Operation"
+        activeOperationName = nil
+        activeOperationStartedAt = nil
+        cancellationInProgress = false
+        isBusy = false
+        if iosSetupActive {
+            iosSetupActive = false
+            iosSetupError = "Setup was stopped by the user. No evidence or prior session data was removed."
+            appendIOSSetupProgress("Setup force-stopped by the user.")
+        }
+        statusMessage = "\(name) stopped. Owned processes are being terminated."
+        Task { await environment.runner.cancelAll() }
+    }
+
+    func checkCoreDevice() {
+        launchTrackedOperation("Check CoreDevice") { [weak self] in
+            guard let self else { return }
+            await self.perform("Check CoreDevice") { [environment = self.environment] in
+                try await environment.researcher.checkCoreDevice()
             }
         }
     }
 
-    func checkCoreDevice() {
-        Task { await perform("Check CoreDevice") { [environment] in
-            try await environment.researcher.checkCoreDevice()
-        } }
-    }
-
     func checkDeveloperServices() {
-        Task { await perform("Check Developer Services") { [environment] in
-            try await environment.researcher.checkDeveloperServices()
-        } }
+        launchTrackedOperation("Check Developer Services") { [weak self] in
+            guard let self else { return }
+            await self.perform("Check Developer Services") { [environment = self.environment] in
+                try await environment.researcher.checkDeveloperServices()
+            }
+        }
     }
 
     func checkRemoteXPC() {
         guard let device = selectedDevice else { return }
-        Task { await perform("Check RemoteXPC") { [environment] in
+        launchTrackedOperation("Check RemoteXPC") { [weak self] in
+            guard let self else { return }
+            await self.perform("Check RemoteXPC") { [environment = self.environment] in
             guard let profile = await environment.registry.profile(for: device.udid) else {
                 throw BridgeCoreError.operationFailed("This device has no 0-Sky profile.")
             }
             return try await environment.researcher.checkRemoteXPC(profile: profile)
-        } }
+            }
+        }
     }
 
     func testDevicePorts() {
         guard let device = selectedDevice else { return }
-        Task { await perform("Test Device Ports") { [environment] in
+        launchTrackedOperation("Test Device Ports") { [weak self] in
+            guard let self else { return }
+            await self.perform("Test Device Ports") { [environment = self.environment] in
             guard let profile = await environment.registry.profile(for: device.udid) else {
                 throw BridgeCoreError.operationFailed("This device has no 0-Sky profile.")
             }
             return await environment.researcher.testForwardedPort(profile: profile)
-        } }
+            }
+        }
     }
 
     func restartDiscovery() {
-        Task {
+        launchTrackedOperation("Restart Device Discovery") { [weak self] in
+            guard let self else { return }
             let start = Date()
-            await refresh(runHealth: false)
-            operations.append(BridgeOperationResult(
+            await self.refresh(runHealth: false)
+            self.operations.append(BridgeOperationResult(
                 identifier: "research.restart-discovery",
                 startedAt: start, finishedAt: Date(), exitCode: 0,
-                stdout: "Discovery backends reran and normalized \(devices.count) device record(s).\n",
+                stdout: "Discovery backends reran and normalized \(self.devices.count) device record(s).\n",
                 stderr: ""
             ))
         }
@@ -674,59 +765,62 @@ final class BridgeAppModel: ObservableObject {
     }
 
     func exportDiagnostics() {
-        Task {
+        launchTrackedOperation("Export Diagnostic Report") { [weak self] in
+            guard let self else { return }
             do {
-                let pairingObject: [String: String] = health.map {
+                let pairingObject: [String: String] = self.health.map {
                     ["state": $0.state.rawValue,
                      "firstFailingTransition": $0.firstFailingTransition ?? ""]
                 } ?? [:]
-                let networkObject: [String: String] = selectedDevice.map {
+                let networkObject: [String: String] = self.selectedDevice.map {
                     ["connection": $0.connection.rawValue,
                      "usbConnected": String($0.usbConnected),
                      "wifiConnected": String($0.wifiConnected),
                      "localForwardPort": $0.localPort.map(String.init) ?? ""]
                 } ?? [:]
-                let location = try await environment.diagnostics.export(
-                    host: host, device: selectedDevice, services: services,
-                    pairing: pairingObject, network: networkObject, health: health,
-                    logs: logEntries, operations: operations
+                let location = try await self.environment.diagnostics.export(
+                    host: self.host, device: self.selectedDevice, services: self.services,
+                    pairing: pairingObject, network: networkObject, health: self.health,
+                    logs: self.logEntries, operations: self.operations
                 )
                 NSWorkspace.shared.activateFileViewerSelecting([location])
-                statusMessage = "Diagnostic report exported."
-            } catch { lastError = error.localizedDescription }
+                self.statusMessage = "Diagnostic report exported."
+            } catch { self.lastError = error.localizedDescription }
         }
     }
 
     func startResearchSession(name: String = "research") {
         guard let device = selectedDevice else { return }
-        Task {
+        launchTrackedOperation("Start Research Session") { [weak self] in
+            guard let self else { return }
             do {
                 let session: ResearchSession
-                if bridgeServiceStatus == "Connected" {
-                    session = try await daemonClient.startResearchSession(name: name, deviceID: device.udid)
+                if self.bridgeServiceStatus == "Connected" {
+                    session = try await self.daemonClient.startResearchSession(name: name, deviceID: device.udid)
                 } else {
-                    session = try await environment.sessions.start(
-                        name: name, device: device, host: host,
-                        toolVersions: ["bridge": host.bridgeVersion],
-                        researchConfiguration: ["automatic_reconnect": String(automaticReconnect)]
+                    session = try await self.environment.sessions.start(
+                        name: name, device: device, host: self.host,
+                        toolVersions: ["bridge": self.host.bridgeVersion],
+                        researchConfiguration: ["automatic_reconnect": String(self.automaticReconnect)]
                     )
                 }
-                activeResearchSession = session
-                statusMessage = "Research session recording started."
-            } catch { lastError = error.localizedDescription }
+                self.activeResearchSession = session
+                self.statusMessage = "Research session recording started."
+            } catch { self.lastError = error.localizedDescription }
         }
     }
 
     func stopResearchSession() {
-        Task {
+        launchTrackedOperation("Stop Research Session") { [weak self] in
+            guard let self else { return }
             do {
-                let directory = bridgeServiceStatus == "Connected"
-                    ? try await daemonClient.stopResearchSession()
-                    : try await environment.sessions.stop()
-                lastResearchSessionDirectory = directory
-                activeResearchSession = nil
-                statusMessage = "Research session stopped and evidence hashes generated."
-            } catch { lastError = error.localizedDescription }
+                let directory = self.bridgeServiceStatus == "Connected"
+                    ? try await self.daemonClient.stopResearchSession()
+                    : try await self.environment.sessions.stop()
+                self.lastResearchSessionDirectory = directory
+                self.activeResearchSession = nil
+                self.statusMessage = "Research session stopped and evidence hashes generated."
+            } catch { self.lastError = error.localizedDescription }
         }
     }
 
@@ -735,14 +829,15 @@ final class BridgeAppModel: ObservableObject {
             lastError = "Stop a research session before exporting it."
             return
         }
-        Task {
+        launchTrackedOperation("Export Research Bundle") { [weak self] in
+            guard let self else { return }
             do {
-                let archive = bridgeServiceStatus == "Connected"
-                    ? try await daemonClient.exportLastResearchSession(profile: profile)
-                    : try await environment.sessions.export(sessionDirectory: directory, profile: profile)
+                let archive = self.bridgeServiceStatus == "Connected"
+                    ? try await self.daemonClient.exportLastResearchSession(profile: profile)
+                    : try await self.environment.sessions.export(sessionDirectory: directory, profile: profile)
                 NSWorkspace.shared.activateFileViewerSelecting([archive])
-                statusMessage = "Research evidence bundle exported."
-            } catch { lastError = error.localizedDescription }
+                self.statusMessage = "Research evidence bundle exported."
+            } catch { self.lastError = error.localizedDescription }
         }
     }
 
@@ -750,18 +845,13 @@ final class BridgeAppModel: ObservableObject {
         _ displayName: String,
         operation: @escaping @Sendable () async throws -> BridgeOperationResult
     ) async {
-        isBusy = true
         lastError = nil
         statusMessage = "\(displayName)…"
-        defer { isBusy = false }
         do {
             let result = try await operation()
             operations.append(result)
             statusMessage = result.succeeded ? "\(displayName) completed." : "\(displayName) failed."
             if !result.succeeded { lastError = DiagnosticRedactor.redact(result.stderr) }
-            // Release the global busy state before the potentially long health
-            // refresh so a completed command never appears permanently stuck.
-            isBusy = false
             await refresh(runHealth: true)
         } catch {
             lastError = DiagnosticRedactor.redact(error.localizedDescription)

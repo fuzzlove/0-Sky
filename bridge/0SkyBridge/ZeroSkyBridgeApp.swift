@@ -18,6 +18,14 @@ struct ZeroSkyBridgeApp: App {
             Divider()
             Button("Reconnect") { model.reconnect() }
             Button("Restart Bridge") { model.serviceAction("restart", service: .deviceBridge) }
+            if model.activeOperationName != nil {
+                Divider()
+                Text(model.activeOperationName ?? "Operation in progress")
+                Button("Stop Active Operation") { model.cancelCurrentOperations() }
+                Button("Force Stop Active Operation", role: .destructive) {
+                    model.forceStopCurrentOperation()
+                }
+            }
             Divider()
             Button("Quit") { NSApplication.shared.terminate(nil) }
         }
