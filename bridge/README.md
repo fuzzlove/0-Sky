@@ -29,5 +29,7 @@ The Swift package products are:
 - `BridgeCore`
 
 The checked-in Xcode project builds the native application. Signing identities,
-installer payloads, device kits, pairing records, and research evidence are not
-part of the source repository.
+binary installer payloads, device kits, pairing records, and research evidence are
+not part of the source repository. The complete-project controller source is
+included under `0SkyBridge/Resources/Scripts`; it requires a separately supplied,
+integrity-checked SRD Kit at runtime.

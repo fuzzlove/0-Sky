@@ -42,6 +42,12 @@ final class BridgeAppModel: ObservableObject {
     @Published var activeResearchSession: ResearchSession?
     @Published var lastResearchSessionDirectory: URL?
     @Published var bridgeServiceStatus = BridgeDaemonClient.registrationStatus()
+    @Published var iosSetupActive = false
+    @Published var iosSetupProgress: [String] = []
+    @Published var iosSetupError: String?
+    @Published var iosSetupCompleted = false
+    @Published var iosSetupStartedAt: Date?
+    @Published var iosSetupLastActivity: Date?
 
     let environment: BridgeEnvironment
     let daemonClient = BridgeDaemonClient()
@@ -354,20 +360,79 @@ final class BridgeAppModel: ObservableObject {
             lastError = "Select the new SRD before installing the 0-Sky iOS Project."
             return
         }
-        Task { await perform("Install Complete 0-Sky iOS Project") { [environment] in
-            let setup = try await environment.iosComponents.setupCompleteProject(
-                device: device, confirmed: true
-            ) { event in
-                Task { await environment.logs.append(
-                    category: .service,
-                    level: event.stream == .stderr ? .warning : .info,
-                    message: DiagnosticRedactor.redact(event.line),
-                    deviceID: device.udid
-                ) }
+        guard !iosSetupActive else { return }
+        iosSetupActive = true
+        iosSetupCompleted = false
+        iosSetupError = nil
+        iosSetupProgress = ["Preflight: validating the selected USB SRD and bundled project kit…"]
+        iosSetupStartedAt = Date()
+        iosSetupLastActivity = Date()
+        isBusy = true
+        lastError = nil
+        statusMessage = "Install Complete 0-Sky iOS Project…"
+
+        Task {
+            do {
+                let setup = try await environment.iosComponents.setupCompleteProject(
+                    device: device, confirmed: true
+                ) { [weak self, environment] event in
+                    let line = DiagnosticRedactor.redact(event.line)
+                    Task { @MainActor [weak self] in
+                        self?.appendIOSSetupProgress(line)
+                    }
+                    Task {
+                        await environment.logs.append(
+                            category: .service,
+                            level: event.stream == .stderr ? .warning : .info,
+                            message: line,
+                            deviceID: device.udid
+                        )
+                    }
+                }
+                operations.append(setup)
+                if setup.succeeded {
+                    _ = try? await environment.registry.reload()
+                    appendIOSSetupProgress("Complete project installation and postcondition checks passed.")
+                    iosSetupCompleted = true
+                    statusMessage = "Install Complete 0-Sky iOS Project completed."
+                } else {
+                    let detail = setup.stderr.isEmpty ? setup.stdout : setup.stderr
+                    let message = DiagnosticRedactor.redact(detail).trimmingCharacters(in: .whitespacesAndNewlines)
+                    iosSetupError = message.isEmpty
+                        ? "The setup controller exited with status \(setup.exitCode)."
+                        : message
+                    appendIOSSetupProgress("Setup stopped with exit status \(setup.exitCode).")
+                    statusMessage = "Install Complete 0-Sky iOS Project failed."
+                }
+            } catch {
+                let message = DiagnosticRedactor.redact(error.localizedDescription)
+                iosSetupError = message
+                appendIOSSetupProgress("Setup failed: \(message)")
+                statusMessage = "Install Complete 0-Sky iOS Project failed."
             }
-            if setup.succeeded { _ = try? await environment.registry.reload() }
-            return setup
-        } }
+            iosSetupActive = false
+            isBusy = false
+
+            // A full health pass can take tens of seconds. Do not keep the
+            // installer UI in its busy state while post-install health is
+            // measured; report setup completion first and refresh separately.
+            if iosSetupCompleted {
+                Task { await self.refresh(runHealth: true) }
+            }
+        }
+    }
+
+    private func appendIOSSetupProgress(_ rawLine: String) {
+        let line = rawLine
+            .replacingOccurrences(of: "\u{001B}", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !line.isEmpty else { return }
+        iosSetupProgress.append(line)
+        if iosSetupProgress.count > 250 {
+            iosSetupProgress.removeFirst(iosSetupProgress.count - 250)
+        }
+        iosSetupLastActivity = Date()
+        statusMessage = line
     }
 
     var requiredIOSComponentPlan: IOSComponentSetupPlan {
@@ -529,9 +594,15 @@ final class BridgeAppModel: ObservableObject {
 
     func cancelCurrentOperations() {
         Task {
+            if iosSetupActive {
+                appendIOSSetupProgress("Cancellation requested; stopping the owned setup process…")
+                statusMessage = "Cancelling iOS component setup…"
+            }
             await environment.runner.cancelAll()
-            isBusy = false
-            statusMessage = "Operation cancelled. Child processes were terminated."
+            if !iosSetupActive {
+                isBusy = false
+                statusMessage = "Operation cancelled. Owned processes were terminated."
+            }
         }
     }
 
@@ -688,6 +759,9 @@ final class BridgeAppModel: ObservableObject {
             operations.append(result)
             statusMessage = result.succeeded ? "\(displayName) completed." : "\(displayName) failed."
             if !result.succeeded { lastError = DiagnosticRedactor.redact(result.stderr) }
+            // Release the global busy state before the potentially long health
+            // refresh so a completed command never appears permanently stuck.
+            isBusy = false
             await refresh(runHealth: true)
         } catch {
             lastError = DiagnosticRedactor.redact(error.localizedDescription)

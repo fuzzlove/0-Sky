@@ -909,6 +909,8 @@ struct SetupAssistantView: View {
         VStack(alignment: .leading, spacing: 20) {
             Text("Welcome to 0-Sky Bridge").font(.largeTitle.bold())
             ProgressView(value: Double(step + 1), total: Double(steps.count))
+            Text("Step \(step + 1) of \(steps.count)")
+                .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
             Label(steps[step], systemImage: "\(step + 1).circle.fill").font(.title2)
             Text(instruction).foregroundStyle(.secondary)
             if step == 1 && model.hasMissingDependencies {
@@ -932,7 +934,63 @@ struct SetupAssistantView: View {
                     .disabled(model.selectedDevice == nil
                               || (!model.selectedHasProfile
                                   && model.selectedDevice?.usbConnected != true)
+                              || model.iosSetupActive
                               || model.isBusy)
+                    if confirmIOSComponentSetup && !model.iosSetupActive {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Label("Confirm complete project installation",
+                                  systemImage: "exclamationmark.shield.fill")
+                                .font(.callout.bold()).foregroundStyle(.orange)
+                            Text("This installs or converges SRDssh/Procursus, 0-Sky Link, 0-Sky Control, ElleKit, Runtime Manager, PreferenceLoader, Frida 17.18.0, research runtime Cryptexes, CatVNC, Filza, and exact-build app registration support. A new SRD may reboot once.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            HStack {
+                                Button("Begin Confirmed Setup") {
+                                    confirmIOSComponentSetup = false
+                                    model.setupCompleteIOSProject()
+                                }
+                                .buttonStyle(.borderedProminent)
+                                Button("Cancel", role: .cancel) {
+                                    confirmIOSComponentSetup = false
+                                }
+                            }
+                        }
+                        .padding(10)
+                        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+                    }
+                    if model.iosSetupActive {
+                        HStack(spacing: 10) {
+                            ProgressView().controlSize(.small)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("Setup is running").font(.callout.bold())
+                                Text(model.iosSetupProgress.last ?? "Starting verified setup controller…")
+                                    .font(.caption).foregroundStyle(.secondary)
+                                    .lineLimit(2).textSelection(.enabled)
+                            }
+                            Spacer()
+                            Button("Cancel Setup", role: .destructive) {
+                                model.cancelCurrentOperations()
+                            }
+                        }
+                    }
+                    if !model.iosSetupProgress.isEmpty {
+                        DisclosureGroup("Verbose Setup Output (\(model.iosSetupProgress.count) lines)") {
+                            ScrollView {
+                                Text(model.iosSetupProgress.joined(separator: "\n"))
+                                    .font(.caption.monospaced())
+                                    .textSelection(.enabled)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                            }
+                            .frame(maxHeight: 150)
+                        }
+                    }
+                    if let error = model.iosSetupError {
+                        Label(DiagnosticRedactor.redact(error), systemImage: "xmark.octagon.fill")
+                            .font(.caption).foregroundStyle(.red).textSelection(.enabled)
+                    } else if model.iosSetupCompleted {
+                        Label("Complete project installation passed. A health refresh is running separately.",
+                              systemImage: "checkmark.circle.fill")
+                            .font(.caption).foregroundStyle(.green)
+                    }
                     Text("Explicit confirmation required — first setup may install research Cryptexes and reboot the selected SRD. Installs 0-Sky Link, 0-Sky Control, SRDssh/Procursus, the complete runtime, Frida 17.18.0, CatVNC, Filza, and exact-build app registration support. Existing newer packages are preserved.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
@@ -948,19 +1006,7 @@ struct SetupAssistantView: View {
                 }.buttonStyle(.borderedProminent)
             }
         }
-        .padding(30).frame(width: 680, height: 520)
-        .confirmationDialog(
-            "Install the complete 0-Sky iOS Project on the selected device?",
-            isPresented: $confirmIOSComponentSetup,
-            titleVisibility: .visible
-        ) {
-            Button("Install Complete Project") {
-                model.setupCompleteIOSProject()
-            }
-            Button("Cancel", role: .cancel) { }
-        } message: {
-            Text("This explicitly confirmed operation installs or converges SRDssh/Procursus, 0-Sky Link, 0-Sky Control, ElleKit, Runtime Manager, PreferenceLoader, Frida 17.18.0, research runtime Cryptexes, CatVNC, Filza, and exact-build app registration support. A new SRD may reboot once. After setup, update any default device or VNC credentials in 0-Sky Control Center.")
-        }
+        .padding(30).frame(width: 760, height: 650)
     }
     private var instruction: String {
         switch step {

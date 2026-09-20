@@ -45,6 +45,9 @@ Developer ID Application/Installer certificates and Apple notarization.
   a release artifact rather than source and is not committed here.
 - Apple-provided SRD/developer services, including the appropriate Xcode Device
   Support/DDI and `cryptexctl`, must be obtained through Apple.
+- The complete-project controller source is bundled with Bridge source builds, but
+  its signed device payload Kit remains external and must include a valid
+  `SHA256SUMS` manifest.
 
 ## 0-Sky Link — iOS/SRD
 
