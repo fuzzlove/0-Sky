@@ -663,6 +663,11 @@ final class BridgeAppModel: ObservableObject {
     }
 
     func runDiagnostics() {
+        // Complete diagnostics always retain and present the verbose,
+        // versioned security-method disclosure. A preference must never turn
+        // an unmeasured condition into a silent PASS.
+        verboseLogging = true
+        statusMessage = "Running complete security diagnostics with full disclosure…"
         launchTrackedOperation("Run Diagnostics") { [weak self] in
             await self?.refresh(runHealth: true)
         }
@@ -856,6 +861,7 @@ final class BridgeAppModel: ObservableObject {
                 let location = try await self.environment.diagnostics.export(
                     host: self.host, device: self.selectedDevice, services: self.services,
                     pairing: pairingObject, network: networkObject, health: self.health,
+                    srdHealth: self.srdHealthReport,
                     logs: self.logEntries, operations: self.operations
                 )
                 NSWorkspace.shared.activateFileViewerSelecting([location])

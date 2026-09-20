@@ -106,6 +106,9 @@
 		A93E8BF68683E4177F5895AA = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ScriptRunner.swift"; sourceTree = "<group>";
 		};
+		D7FFDA248E500E8EF47C07BA = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SecurityDiagnosticDisclosure.swift"; sourceTree = "<group>";
+		};
 		B423C99BD0368180DC70AD5F = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ServiceManager.swift"; sourceTree = "<group>";
 		};
@@ -274,6 +277,9 @@
 		3F7BF450FB034B4666272AF8 = {
 			isa = PBXBuildFile; fileRef = A93E8BF68683E4177F5895AA;
 		};
+		89EC055B9390663642E8F7AC = {
+			isa = PBXBuildFile; fileRef = D7FFDA248E500E8EF47C07BA;
+		};
 		7065A184F120522FD5E7F95C = {
 			isa = PBXBuildFile; fileRef = B423C99BD0368180DC70AD5F;
 		};
@@ -374,6 +380,7 @@
 				56707BBF982A6031F3741F24 /* SRDHealthEngine.swift */,
 				F256E1E55F8FD46CEB4352A2 /* SSHManager.swift */,
 				A93E8BF68683E4177F5895AA /* ScriptRunner.swift */,
+				D7FFDA248E500E8EF47C07BA /* SecurityDiagnosticDisclosure.swift */,
 				B423C99BD0368180DC70AD5F /* ServiceManager.swift */,
 				CDE914FF5802FD1CCFC333B9 /* StructuredEventLog.swift */,
 				FE6AB59CF0EBB74E211EAF27 /* Validation.swift */,
@@ -485,6 +492,7 @@
 				768D00D5E8553AA2F34B1769,
 				B8E11ED100825576B0ADDDB1,
 				3F7BF450FB034B4666272AF8,
+				89EC055B9390663642E8F7AC,
 				7065A184F120522FD5E7F95C,
 				6B2E09C804FFC560642A2917,
 				1246BD6E5EEDD2A72B517144,

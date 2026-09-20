@@ -69,6 +69,7 @@ struct BridgeCoreTestRunner {
             ("reconnection lifecycle matrix", reconnectionLifecycleMatrix),
             ("enrollment planning", enrollmentPlanning),
             ("diagnostic export", diagnosticExport),
+            ("security diagnostic full disclosure", securityDiagnosticFullDisclosure),
             ("process cancellation", processCancellation),
             ("normalized event bus", normalizedEventBus),
             ("safe log clearing", safeLogClearing),
@@ -423,7 +424,7 @@ struct BridgeCoreTestRunner {
                 architecture: "arm64", bridgeVersion: "test", helperState: "fixture"
             ),
             device: nil, services: [], pairing: ["token": "supersecret"], network: [:],
-            health: nil,
+            health: nil, srdHealth: nil,
             logs: [BridgeLogEntry(category: .security, level: .info,
                                   message: "password=hunter2 /" + "Users" + "/engineer/project")],
             operations: [BridgeOperationResult(
@@ -432,7 +433,10 @@ struct BridgeCoreTestRunner {
             )]
         )
         let expected = ["summary.txt", "host.json", "device.json", "services.json",
-                        "pairing.json", "network.json", "bridge.log", "operations.log"]
+                        "pairing.json", "network.json", "health.json", "srd-health.json",
+                        "security-checks.json", "security-disclosure.txt",
+                        "collection-policy.json", "bridge.log", "operations.log",
+                        "hashes.sha256"]
         for name in expected {
             let url = output.appendingPathComponent(name)
             try expect(FileManager.default.fileExists(atPath: url.path), "diagnostic missing \(name)")
@@ -442,6 +446,64 @@ struct BridgeCoreTestRunner {
             try expect(!text.contains("hunter2") && !text.contains("supersecret")
                        && !text.contains("Engineer Personal Mac"), "diagnostic leaked sensitive data")
         }
+        let disclosure = try String(
+            contentsOf: output.appendingPathComponent("security-disclosure.txt"),
+            encoding: .utf8
+        )
+        try expect(disclosure.contains("CHECK_ID=DEFAULT_CREDENTIALS")
+                   && disclosure.contains("MUTATES_STATE=NO")
+                   && disclosure.contains("RESULT=NOT_RUN"),
+                   "diagnostic export omitted security-method or NOT_RUN disclosure")
+        let hashes = try String(
+            contentsOf: output.appendingPathComponent("hashes.sha256"), encoding: .utf8
+        )
+        for line in hashes.split(separator: "\n") {
+            let parts = line.split(separator: " ", omittingEmptySubsequences: true)
+            try expect(parts.count == 2, "invalid SHA-256 manifest line")
+            let file = output.appendingPathComponent(String(parts[1]))
+            let calculated = SHA256.hash(data: try Data(contentsOf: file))
+                .map { String(format: "%02x", $0) }.joined()
+            try expect(calculated == String(parts[0]), "diagnostic hash mismatch")
+        }
+    }
+
+    private static func securityDiagnosticFullDisclosure() async throws {
+        let ids = SecurityDiagnosticsCatalog.checks.map(\.id)
+        try expect(Set(ids).count == ids.count, "security diagnostic check IDs are not unique")
+        for required in ["DEVICE", "USB", "PAIRING", "TRUST", "REMOTEXPC", "SSH",
+                         "DEFAULT_CREDENTIALS", "VNC_DEFAULT_CREDENTIALS", "DDI",
+                         "DEBUGSERVER", "LLDB", "FRIDA_HOST", "FRIDA_DEVICE",
+                         "FRIDA_VERSION", "FRIDA_ATTACH", "PROCESS_OWNERSHIP",
+                         "DIAGNOSTIC_REDACTION"] {
+            try expect(ids.contains(required), "security disclosure omitted \(required)")
+        }
+        try expect(SecurityDiagnosticsCatalog.checks.allSatisfy {
+            !$0.purpose.isEmpty && !$0.method.isEmpty && !$0.expected.isEmpty
+                && !$0.privileges.isEmpty && !$0.dataAccessed.isEmpty
+                && !$0.evidenceCollected.isEmpty && !$0.secretHandling.isEmpty
+                && !$0.mutatesState
+        }, "security disclosure contains an incomplete or mutating standard check")
+
+        let measured = HealthResult(
+            name: "DEFAULT_CREDENTIALS", status: .pass, severity: .critical,
+            observed: ["root_default": .bool(false), "mobile_default": .bool(false)],
+            expected: "no legacy default credentials", durationMS: 12
+        )
+        let report = SRDHealthReport(deviceID: "fixture", results: [measured])
+        let records = SecurityDiagnosticsCatalog.records(health: nil, srdHealth: report)
+        try expect(records.count == SecurityDiagnosticsCatalog.checks.count,
+                   "security disclosure did not produce exactly one record per check")
+        try expect(records.first { $0.id == "DEFAULT_CREDENTIALS" }?.result?.status == .pass,
+                   "measured security result was not connected to its disclosure")
+        try expect(records.first { $0.id == "VNC_DEFAULT_CREDENTIALS" }?.result == nil,
+                   "missing result was falsely treated as measured")
+        let text = SecurityDiagnosticsCatalog.verboseText(health: nil, srdHealth: report)
+        try expect(text.contains("CHECK_ID=DEFAULT_CREDENTIALS")
+                   && text.contains("RESULT=PASS")
+                   && text.contains("CHECK_ID=VNC_DEFAULT_CREDENTIALS")
+                   && text.contains("RESULT=NOT_RUN")
+                   && text.contains("MUTATES_STATE=NO"),
+                   "verbose security disclosure omitted a required full-result field")
     }
 
     private static func processCancellation() async throws {

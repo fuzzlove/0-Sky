@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public actor DiagnosticExporter {
@@ -15,6 +16,7 @@ public actor DiagnosticExporter {
         pairing: [String: String],
         network: [String: String],
         health: BridgeHealthSnapshot?,
+        srdHealth: SRDHealthReport?,
         logs: [BridgeLogEntry],
         operations: [BridgeOperationResult]
     ) throws -> URL {
@@ -22,10 +24,17 @@ public actor DiagnosticExporter {
         formatter.dateFormat = "yyyyMMdd-HHmmss"
         formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.timeZone = .current
-        let directory = root.appendingPathComponent(
+        let baseDirectory = root.appendingPathComponent(
             "0sky-diagnostic-\(formatter.string(from: Date()))",
             isDirectory: true
         )
+        var directory = baseDirectory
+        if FileManager.default.fileExists(atPath: directory.path) {
+            directory = root.appendingPathComponent(
+                "\(baseDirectory.lastPathComponent)-\(UUID().uuidString.lowercased().prefix(8))",
+                isDirectory: true
+            )
+        }
         try FileManager.default.createDirectory(
             at: directory, withIntermediateDirectories: true,
             attributes: [.posixPermissions: 0o700]
@@ -37,6 +46,8 @@ public actor DiagnosticExporter {
             "FIRST_FAILING_TRANSITION=\(health?.firstFailingTransition.map(HealthResult.displayName(for:)) ?? "")",
             "ROOT_CAUSE=\(health?.rootCause ?? "")",
             "RECOMMENDED_ACTION=\(health?.recommendedAction ?? "")",
+            "SECURITY_DISCLOSURE_VERSION=\(SecurityDiagnosticsCatalog.disclosureVersion)",
+            "SECURITY_CHECK_COUNT=\(SecurityDiagnosticsCatalog.checks.count)",
             "",
         ].joined(separator: "\n"))
         try writeData(summary.data(using: .utf8)!, named: "summary.txt", in: directory)
@@ -52,6 +63,37 @@ public actor DiagnosticExporter {
         try writeJSON(services, named: "services.json", in: directory)
         try writeJSONObject(pairing, named: "pairing.json", in: directory)
         try writeJSONObject(network, named: "network.json", in: directory)
+        try writeJSON(health, named: "health.json", in: directory)
+        try writeJSON(srdHealth, named: "srd-health.json", in: directory)
+        let securityRecords = SecurityDiagnosticsCatalog.records(
+            health: health, srdHealth: srdHealth
+        )
+        try writeJSON(securityRecords, named: "security-checks.json", in: directory)
+        try writeData(
+            Data(SecurityDiagnosticsCatalog.verboseText(
+                health: health, srdHealth: srdHealth
+            ).utf8),
+            named: "security-disclosure.txt", in: directory
+        )
+        try writeJSONObject([
+            "schema_version": 1,
+            "disclosure_version": SecurityDiagnosticsCatalog.disclosureVersion,
+            "mode": "complete-security-diagnostics",
+            "check_count": SecurityDiagnosticsCatalog.checks.count,
+            "missing_result_behavior": "NOT_RUN; never PASS",
+            "included": [
+                "normalized host metadata", "selected device metadata",
+                "service state", "normalized health results",
+                "complete security-check methodology", "redacted structured logs",
+                "redacted operation output", "SHA-256 file hashes",
+            ],
+            "excluded": [
+                "passwords", "password hashes", "private key bytes",
+                "authentication tokens", "pairing secrets and records",
+                "Apple account credentials", "unrelated personal device data",
+            ],
+            "redaction": "Structured secret keys and secret-shaped text are redacted before write. Review user-generated tool output before external disclosure.",
+        ] as [String: Any], named: "collection-policy.json", in: directory)
         try writeJSON(logs, named: "bridge.log", in: directory)
         let safeOperations = operations.map {
             BridgeOperationResult(
@@ -63,6 +105,7 @@ public actor DiagnosticExporter {
             )
         }
         try writeJSON(safeOperations, named: "operations.log", in: directory)
+        try writeHashes(in: directory)
         return directory
     }
 
@@ -84,9 +127,27 @@ public actor DiagnosticExporter {
 
     private func writeData(_ data: Data, named name: String, in directory: URL) throws {
         let destination = directory.appendingPathComponent(name)
-        try data.write(to: destination, options: .atomic)
+        try data.write(to: destination, options: .withoutOverwriting)
         try FileManager.default.setAttributes(
             [.posixPermissions: 0o600], ofItemAtPath: destination.path
         )
+    }
+
+    private func writeHashes(in directory: URL) throws {
+        let names = try FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.isRegularFileKey],
+            options: [.skipsHiddenFiles]
+        )
+        .filter { $0.lastPathComponent != "hashes.sha256" }
+        .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        let lines = try names.compactMap { url -> String? in
+            let values = try url.resourceValues(forKeys: [.isRegularFileKey])
+            guard values.isRegularFile == true else { return nil }
+            let digest = SHA256.hash(data: try Data(contentsOf: url))
+                .map { String(format: "%02x", $0) }.joined()
+            return "\(digest)  \(url.lastPathComponent)"
+        }
+        try writeData(Data((lines.joined(separator: "\n") + "\n").utf8),
+                      named: "hashes.sha256", in: directory)
     }
 }

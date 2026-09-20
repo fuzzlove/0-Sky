@@ -70,3 +70,10 @@ Mac…**. On an already paired Mac, connect the exact device by USB and choose
 Macs flow and **Pair This Mac** on the new computer. The signed transfer request
 is device-bound, expires after seven days, and contains public keys only;
 existing Mac registrations are preserved during the schema-2 migration.
+
+## Full-disclosure security diagnostics
+
+0-Sky Bridge publishes the complete method and redacted result for every
+security diagnostic. Unmeasured checks are explicitly `NOT_RUN`, and exports
+include a versioned disclosure catalog plus SHA-256 integrity hashes. See the
+[Bridge diagnostic specification](bridge/docs/DIAGNOSTICS.md).

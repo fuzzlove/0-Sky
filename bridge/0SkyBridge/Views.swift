@@ -697,10 +697,11 @@ struct DiagnosticsView: View {
                 HStack {
                     Button("Run Diagnostics") { model.runDiagnostics() }.buttonStyle(.borderedProminent)
                     Button("Export Diagnostic Report") { model.exportDiagnostics() }
-                    Toggle("Verbose Output", isOn: $model.verboseLogging)
-                        .toggleStyle(.switch)
-                        .fixedSize()
+                    Label("Full disclosure enabled", systemImage: "checkmark.shield.fill")
+                        .font(.caption).foregroundStyle(.secondary)
                 }
+                Text("Complete diagnostics disclose every security check, method, data access, privilege, network scope, retained evidence, secret handling, limitation, and measured result. Unmeasured checks are explicitly NOT_RUN—never PASS.")
+                    .font(.callout).foregroundStyle(.secondary)
                 RequiredActionDetail(model: model)
                 if let health = model.health {
                     KeyValue(
@@ -713,8 +714,125 @@ struct DiagnosticsView: View {
                 } else {
                     ContentUnavailableView("No Diagnostic Result", systemImage: "stethoscope")
                 }
+                SecurityDiagnosticDisclosurePanel(model: model)
             }.padding(24)
         }.navigationTitle("Diagnostics")
+    }
+}
+
+private struct SecurityDiagnosticDisclosurePanel: View {
+    @ObservedObject var model: BridgeAppModel
+
+    private var records: [SecurityDiagnosticRecord] {
+        SecurityDiagnosticsCatalog.records(
+            health: model.health, srdHealth: model.srdHealthReport
+        )
+    }
+
+    var body: some View {
+        GroupBox {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack {
+                    KeyValue("Disclosure version", SecurityDiagnosticsCatalog.disclosureVersion)
+                    Spacer()
+                    Text("\(records.filter { $0.result != nil }.count) measured · \(records.filter { $0.result == nil }.count) NOT_RUN")
+                        .font(.caption.monospaced()).foregroundStyle(.secondary)
+                }
+                Text("The report below is the complete security-check contract and result set used by 0-Sky Bridge. It remains visible regardless of the general logging preference. Secrets are excluded; disclosure of collection behavior does not authorize secret export.")
+                    .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                ForEach(records) { record in
+                    SecurityDiagnosticRecordView(record: record)
+                }
+                DisclosureGroup("Raw Full Disclosure Text") {
+                    Text(SecurityDiagnosticsCatalog.verboseText(
+                        health: model.health, srdHealth: model.srdHealthReport
+                    ))
+                    .font(.caption.monospaced())
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.vertical, 6)
+                }
+            }.padding(8)
+        } label: {
+            Label("Security Check Full Disclosure", systemImage: "shield.text")
+        }
+    }
+}
+
+private struct SecurityDiagnosticRecordView: View {
+    let record: SecurityDiagnosticRecord
+
+    private var resultLabel: String { record.result?.status.rawValue ?? "NOT_RUN" }
+    private var resultColor: Color {
+        guard let result = record.result else { return .secondary }
+        switch result.status {
+        case .pass, .info: return .green
+        case .warning, .degraded: return .orange
+        case .fail: return .red
+        case .unknown: return .secondary
+        }
+    }
+
+    var body: some View {
+        DisclosureGroup {
+            VStack(alignment: .leading, spacing: 7) {
+                KeyValue("Check ID", record.disclosure.id)
+                KeyValue("Category", record.disclosure.category)
+                KeyValue("Execution", record.disclosure.execution)
+                KeyValue("Result source", record.resultSource)
+                KeyValue("Severity", record.result?.severity.rawValue ?? "NOT_RUN")
+                disclosureField("Purpose", record.disclosure.purpose)
+                disclosureField("Method", record.disclosure.method)
+                disclosureField("Expected", record.result?.expected ?? record.disclosure.expected)
+                disclosureField("Privileges", record.disclosure.privileges)
+                KeyValue("Mutates state", record.disclosure.mutatesState ? "YES" : "NO")
+                disclosureField("Network scope", record.disclosure.networkScope)
+                disclosureList("Data accessed", record.disclosure.dataAccessed)
+                disclosureList("Evidence collected", record.disclosure.evidenceCollected)
+                disclosureField("Secret handling", record.disclosure.secretHandling)
+                if let result = record.result {
+                    if !result.observed.isEmpty {
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text("Observed").font(.caption.bold())
+                            ForEach(result.observed.keys.sorted(), id: \.self) { key in
+                                KeyValue(key, SecurityDiagnosticsCatalog.render(
+                                    result.observed[key] ?? .null
+                                ))
+                            }
+                        }
+                    }
+                    disclosureField("Root cause", result.rootCause ?? "(none reported)")
+                    KeyValue("Failure type", result.failureKind?.rawValue ?? "(none)")
+                    KeyValue("Duration", "\(result.durationMS) ms")
+                    disclosureList("Remediation", result.remediation)
+                    disclosureList("Raw evidence (redacted)", result.rawEvidence)
+                } else {
+                    disclosureField("Observed", SecurityDiagnosticsCatalog.noResultExplanation)
+                }
+                disclosureList("Limitations", record.disclosure.limitations)
+            }
+            .padding(.vertical, 7)
+            .textSelection(.enabled)
+        } label: {
+            HStack {
+                Text(record.disclosure.title)
+                Spacer()
+                Text(resultLabel).font(.caption.bold().monospaced()).foregroundStyle(resultColor)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func disclosureField(_ title: String, _ value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title).font(.caption.bold())
+            Text(DiagnosticRedactor.redact(value)).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    @ViewBuilder
+    private func disclosureList(_ title: String, _ values: [String]) -> some View {
+        disclosureField(title, values.isEmpty ? "(none)" : values.joined(separator: "\n• "))
     }
 }
 

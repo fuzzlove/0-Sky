@@ -44,3 +44,13 @@ binary installer payloads, device kits, pairing records, and research evidence a
 not part of the source repository. The complete-project controller source is
 included under `0SkyBridge/Resources/Scripts`; it requires a separately supplied,
 integrity-checked SRD Kit at runtime.
+
+## Full-disclosure security diagnostics
+
+The Diagnostics screen publishes the complete, versioned security-check
+contract and verbose measured output. Every check explains its method, accessed
+data, privileges, network scope, mutation status, evidence, secret handling,
+and limitations. Unmeasured checks are explicitly `NOT_RUN`, never `PASS`.
+Exports include machine-readable and human-readable disclosure, normalized
+health, collection policy, and SHA-256 hashes without credentials, key material,
+tokens, or pairing records. See [`docs/DIAGNOSTICS.md`](docs/DIAGNOSTICS.md).
