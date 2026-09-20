@@ -18,5 +18,6 @@
   "device_evidence_excluded": true,
   "requirements_documented": true,
   "multi_mac_pairing_tests": "22/22 PASS",
-  "multi_mac_pairing": "PUBLIC_ONLY_SIGNED_REQUESTS_AND_BOUNDED_REGISTRY"
+  "multi_mac_pairing": "PUBLIC_ONLY_SIGNED_REQUESTS_AND_BOUNDED_REGISTRY",
+  "device_runtime": "2.4.10_SCHEMA2_PAIRING_READER"
 }

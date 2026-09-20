@@ -126,3 +126,7 @@ The following are intentionally distributed separately or generated locally:
   must not be transferred.
 - A device accepts at most 16 0-Sky Mac identities. The registry migrates legacy
   single-Mac markers and preserves existing entries atomically.
+
+The multiple-computer pairing release requires device Runtime Manager 2.4.10
+or later. **Set Up iOS Components** converges this package before pairing; a
+2.4.9 device broker does not implement the schema-2 registry reader.
