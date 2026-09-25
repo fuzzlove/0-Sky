@@ -5,6 +5,7 @@ public actor SSHManager {
         case rootProbe
         case workerHeartbeat
         case linkStatus
+        case linkAppRegistration
         case controlStatus
         case controlInstalled
         case controlRunning
@@ -14,6 +15,45 @@ public actor SSHManager {
         case defaultCredentialsHealth
         case vncDefaultCredentialsHealth
         case deviceStorage
+
+        private static func bridgeStatusCommand(_ endpoint: String) -> String {
+            // Read the token inside device Python. Passing its value through a
+            // shell variable and wget --header exposes it in process argv.
+            let program = "import pathlib,urllib.request; "
+                + "token=pathlib.Path(\"/var/jb/etc/trollstorelite-srd-bridge.token\").read_text(encoding=\"ascii\").strip(); "
+                + "url=\"http://127.0.0.1:48654\(endpoint)\"; "
+                + "request=urllib.request.Request(url,headers={\"X-TrollStore-Bridge-Token\":token}); "
+                + "print(urllib.request.urlopen(request,timeout=8).read().decode(\"utf-8\"))"
+            return "/var/jb/usr/bin/python3 -c '\(program)'"
+        }
+
+        private static let linkAppProbeScript = #"""
+import json,pathlib,plistlib,subprocess
+bundle="codes.liquidsky.research.zerosky"
+answer={"registered":False,"executable":False,"icon":False,"version":"","build":""}
+try:
+    listing=subprocess.run(["/var/jb/usr/bin/uicache","-l"],capture_output=True,text=True,timeout=8,check=True)
+    prefix=bundle+" : "
+    paths=[line[len(prefix):].strip() for line in listing.stdout.splitlines() if line.startswith(prefix)]
+    if len(paths)==1:
+        app=pathlib.Path(paths[0])
+        path=str(app)
+        allowed=path.startswith(("/private/var/containers/Bundle/Application/","/var/containers/Bundle/Application/","/private/var/run/com.apple.security.cryptexd/mnt/"))
+        info=plistlib.loads((app/"Info.plist").read_bytes()) if allowed else {}
+        executable=str(info.get("CFBundleExecutable",""))
+        icons=info.get("CFBundleIcons",{}).get("CFBundlePrimaryIcon",{}).get("CFBundleIconFiles",[])
+        answer["registered"]=allowed and info.get("CFBundleIdentifier")==bundle
+        answer["executable"]=answer["registered"] and bool(executable) and "/" not in executable and (app/executable).is_file()
+        answer["icon"]=answer["registered"] and isinstance(icons,list) and any(
+            isinstance(name,str) and "/" not in name and any(
+                (app/(name+suffix)).is_file() and (app/(name+suffix)).stat().st_size>8
+                for suffix in ("@2x.png","@3x.png",".png")) for name in icons)
+        answer["version"]=str(info.get("CFBundleShortVersionString",""))
+        answer["build"]=str(info.get("CFBundleVersion",""))
+except Exception as error:
+    answer["error"]=type(error).__name__
+print(json.dumps(answer,separators=(",",":"),sort_keys=True))
+"""#
 
         private static let vncProbeScript = #"""
 import ctypes,json,socket,struct
@@ -112,11 +152,14 @@ print(json.dumps({'measured':measured,'unsafe':unsafe,'port_5900_open':rfb.get('
             case .workerHeartbeat:
                 return "test -s /var/jb/var/run/crypstore-worker.json"
             case .linkStatus:
-                return "TOKEN=$(cat /var/jb/etc/trollstorelite-srd-bridge.token) && /var/jb/usr/bin/wget -qO- --header=\"X-TrollStore-Bridge-Token: $TOKEN\" http://127.0.0.1:48654/v1/pairing/status"
+                return Self.bridgeStatusCommand("/v1/pairing/status")
+            case .linkAppRegistration:
+                let payload = Data(Self.linkAppProbeScript.utf8).base64EncodedString()
+                return "test -x /var/jb/usr/bin/python3 -a -x /var/jb/usr/bin/base64 || exit 127; printf '%s' '\(payload)' | /var/jb/usr/bin/base64 -d | /var/jb/usr/bin/python3 -"
             case .controlStatus:
                 // The authenticated runtime endpoint reports registration,
                 // mount, process and version independently from Link pairing.
-                return "TOKEN=$(cat /var/jb/etc/trollstorelite-srd-bridge.token) && /var/jb/usr/bin/wget -qO- --header=\"X-TrollStore-Bridge-Token: $TOKEN\" http://127.0.0.1:48654/v1/runtime"
+                return Self.bridgeStatusCommand("/v1/runtime")
             case .controlInstalled:
                 return "grep -q '\"com.liquidsky.CrypStore\"' /var/jb/var/lib/crypstore/state.json"
             case .controlRunning:

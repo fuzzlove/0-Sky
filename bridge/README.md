@@ -4,11 +4,13 @@ Native macOS GUI and persistent service for device discovery, pairing/trust,
 USB/Wi-Fi transport, RemoteXPC, SSH, developer services, DDI/debugserver,
 Frida, recovery, and research-session evidence.
 
-The version 1.0 agreement in [`../EULA.md`](../EULA.md) is bundled into the
+The canonical agreement in [`0SkyBridge/Resources/Legal/EULA.md`](0SkyBridge/Resources/Legal/EULA.md) is bundled into the
 application. On first launch—or after a future agreement version change—the
 Bridge blocks device discovery and service startup until the user accepts the
 agreement and separately certifies device/system ownership or explicit
-authorization. Only the accepted version and timestamp are stored locally.
+authorization. Only the accepted version, document digest, affirmative state,
+and timestamp are stored locally. Acceptance of the unchanged version 1.0
+document is migrated from the earlier local preference keys.
 
 ## Requirements
 

@@ -61,6 +61,9 @@
 		D1EE4B2D8827DA93B6BE7FBC = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HealthMonitor.swift"; sourceTree = "<group>";
 		};
+		472C434E00E0E44F4EC3A2FB = {
+			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "HostProfileInspector.swift"; sourceTree = "<group>";
+		};
 		13764FF4978809044DB2C88F = {
 			isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "IOSComponentSetupManager.swift"; sourceTree = "<group>";
 		};
@@ -154,9 +157,6 @@
 		0C08D1DBDBB552121C4ECBEA = {
 			isa = PBXFileReference; lastKnownFileType = image.icns; path = "Resources/AppIcon.icns"; sourceTree = "<group>";
 		};
-		545629D26189033A7D09826B = {
-			isa = PBXFileReference; lastKnownFileType = net.daringfireball.markdown; path = "Resources/EULA.md"; sourceTree = "<group>";
-		};
 		4F907049016F7651498295C5 = {
 			isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Resources/com.liquidsky.0sky.bridge.helper.plist"; sourceTree = "<group>";
 		};
@@ -234,6 +234,9 @@
 		};
 		856E3578FF08E680EFD61117 = {
 			isa = PBXBuildFile; fileRef = D1EE4B2D8827DA93B6BE7FBC;
+		};
+		2D3376D67E2AFCB9F35E7DB1 = {
+			isa = PBXBuildFile; fileRef = 472C434E00E0E44F4EC3A2FB;
 		};
 		14BD99BE1CBDDFCD3AADD7E6 = {
 			isa = PBXBuildFile; fileRef = 13764FF4978809044DB2C88F;
@@ -328,9 +331,6 @@
 		F24C52D804BF040F4304704D = {
 			isa = PBXBuildFile; fileRef = 0C08D1DBDBB552121C4ECBEA;
 		};
-		3A735E70E8559E3AB8732375 = {
-			isa = PBXBuildFile; fileRef = 545629D26189033A7D09826B;
-		};
 		F503316A17247AD0481F12E9 = {
 			isa = PBXBuildFile; fileRef = 797E92F9BC7CD81F430FA27D;
 		};
@@ -371,6 +371,7 @@
 				39F683293B29312AB8758B9B /* DiagnosticRedactor.swift */,
 				AF6BBEE5EB210377CFEBA6D8 /* HealthArchitecture.swift */,
 				D1EE4B2D8827DA93B6BE7FBC /* HealthMonitor.swift */,
+				472C434E00E0E44F4EC3A2FB /* HostProfileInspector.swift */,
 				13764FF4978809044DB2C88F /* IOSComponentSetupManager.swift */,
 				E92BB904637973EFBF25440F /* KeychainStore.swift */,
 				668CD6153D7BA7BBAC2ED9C4 /* LicenseAgreement.swift */,
@@ -406,7 +407,6 @@
 				7015A470938F6A3F38146E7F /* ZeroSkyBridgeApp.swift */,
 				E54980C0CA0B50527337EAA3 /* bridge-operations.json */,
 				0C08D1DBDBB552121C4ECBEA /* AppIcon.icns */,
-				545629D26189033A7D09826B /* EULA.md */,
 				4F907049016F7651498295C5 /* com.liquidsky.0sky.bridge.helper.plist */,
 				9F693C2E96029315647FDDDC /* com.liquidsky.0sky.bridge.service.plist */,
 			);
@@ -484,6 +484,7 @@
 				0581095264EAA5A0F3FCED31,
 				3E39404237212A86161F7FD4,
 				856E3578FF08E680EFD61117,
+				2D3376D67E2AFCB9F35E7DB1,
 				14BD99BE1CBDDFCD3AADD7E6,
 				A04DD83C804E7D2E4C301846,
 				005FDEF164F8162187B61265,
@@ -541,7 +542,6 @@
 			files = (
 				CDE6DFFD9BA5F8B289CB1D0A,
 				F24C52D804BF040F4304704D,
-				3A735E70E8559E3AB8732375,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -649,7 +649,7 @@
 			outputPaths = ();
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = "/bin/zsh";
-			shellScript = "KIT=\"${SRCROOT}/exploitdev/srdsh-work/components/zero-sky/kit\"\n[[ -d \"${KIT}/host-mac\" ]] || KIT=\"${SRCROOT}/kit\"\n[[ -d \"${KIT}/host-mac\" ]] || KIT=\"${SRCROOT}/../kit\"\n[[ -d \"${KIT}/host-mac\" ]] || { echo 'verified 0-Sky kit not found' >&2; exit 1; }\nHOST=\"${SRCROOT}\"\n[[ -f \"${HOST}/macos_host_setup.py\" ]] || HOST=\"${SRCROOT}/..\"\n[[ -f \"${HOST}/macos_host_setup.py\" ]] || { echo 'macOS host setup sources not found' >&2; exit 1; }\nRES=\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources\"\nmkdir -p \"${RES}/Kit\" \"${RES}/Scripts\"\n/usr/bin/ditto --noqtn \"${KIT}\" \"${RES}/Kit\"\n/usr/bin/ditto --noqtn \"${HOST}/macos_host_setup.py\" \"${RES}/Scripts/macos_host_setup.py\"\n/usr/bin/ditto --noqtn \"${HOST}/zero_sky_user_config.py\" \"${RES}/Scripts/zero_sky_user_config.py\"\n/usr/bin/ditto --noqtn \"${SRCROOT}/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command\" \"${RES}/Scripts/Install 0-Sky Dependencies.command\"\nchmod -R u=rwX,go=rX \"${RES}\"";
+			shellScript = "\"${SRCROOT}/Scripts/embed_verified_kit.sh\"";
 		};
 		93B61FCED3133927BCF46DF7 = {
 			isa = PBXContainerItemProxy;

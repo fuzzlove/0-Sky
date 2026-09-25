@@ -41,7 +41,11 @@ from zero_sky_user_config import (
 
 
 ROOT = Path(__file__).resolve().parent
-DEFAULT_KIT = ROOT / "exploitdev/srdsh-work/components/zero-sky/kit"
+DEFAULT_KIT = next((candidate for candidate in (
+    ROOT / "exploitdev/srdsh-work/components/zero-sky/kit",
+    ROOT / "0SkyBridge/Resources/Scripts/kit",
+    ROOT / "kit",
+) if (candidate / "SHA256SUMS").is_file()), ROOT / "kit")
 KIT = Path(os.environ.get("ZERO_SKY_KIT", DEFAULT_KIT)).expanduser().resolve()
 ZERO_SKY = KIT.parent
 INSTALLER = KIT / "host-mac/install.py"
@@ -110,12 +114,14 @@ def log(message: str) -> None:
 def run(argv: list[str | Path], *, check: bool = True,
         capture: bool = False, env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
     command = [str(item) for item in argv]
-    log("+ " + " ".join(shlex.quote(item) for item in command))
+    # The argv can contain an exact device ID, a home path or an SSH identity.
+    # Report the stage without copying those values into normal setup logs.
+    log("running " + Path(command[0]).name)
     return subprocess.run(
         command, check=check, text=True,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.PIPE if capture else None,
-        env=env,
+        env=env, timeout=3600,
     )
 
 
@@ -695,12 +701,17 @@ def setup_python(identity: Path, support: Path) -> Path:
         raise SystemExit("the bundled offline Python dependency set is incomplete")
     venv = support / "venv"
     venv.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
-    run([base_python, "-m", "venv", "--clear", venv])
     python = venv / "bin/python3"
-    run([
-        python, "-m", "pip", "install", "--no-index", "--find-links", WHEELHOUSE,
-        "--requirement", REQUIREMENTS_LOCK,
-    ])
+    if not python_probe(python)[0]:
+        if venv.exists():
+            raise SystemExit("existing Python environment is incomplete; preserve it for review before repair")
+        run([base_python, "-m", "venv", venv])
+        run([
+            python, "-m", "pip", "install", "--no-index", "--find-links", WHEELHOUSE,
+            "--requirement", REQUIREMENTS_LOCK,
+        ])
+    else:
+        log("reusing the pinned Python environment")
     venv.chmod(0o700)
     setup_frida_host(base_python, support)
     identity.parent.mkdir(parents=True, exist_ok=True)

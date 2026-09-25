@@ -69,7 +69,7 @@ public enum BridgeValidation {
     public static func safeEnvironment(overrides: [String: String] = [:]) throws -> [String: String] {
         let allowed = try NSRegularExpression(pattern: "^[A-Z][A-Z0-9_]{0,63}$")
         var environment = [
-            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin",
+            "PATH": "/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:/usr/local/bin",
             "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
             "LANG": "en_US.UTF-8",
             "LC_ALL": "en_US.UTF-8",

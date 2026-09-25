@@ -26,10 +26,11 @@ public struct BridgePaths: Sendable {
 
     public func enrollmentInstaller() throws -> URL {
         if let repositoryRoot {
-            let candidate = repositoryRoot.appendingPathComponent(
-                "exploitdev/srdsh-work/components/zero-sky/kit/host-mac/install.py"
-            )
-            if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+            for relative in ["bridge/0SkyBridge/Resources/Scripts/kit/host-mac/install.py",
+                             "exploitdev/srdsh-work/components/zero-sky/kit/host-mac/install.py"] {
+                let candidate = repositoryRoot.appendingPathComponent(relative)
+                if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+            }
         }
         if let bundledKitRoot {
             let candidate = bundledKitRoot.appendingPathComponent("host-mac/install.py")
@@ -60,10 +61,11 @@ public struct BridgePaths: Sendable {
     public func zeroSkyLinkIPA() throws -> URL {
         let relative = "payloads/0-Sky-Link-1.9.0-universal.ipa"
         if let repositoryRoot {
-            let candidate = repositoryRoot.appendingPathComponent(
-                "exploitdev/srdsh-work/components/zero-sky/kit/\(relative)"
-            )
-            if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+            for base in ["bridge/0SkyBridge/Resources/Scripts/kit",
+                         "exploitdev/srdsh-work/components/zero-sky/kit"] {
+                let candidate = repositoryRoot.appendingPathComponent("\(base)/\(relative)")
+                if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+            }
         }
         if let bundledKitRoot {
             let candidate = bundledKitRoot.appendingPathComponent(relative)
@@ -74,10 +76,11 @@ public struct BridgePaths: Sendable {
 
     public func projectSetupController() throws -> URL {
         if let repositoryRoot {
-            let candidate = repositoryRoot.appendingPathComponent(
-                "exploitdev/srdsh-work/components/zero-sky/main.py"
-            )
-            if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+            for relative in ["bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py",
+                             "exploitdev/srdsh-work/components/zero-sky/main.py"] {
+                let candidate = repositoryRoot.appendingPathComponent(relative)
+                if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+            }
         }
         if let resources = Bundle.main.resourceURL {
             let candidate = resources.appendingPathComponent("Scripts/0sky_project_setup.py")
@@ -88,12 +91,13 @@ public struct BridgePaths: Sendable {
 
     public func projectSetupKit() throws -> URL {
         if let repositoryRoot {
-            let candidate = repositoryRoot.appendingPathComponent(
-                "exploitdev/srdsh-work/components/zero-sky/kit"
-            )
-            if FileManager.default.isReadableFile(
-                atPath: candidate.appendingPathComponent("SHA256SUMS").path
-            ) { return candidate }
+            for base in ["bridge/0SkyBridge/Resources/Scripts/kit",
+                         "exploitdev/srdsh-work/components/zero-sky/kit"] {
+                let candidate = repositoryRoot.appendingPathComponent(base)
+                if FileManager.default.isReadableFile(
+                    atPath: candidate.appendingPathComponent("SHA256SUMS").path
+                ) { return candidate }
+            }
         }
         if let bundledKitRoot { return bundledKitRoot }
         throw BridgeCoreError.dependencyMissing("verified complete 0-Sky project kit")
@@ -116,6 +120,8 @@ public struct BridgePaths: Sendable {
         for _ in 0..<8 {
             if FileManager.default.fileExists(
                 atPath: candidate.appendingPathComponent("exploitdev/srdsh-work/components/zero-sky/kit/host-mac/pair.py").path
+            ) || FileManager.default.fileExists(
+                atPath: candidate.appendingPathComponent("bridge/0SkyBridge/Resources/Scripts/kit/host-mac/pair.py").path
             ) { return candidate }
             let parent = candidate.deletingLastPathComponent()
             if parent == candidate { break }
@@ -149,10 +155,11 @@ public struct BridgePaths: Sendable {
         // pair.py must not erase a newer durable wireless proof.
         let requiresCurrentRevision = name == "pair.py" || name == "multi_host_pairing.py"
         if requiresCurrentRevision, let repositoryRoot {
-            let source = repositoryRoot.appendingPathComponent(
-                "exploitdev/srdsh-work/components/zero-sky/kit/host-mac/\(name)"
-            )
-            if FileManager.default.isReadableFile(atPath: source.path) { return source }
+            for base in ["exploitdev/srdsh-work/components/zero-sky/kit",
+                         "bridge/0SkyBridge/Resources/Scripts/kit"] {
+                let source = repositoryRoot.appendingPathComponent("\(base)/host-mac/\(name)")
+                if FileManager.default.isReadableFile(atPath: source.path) { return source }
+            }
         }
         if requiresCurrentRevision, let bundledKitRoot {
             let bundled = bundledKitRoot.appendingPathComponent("host-mac/\(name)")
@@ -163,10 +170,11 @@ public struct BridgePaths: Sendable {
             if FileManager.default.isReadableFile(atPath: installed.path) { return installed }
         }
         if let repositoryRoot {
-            let source = repositoryRoot.appendingPathComponent(
-                "exploitdev/srdsh-work/components/zero-sky/kit/host-mac/\(name)"
-            )
-            if FileManager.default.isReadableFile(atPath: source.path) { return source }
+            for base in ["exploitdev/srdsh-work/components/zero-sky/kit",
+                         "bridge/0SkyBridge/Resources/Scripts/kit"] {
+                let source = repositoryRoot.appendingPathComponent("\(base)/host-mac/\(name)")
+                if FileManager.default.isReadableFile(atPath: source.path) { return source }
+            }
         }
         if let bundledKitRoot {
             let bundled = bundledKitRoot.appendingPathComponent("host-mac/\(name)")

@@ -18,6 +18,9 @@ elif [[ -f "$SCRIPT_DIR/macos_host_setup.py" && \
         -d "$SCRIPT_DIR/exploitdev/srdsh-work/components/zero-sky/kit" ]]; then
   SETUP="$SCRIPT_DIR/macos_host_setup.py"
   KIT="$SCRIPT_DIR/exploitdev/srdsh-work/components/zero-sky/kit"
+elif [[ -f "$SCRIPT_DIR/../../../macos_host_setup.py" && -d "$SCRIPT_DIR/kit" ]]; then
+  SETUP="$SCRIPT_DIR/../../../macos_host_setup.py"
+  KIT="$SCRIPT_DIR/kit"
 elif [[ -x "$SCRIPT_DIR/0sky" ]]; then
   # Compact native releases carry the same setup program and kit internally.
   NATIVE="$SCRIPT_DIR/0sky"
@@ -25,6 +28,10 @@ fi
 
 print "0-Sky Dependency Installer"
 print "=========================="
+case $(/usr/bin/uname -m) in
+  arm64|x86_64) print "Mac architecture: $(/usr/bin/uname -m)" ;;
+  *) print -u2 "This installer supports Intel x86_64 and Apple silicon arm64 Macs."; exit 2 ;;
+esac
 print "This guided installer adds every required macOS component for 0-Sky."
 print "Required host packages include Python 3.12, dpkg/dpkg-deb, USB tools,"
 print "and the pinned offline 0-Sky Python environment."

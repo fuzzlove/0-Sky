@@ -32,6 +32,14 @@ signing identities are intentionally not committed. Ad-hoc signing is suitable
 only for local development; public distribution requires the publisher's own
 Developer ID Application/Installer certificates and Apple notarization.
 
+For a single Intel/Apple-silicon build, run `./build.sh` from the repository
+root. It builds `arm64` and `x86_64` slices, embeds only SHA-256 manifest-listed
+Kit files, rejects installer inputs containing embedded personal data, and
+checks both architectures in the Mac app and Bluetooth helper. The result is
+unsigned; sign and notarize it with your own release identity. The existing
+published pre-release installers are separate artifacts and are not changed by
+building this source tree.
+
 ### Runtime host tools
 
 - Xcode command-line tools: `xcrun`, `clang`, `codesign`, `lipo`, `hdiutil`,
@@ -57,6 +65,47 @@ Python 3.12 and dpkg, and creates the isolated pinned environment from the
 release wheelhouse. Apple's `/usr/bin/python3` may start the bootstrap but is
 not accepted as the completed 0-Sky runtime.
 
+### Device OS compatibility
+
+The installer accepts an authorized iOS/iPadOS 17 or later SRD and checks the
+actual device version, exact UDID, Apple pairing, root SSH and available
+developer services. It has no artificial iOS 27 ceiling, so later versions
+can be probed; a future version passes only when the required services and
+payloads validate. The host kit includes both Intel and Apple-silicon Python
+wheels and a dual-architecture Bluetooth helper. Device payloads remain
+`arm64`/`arm64e` as appropriate to the selected SRD.
+
+This is a capability contract, not a claim that every iOS build from 17 through
+27 has passed live end-to-end testing. Exact-build Apple-derived assets are
+used only for their matching OS build; when absent, the installer reports the
+missing capability and preserves the existing device state. Use an Xcode
+release with device support for the target OS. Apple's current [Xcode support
+table](https://developer.apple.com/xcode/system-requirements) lists device
+support by Xcode version; it does not make 0-Sky payloads interchangeable
+between iOS builds.
+
+### Reversible Mac-side uninstall and reinstall
+
+The app's **Remove Device from 0-Sky Bridge** action and the bundled
+`host-mac/uninstall.py` move only that exact device's Mac-side instance and
+LaunchAgents into a private `uninstall-backups` directory. They preserve
+Apple pairing, the SRD bootstrap and research evidence. The CLI defaults to
+a dry run:
+
+```sh
+python3 path/to/Kit/host-mac/uninstall.py \
+  --instance-name INSTANCE --udid DEVICE_UDID
+python3 path/to/Kit/host-mac/uninstall.py \
+  --instance-name INSTANCE --udid DEVICE_UDID --apply
+```
+
+After removal, connect the same SRD over USB and rerun the guided installer;
+it can reuse the existing Apple trust and device bootstrap. To undo a removal
+before reinstalling, pass the reported backup ID to `--restore-backup ID
+--apply` with the same instance and UDID. Rollback is refused if a new
+installation already occupies those paths. No device-side erase or blanket
+pairing reset is part of this workflow.
+
 ## 0-Sky Link — iOS/SRD
 
 - macOS with Xcode and an iPhoneOS SDK supporting iOS 17 or later.
@@ -68,7 +117,7 @@ not accepted as the completed 0-Sky runtime.
   `127.0.0.1:48654`; the service and its per-device secrets are not embedded.
 - The production Link release carries a separately integrity-checked SRD Kit.
   Apple-provided assets and generated device payloads are intentionally absent
-  from source control and may be supplied only through `ZEROSKY_KIT_SOURCE` in
+  from source control and may be supplied through `ZERO_SKY_KIT_SOURCE` in
   authorized local builds.
 
 Build:

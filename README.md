@@ -8,8 +8,8 @@ repository publishes the source for the three first-party applications:
 - [`control/`](control/) — 0-Sky Control for iOS/SRD
 
 Installation, access, and use are governed by the
-[`0-Sky End User License Agreement and Authorized Security Research Terms`](EULA.md),
-version 1.0, effective September 20, 2026. The Bridge installer and first-run
+[`0-Sky End User License Agreement and Authorized Security Research Terms`](bridge/0SkyBridge/Resources/Legal/EULA.md).
+Its independent version and effective date are in the adjacent `EULA.json` manifest. The Bridge installer and first-run
 application flow require explicit agreement and authorization certification.
 
 The source tree deliberately excludes device identifiers, pairing records,
@@ -41,12 +41,16 @@ researcher-provided signing/authorization environment described in the
 requirements. This repository does not contain Apple-provided SRD assets or
 any reusable signing credential.
 
-## Binary pre-release
+## Pre-releases
 
-Prebuilt Apple Silicon and Intel macOS installers remain available under
-[`v1.0.0-pre.1`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.1).
-That tag predates this source publication, so its automatically generated
-source archive contains only the repository content that existed at the tag.
+[`v1.0.0-pre.2`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.2)
+contains the updated source and no installer assets. The external signed device
+payloads must pass the release sanitization gate before new installers can be
+published.
+
+Prebuilt Apple Silicon and Intel macOS installers remain available under the
+earlier [`v1.0.0-pre.1`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.1).
+Those installers predate the source changes in `v1.0.0-pre.2`.
 
 ## Security and privacy
 

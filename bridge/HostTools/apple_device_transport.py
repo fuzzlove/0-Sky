@@ -283,18 +283,8 @@ class PymobiledeviceTransportBackend:
     async def native_coredevice(self, udid: str, timeout: float = 15) -> dict[str, Any] | None:
         """Ask Apple's unprivileged CoreDevice stack for an authenticated path."""
         environment = dict(os.environ)
-        if not environment.get("DEVELOPER_DIR"):
-            for candidate in (
-                Path("/Applications/Xcode.app/Contents/Developer"),
-                Path("/Applications/Xcode-beta.app/Contents/Developer"),
-            ):
-                if (candidate / "usr/bin/devicectl").is_file():
-                    environment["DEVELOPER_DIR"] = str(candidate)
-                    break
-        developer = Path(environment.get("DEVELOPER_DIR", ""))
-        direct_devicectl = developer / "usr/bin/devicectl"
-        command = ([str(direct_devicectl)] if direct_devicectl.is_file()
-                   else ["/usr/bin/xcrun", "devicectl"])
+        # xcrun honors the selected Xcode and an explicit DEVELOPER_DIR.
+        command = ["/usr/bin/xcrun", "devicectl"]
         with tempfile.TemporaryDirectory(prefix="0sky-coredevice-") as directory:
             output = Path(directory) / "device.json"
             completed = await asyncio.to_thread(

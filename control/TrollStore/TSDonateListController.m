@@ -3,9 +3,9 @@
 
 @implementation TSDonateListController
 
-- (void)openProjectRepository
+- (void)openDonateLink
 {
-    NSURL *url = [NSURL URLWithString:@"https://github.com/fuzzlove/0-Sky"];
+    NSURL *url = [NSURL URLWithString:@"https://www.youtube.com/watch?v=dQw4w9WgXcQ"];
     [[UIApplication sharedApplication] openURL:url options:@{} completionHandler:nil];
 }
 
@@ -14,11 +14,11 @@
     if (!_specifiers) {
         _specifiers = [NSMutableArray new];
         [_specifiers addObject:[PSSpecifier emptyGroupSpecifier]];
-        PSSpecifier *project = [PSSpecifier preferenceSpecifierNamed:@"Project Repository"
+        PSSpecifier *project = [PSSpecifier preferenceSpecifierNamed:@"Donate"
             target:self set:nil get:nil detail:nil cell:PSButtonCell edit:nil];
-        project.identifier = @"openProjectRepository";
+        project.identifier = @"openDonateLink";
         [project setProperty:@YES forKey:@"enabled"];
-        project.buttonAction = @selector(openProjectRepository);
+        project.buttonAction = @selector(openDonateLink);
         [_specifiers addObject:project];
     }
     self.navigationItem.title = @"0-Sky Project";

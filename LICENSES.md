@@ -1,7 +1,7 @@
 # Licensing and attribution
 
 Installation, access, and use of 0-Sky are governed by the
-[`0-Sky End User License Agreement and Authorized Security Research Terms`](EULA.md).
+[`0-Sky End User License Agreement and Authorized Security Research Terms`](bridge/0SkyBridge/Resources/Legal/EULA.md).
 Separate open-source components remain governed by their respective licenses
 as stated below.
 

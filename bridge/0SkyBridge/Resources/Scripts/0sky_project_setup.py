@@ -29,6 +29,14 @@ import threading
 import time
 from typing import Any
 
+_config_module_directory = Path(__file__).resolve().parent
+if not (_config_module_directory / "zero_sky_user_config.py").is_file():
+    # Source checkouts import the one canonical module from bridge/. The app
+    # build copies that module beside this controller in Resources/Scripts.
+    source_bridge = _config_module_directory.parents[2]
+    if (source_bridge / "zero_sky_user_config.py").is_file():
+        sys.path.insert(0, str(source_bridge))
+
 from zero_sky_user_config import (
     UserConfigError,
     config_path as user_config_path,
@@ -541,7 +549,13 @@ paths=[r[len(prefix):].strip() for r in rows if r.startswith(prefix)]
 if len(paths)==1:
  p=pathlib.Path(paths[0])
  try:
-  i=plistlib.loads((p/"Info.plist").read_bytes()); answer={"path":str(p),"version":str(i.get("CFBundleShortVersionString","")),"build":str(i.get("CFBundleVersion","")),"distribution":str(i.get("ZeroSkyDistributionName",""))}
+  path=str(p)
+  allowed=path.startswith(("/private/var/containers/Bundle/Application/","/var/containers/Bundle/Application/","/private/var/run/com.apple.security.cryptexd/mnt/"))
+  i=plistlib.loads((p/"Info.plist").read_bytes()) if allowed else {}
+  executable=str(i.get("CFBundleExecutable",""))
+  icons=i.get("CFBundleIcons",{}).get("CFBundlePrimaryIcon",{}).get("CFBundleIconFiles",[])
+  icon=bool(isinstance(icons,list) and any(isinstance(name,str) and "/" not in name and any((p/(name+suffix)).is_file() and (p/(name+suffix)).stat().st_size>8 for suffix in ("@2x.png","@3x.png",".png")) for name in icons))
+  answer={"path":path,"version":str(i.get("CFBundleShortVersionString","")),"build":str(i.get("CFBundleVersion","")),"distribution":str(i.get("ZeroSkyDistributionName","")),"registered":bool(allowed and i.get("CFBundleIdentifier")==sys.argv[1]),"executable":bool(executable and "/" not in executable and (p/executable).is_file()),"icon":icon}
  except Exception: pass
 print(json.dumps(answer))'''
     result = remote(target, identity,
@@ -883,10 +897,16 @@ ps ax -o command= 2>/dev/null | "$G" -q '[f]rida-server$' '''
 
 
 def direct_components_current(target: dict[str, Any], identity: Path) -> bool:
+    link = app_info(target, identity, "codes.liquidsky.research.zerosky")
     return (
         package_version(target, identity, "com.catvnc.server") == "0.0.2"
         and app_info(target, identity, "com.liquidsky.CrypStore").get("version") == "3.4.4"
-        and app_info(target, identity, "codes.liquidsky.research.zerosky").get("version") == "1.9.0"
+        and link.get("version") == "1.9.0"
+        and link.get("build") == "45"
+        and link.get("distribution") == "0-Sky Link"
+        and link.get("registered") is True
+        and link.get("executable") is True
+        and link.get("icon") is True
     )
 
 
@@ -1151,6 +1171,11 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         passed = (final["catvnc"] == "0.0.2" and
                   final["commissary"].get("version") == "3.4.4" and
                   final["zero_sky"].get("version") == "1.9.0" and
+                  final["zero_sky"].get("build") == "45" and
+                  final["zero_sky"].get("distribution") == "0-Sky Link" and
+                  final["zero_sky"].get("registered") is True and
+                  final["zero_sky"].get("executable") is True and
+                  final["zero_sky"].get("icon") is True and
                   final["filza"].get("version") == FILZA_VERSION and
                   final["frida"] == "17.18.0" and
                   final["bridge"].get("paired") is True and
@@ -1242,8 +1267,8 @@ def configure_user(args: argparse.Namespace) -> tuple[Path, dict[str, Any]]:
         config["defaults"].update(overrides["defaults"])
     if args.init_config or args.setup:
         path, _ = write_user_config(ROOT, requested, overrides)
-        # Environment variables are process-scoped overrides and are never
-        # silently persisted, but they must still affect this setup run.
+        # Setup persists the effective per-user configuration for resumption.
+        # The stored file outranks environment defaults on subsequent runs.
         config = load_user_config(ROOT, requested)
     else:
         path = user_config_path(requested)

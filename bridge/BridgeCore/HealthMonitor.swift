@@ -82,12 +82,14 @@ public actor HealthMonitor {
         async let serviceValues = services.allStatuses(profile: profile)
         async let sshResult = ssh.probe(profile)
         async let linkResult = ssh.run(.linkStatus, profile: profile)
+        async let linkAppResult = ssh.run(.linkAppRegistration, profile: profile)
         async let controlResult = ssh.run(.controlStatus, profile: profile)
         async let portOpen = TCPProbe.open(port: profile.localPort, timeout: 2)
 
         let allServices = await serviceValues
         let root = await sshResult
         let link = await linkResult
+        let linkApp = await linkAppResult
         let control = await controlResult
         let localPortOpen = await portOpen
 
@@ -121,12 +123,33 @@ public actor HealthMonitor {
             && linkJSON?["paired"] as? Bool == true
             && linkJSON?["worker_fresh"] as? Bool == true
             && linkJSON?["privileged_bridge_ready"] as? Bool == true
+        let linkAppJSON = (try? JSONSerialization.jsonObject(
+            with: Data(linkApp.stdout.utf8))) as? [String: Any]
+        let linkAppReady = linkApp.succeeded
+            && linkAppJSON?["registered"] as? Bool == true
+            && linkAppJSON?["executable"] as? Bool == true
+            && linkAppJSON?["icon"] as? Bool == true
+            && linkAppJSON?["version"] as? String == "1.9.0"
+            && linkAppJSON?["build"] as? String == "45"
+        let linkFailure: String
+        if !linkAppReady {
+            linkFailure = "0-Sky Link app is missing, unregistered, or its executable/icon cannot be verified. Rerun complete iOS component setup for this exact SRD."
+        } else if !link.succeeded {
+            linkFailure = "Link status probe exited \(link.exitCode): "
+                + DiagnosticRedactor.redact(link.stderr.isEmpty ? "no stderr" : link.stderr)
+        } else if linkJSON == nil {
+            linkFailure = "Link status probe returned invalid JSON."
+        } else {
+            linkFailure = "Link status: paired=\(linkJSON?["paired"] as? Bool == true), "
+                + "worker_fresh=\(linkJSON?["worker_fresh"] as? Bool == true), "
+                + "privileged_bridge_ready=\(linkJSON?["privileged_bridge_ready"] as? Bool == true)."
+        }
         checks.append(HealthCheck(
             transition: "0SKY_LINK",
-            state: linkReady ? .pass : .fail,
-            detail: linkReady
-                ? "Authenticated 0-Sky Link heartbeat and bridge protocol are fresh."
-                : "0-Sky Link did not return a fresh authenticated bridge status.",
+            state: linkReady && linkAppReady ? .pass : .fail,
+            detail: linkReady && linkAppReady
+                ? "0-Sky Link 1.9.0 app, icon, registration, and authenticated bridge are verified."
+                : linkFailure,
             checkedAt: Date(), mandatory: true
         ))
         let controlJSON = (try? JSONSerialization.jsonObject(with: Data(control.stdout.utf8))) as? [String: Any]
@@ -138,12 +161,23 @@ public actor HealthMonitor {
         let controlReachable = control.succeeded
             && ControlRuntimeFields.bool(controlJSON, field: "ok")
         let controlReady = controlInstalled && controlRunning && controlReachable
+        let controlFailure: String
+        if !control.succeeded {
+            controlFailure = "Control status probe exited \(control.exitCode): "
+                + DiagnosticRedactor.redact(control.stderr.isEmpty ? "no stderr" : control.stderr)
+        } else if controlJSON == nil {
+            controlFailure = "Control status probe returned invalid JSON."
+        } else {
+            controlFailure = "Control runtime: registered=\(ControlRuntimeFields.bool(controlJSON, field: "registered")), "
+                + "mounted=\(ControlRuntimeFields.bool(controlJSON, field: "mounted")), "
+                + "running=\(controlRunning), ok=\(controlReachable)."
+        }
         checks.append(HealthCheck(
             transition: "0SKY_CONTROL",
             state: controlReady ? .pass : .fail,
             detail: controlReady
                 ? "0-Sky Control is installed, running, and its bridge is reachable."
-                : "0-Sky Control installation, process, or communication check failed.",
+                : controlFailure,
             checkedAt: Date(), mandatory: true
         ))
         // These layers require dedicated tool adapters. Until an adapter returns
@@ -192,8 +226,10 @@ public actor HealthMonitor {
 
     public func integrationStatus(profile: DeviceProfile) async -> DeviceIntegrationStatus {
         async let linkResult = ssh.run(.linkStatus, profile: profile)
+        async let linkAppResult = ssh.run(.linkAppRegistration, profile: profile)
         async let controlResult = ssh.run(.controlStatus, profile: profile)
         let link = await linkResult
+        let linkApp = await linkAppResult
         let control = await controlResult
         let linkJSON = (try? JSONSerialization.jsonObject(with: Data(link.stdout.utf8))) as? [String: Any]
         let runtime = (try? JSONSerialization.jsonObject(with: Data(control.stdout.utf8))) as? [String: Any]
@@ -201,6 +237,14 @@ public actor HealthMonitor {
             && linkJSON?["paired"] as? Bool == true
             && linkJSON?["worker_fresh"] as? Bool == true
             && linkJSON?["privileged_bridge_ready"] as? Bool == true
+        let linkAppJSON = (try? JSONSerialization.jsonObject(
+            with: Data(linkApp.stdout.utf8))) as? [String: Any]
+        let linkAppReady = linkApp.succeeded
+            && linkAppJSON?["registered"] as? Bool == true
+            && linkAppJSON?["executable"] as? Bool == true
+            && linkAppJSON?["icon"] as? Bool == true
+            && linkAppJSON?["version"] as? String == "1.9.0"
+            && linkAppJSON?["build"] as? String == "45"
         let installed = control.succeeded
             && (ControlRuntimeFields.bool(runtime, field: "registered")
                 || ControlRuntimeFields.bool(runtime, field: "mounted"))
@@ -208,7 +252,7 @@ public actor HealthMonitor {
         let reachable = control.succeeded && ControlRuntimeFields.bool(runtime, field: "ok")
         let rawVersion = ControlRuntimeFields.string(runtime, field: "version")
         return DeviceIntegrationStatus(
-            linkReachable: linkReady,
+            linkReachable: linkReady && linkAppReady,
             controlInstalled: installed,
             controlRunning: running,
             controlReachable: reachable,

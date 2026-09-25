@@ -592,13 +592,18 @@ struct PairingWorkflowView: View {
         VStack(alignment: .leading, spacing: 8) {
             Text("New Device Workflow").font(.headline)
             ForEach(steps) { step in
-                HStack {
-                    Image(systemName: icon(step.state))
-                        .foregroundStyle(color(step.state))
-                    Text(step.title)
-                    Spacer()
-                    if step.state == .active { Text("NEXT").font(.caption.bold()).foregroundStyle(.blue) }
-                }.font(.callout)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack {
+                        Image(systemName: icon(step.state))
+                            .foregroundStyle(color(step.state))
+                        Text(step.title)
+                        Spacer()
+                        if step.state == .active { Text("NEXT").font(.caption.bold()).foregroundStyle(.blue) }
+                    }.font(.callout)
+                    if let detail = step.detail, step.state == .failed {
+                        Text(detail).font(.caption).foregroundStyle(.red)
+                    }
+                }
             }
         }
         .padding()
@@ -1087,7 +1092,11 @@ struct SettingsView: View {
                 Text("Passwords, bridge tokens, private keys, and Keychain contents are excluded from configuration and diagnostic exports.")
             }
             Section("Legal") {
-                KeyValue("Agreement", "Version \(LicenseAgreementMetadata.currentVersion)")
+                KeyValue("Shipped EULA", LicenseAgreementDocument.load()?.metadata.eulaVersion ?? "Unavailable")
+                KeyValue("Accepted EULA", LicenseAcceptanceStore().record()?.eulaVersion ?? "Not accepted")
+                KeyValue("Accepted at", LicenseAcceptanceStore().record().map {
+                    ISO8601DateFormatter().string(from: $0.acceptedAt)
+                } ?? "Not accepted")
                 Text("Authorized security research only. Use 0-Sky only on devices and systems you own or are explicitly authorized to test.")
                 Button("View License Agreement") {
                     if !LicenseAgreementDocument.openExternally() {

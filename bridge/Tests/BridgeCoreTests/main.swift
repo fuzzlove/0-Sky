@@ -88,6 +88,8 @@ struct BridgeCoreTestRunner {
             ("default credential detection", defaultCredentialDetection),
             ("session crash collection", sessionCrashCollection),
             ("wireless capability persistence", wirelessCapabilityPersistence),
+            ("host profile inspection", hostProfileInspection),
+            ("legacy exact-device SSH forward", legacyExactDeviceSSHForward),
             ("multiple trusted Macs", multipleTrustedMacs),
             ("safe Mac-side device removal", safeDeviceRemoval),
         ]
@@ -119,22 +121,56 @@ struct BridgeCoreTestRunner {
     }
 
     private static func licenseAgreementMetadata() async throws {
-        try expect(LicenseAgreementMetadata.currentVersion == "1.0",
-                   "unexpected agreement version")
-        try expect(LicenseAgreementMetadata.effectiveDate == "September 20, 2026",
-                   "unexpected agreement effective date")
-        try expect(!LicenseAgreementMetadata.isCurrent(acceptedVersion: nil),
-                   "missing acceptance was treated as current")
-        try expect(!LicenseAgreementMetadata.isCurrent(acceptedVersion: "0.9"),
-                   "an earlier agreement version was treated as current")
-        try expect(LicenseAgreementMetadata.isCurrent(acceptedVersion: "1.0"),
-                   "current agreement acceptance was rejected")
-        let encoded = try JSONEncoder().encode(LicenseAcceptanceRecord())
+        let digest = String(repeating: "a", count: 64)
+        let metadata = try LicenseAgreementMetadata(data: Data("""
+        {"schema":1,"eula_version":"1.0","effective_date":"2026-09-20","sha256":"\(digest)"}
+        """.utf8))
+        let suite = "0sky-eula-test-\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suite) else {
+            throw TestFailure.failed("could not create isolated EULA preference suite")
+        }
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let store = LicenseAcceptanceStore(defaults: defaults)
+        try expect(!store.isAccepted(metadata), "missing acceptance was treated as current")
+        let acceptedAt = Date(timeIntervalSince1970: 1_750_000_000)
+        try expect(store.accept(metadata, at: acceptedAt), "explicit acceptance was not saved")
+        let record = store.record()
+        try expect(metadata.isCurrent(record), "current EULA acceptance was rejected")
+        try expect(record?.acceptedAt == acceptedAt, "acceptance timestamp did not round trip")
+        let encoded = try JSONEncoder().encode(record)
         let fields = try JSONSerialization.jsonObject(with: encoded) as? [String: Any]
-        try expect(fields?["agreementVersion"] as? String == "1.0",
-                   "acceptance record omitted the agreement version")
+        try expect(fields?["eulaVersion"] as? String == "1.0"
+                   && fields?["accepted"] as? Bool == true,
+                   "acceptance record omitted version or affirmative action")
         try expect(fields?.keys.contains("device_id") != true,
                    "acceptance record unexpectedly included a device identifier")
+        let updated = try LicenseAgreementMetadata(data: Data("""
+        {"schema":1,"eula_version":"2.0","effective_date":"2027-01-01","sha256":"\(digest)"}
+        """.utf8))
+        try expect(!store.isAccepted(updated), "new EULA version reused old acceptance")
+        let changedText = try LicenseAgreementMetadata(data: Data("""
+        {"schema":1,"eula_version":"1.0","effective_date":"2026-09-20","sha256":"\(String(repeating: "b", count: 64))"}
+        """.utf8))
+        try expect(!store.isAccepted(changedText), "changed legal text reused old acceptance")
+        let legacySuite = "0sky-eula-legacy-test-\(UUID().uuidString)"
+        guard let legacyDefaults = UserDefaults(suiteName: legacySuite) else {
+            throw TestFailure.failed("could not create isolated legacy EULA suite")
+        }
+        defer { legacyDefaults.removePersistentDomain(forName: legacySuite) }
+        legacyDefaults.set("1.0", forKey: LicenseAgreementMetadata.legacyAcceptedVersionKey)
+        legacyDefaults.set(ISO8601DateFormatter().string(from: acceptedAt),
+                           forKey: LicenseAgreementMetadata.legacyAcceptedAtKey)
+        let matchingLegacy = try LicenseAgreementMetadata(data: Data("""
+        {"schema":1,"eula_version":"1.0","effective_date":"2026-09-20","sha256":"\(digest)",
+         "legacy_acceptance":{"eula_version":"1.0","sha256":"\(digest)"}}
+        """.utf8))
+        let legacyStore = LicenseAcceptanceStore(defaults: legacyDefaults)
+        try expect(legacyStore.isAccepted(matchingLegacy),
+                   "unchanged legacy EULA acceptance was not preserved")
+        try expect(legacyStore.record()?.acceptedAt == acceptedAt,
+                   "legacy acceptance timestamp was not preserved")
+        try expect(!legacyStore.isAccepted(changedText),
+                   "legacy acceptance bypassed a changed EULA digest")
     }
 
     private static func deviceParsing() async throws {
@@ -1001,9 +1037,13 @@ struct BridgeCoreTestRunner {
         ]
         for file in files { try Data("fixture".utf8).write(to: file) }
         for role in ["usbmux", "worker", "device-bridge", "bluetooth"] {
-            try Data("fixture".utf8).write(to: agents.appendingPathComponent(
-                "com.liquidskysecurity.crypstore-\(role).\(instance).plist"
-            ))
+            let label = "com.liquidskysecurity.crypstore-\(role).\(instance)"
+            let plist: [String: Any] = [
+                "Label": label, "ProgramArguments": ["/usr/bin/true"],
+                "EnvironmentVariables": ["CRYPSTORE_DEVICE_UDID": udid],
+            ]
+            try PropertyListSerialization.data(fromPropertyList: plist, format: .xml, options: 0)
+                .write(to: agents.appendingPathComponent("\(label).plist"))
         }
         let unrelatedAgent = agents.appendingPathComponent("com.example.keep.plist")
         try Data("keep".utf8).write(to: unrelatedAgent)
@@ -1019,6 +1059,12 @@ struct BridgeCoreTestRunner {
         let result = try await manager.remove(profile: profile)
         try expect(result.researchEvidencePreserved && !result.deviceModified,
                    "device removal reported mutation or evidence deletion")
+        try expect(result.rollbackID != nil && result.serviceStopFailures.isEmpty,
+                   "device removal did not create a reversible backup")
+        let backup = support.appendingPathComponent("uninstall-backups/\(result.rollbackID!)")
+        try expect(fm.fileExists(atPath: backup.appendingPathComponent("manifest.json").path)
+                   && fm.fileExists(atPath: backup.appendingPathComponent("state/instances/\(instance)/config.json").path),
+                   "device removal did not retain exact-device rollback state")
         try expect(!fm.fileExists(atPath: support.appendingPathComponent("instances/\(instance)").path),
                    "exact device instance was not removed")
         try expect(fm.fileExists(atPath: files[4].path)
@@ -1033,7 +1079,7 @@ struct BridgeCoreTestRunner {
         try expect(eventNames.contains(.deviceRemovalStarted) && eventNames.contains(.deviceRemoved),
                    "device removal did not publish normalized lifecycle events")
 
-        // A malicious instance symlink must be unlinked without following it.
+        // A malicious instance symlink must be rejected without following it.
         let outside = root.appendingPathComponent("outside")
         try fm.createDirectory(at: outside, withIntermediateDirectories: true)
         let outsideMarker = outside.appendingPathComponent("keep")
@@ -1049,7 +1095,10 @@ struct BridgeCoreTestRunner {
             sshKeyPath: root.appendingPathComponent("shared-key").path,
             knownHostsPath: support.appendingPathComponent("instances/\(symlinkInstance)/known").path
         )
-        _ = try await manager.remove(profile: symlinkProfile)
+        do {
+            _ = try await manager.remove(profile: symlinkProfile)
+            throw TestFailure.failed("symlinked device instance was accepted")
+        } catch BridgeCoreError.operationFailed { /* expected */ }
         try expect(fm.fileExists(atPath: outsideMarker.path),
                    "device removal followed a malicious instance symlink")
     }
@@ -1075,5 +1124,70 @@ struct BridgeCoreTestRunner {
         let values = try await DeviceRegistry(supportURL: root).reload()
         try expect(values.first?.wirelessEnabled == true,
                    "durable wireless proof was erased by a later USB verification")
+    }
+
+    private static func legacyExactDeviceSSHForward() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "0sky-legacy-forward-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let udid = "00000000-0000000000000001"
+        let label = "com.liquidskysecurity.crypstore-usbmux.old-instance"
+        let payload: [String: Any] = [
+            "Label": label,
+            "ProgramArguments": ["/opt/homebrew/bin/iproxy", "-s", "127.0.0.1", "-u", udid, "2222:22"],
+        ]
+        try PropertyListSerialization.data(fromPropertyList: payload, format: .xml, options: 0)
+            .write(to: root.appendingPathComponent("\(label).plist"))
+        let profile = DeviceProfile(udid: udid, instanceName: "iphonese-srd", localPort: 2222,
+                                    sshHostAlias: "0sky-device-aaaaaaaaaaaaaaaaaaaaaaaa",
+                                    sshKeyPath: "/tmp/key", knownHostsPath: "/tmp/known")
+        let manager = ServiceManager(runner: ScriptRunner(), agentsDirectory: root)
+        let selectedLabel = try await manager.label(kind: .usbmux, profile: profile)
+        try expect(selectedLabel == label,
+                   "exact-UDID legacy SSH forward was not reused")
+        let other = DeviceProfile(udid: "00000000-0000000000000002", instanceName: "iphone12",
+                                  localPort: 2222, sshHostAlias: "0sky-device-bbbbbbbbbbbbbbbbbbbbbbbb",
+                                  sshKeyPath: "/tmp/key", knownHostsPath: "/tmp/known")
+        let otherLabel = try await manager.label(kind: .usbmux, profile: other)
+        try expect(otherLabel != label,
+                   "another device reused the selected SRD's SSH forward")
+    }
+
+    private static func hostProfileInspection() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("0sky-host-profile-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let udid = "00000000-0000000000000001"
+        let directory = root.appendingPathComponent("instances/iphonese-srd", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let configURL = directory.appendingPathComponent("config.json")
+        let pinURL = directory.appendingPathComponent("device-known-hosts")
+        let missing = HostProfileInspector.inspect(supportURL: root, udid: udid)
+        try expect(missing.state == .missing, "missing profile was reported ready")
+        let legacy: [String: Any] = [
+            "udid": udid, "ssh_host": "127.0.0.1", "ssh_port": "2222",
+            "ssh_key": "/tmp/test-key",
+        ]
+        try JSONSerialization.data(withJSONObject: legacy).write(to: configURL)
+        let partial = HostProfileInspector.inspect(supportURL: root, udid: udid)
+        try expect(partial.state == .invalid && partial.code == "ERR_PROFILE_STALE",
+                   "legacy four-field profile was accepted")
+        let alias = "0sky-device-" + SHA256.hash(data: Data(udid.utf8))
+            .map { String(format: "%02x", $0) }.joined().prefix(24)
+        var complete = legacy
+        complete["schema"] = 2
+        complete["instance"] = "iphonese-srd"
+        complete["ssh_host_alias"] = alias
+        complete["ssh_known_hosts"] = pinURL.path
+        try JSONSerialization.data(withJSONObject: complete).write(to: configURL)
+        try Data("\(alias) ssh-ed25519 \(String(repeating: "A", count: 44))\n".utf8).write(to: pinURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: configURL.path)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: pinURL.path)
+        let valid = HostProfileInspector.inspect(supportURL: root, udid: udid)
+        try expect(valid.ready, "complete exact-device profile was rejected: \(valid.code ?? "none") \(valid.detail)")
+        try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: pinURL.path)
+        let unsafe = HostProfileInspector.inspect(supportURL: root, udid: udid)
+        try expect(unsafe.code == "ERR_PROFILE_PERMISSION", "broad host-key pin mode was accepted")
     }
 }

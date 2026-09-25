@@ -338,7 +338,7 @@ struct BridgeCLI {
         print("")
         print("0SKY_SRD_PLATFORM_SMOKE_REPORT")
         print("DEVICE_DISCOVERY=\(binary(values["DEVICE_DISCOVERY"]))")
-        print("USB_CONNECTION=\(binary(values["USB_TRANSPORT"]))")
+        print("USB_CONNECTION=\(values["USB_TRANSPORT"]?.rawValue ?? "NOT_RUN")")
         print("PAIRING=\(binary(values["PAIRING_RECORD"]))")
         print("TRUST=\(binary(values["TRUST"]))")
         print("REMOTEXPC=\(binary(values["REMOTEXPC"]))")
@@ -352,10 +352,13 @@ struct BridgeCLI {
                     "TIMELINE", "HASH_VALIDATION", "REDACTION", "EVIDENCE_EXPORT"] {
             print("\(key)=\(platform[key] == true ? "PASS" : "FAIL")")
         }
-        let physicalKeys = ["DEVICE_DISCOVERY", "USB_TRANSPORT", "PAIRING_RECORD", "TRUST",
+        let physicalKeys = ["DEVICE_DISCOVERY", "PAIRING_RECORD", "TRUST",
                             "REMOTEXPC", "WIRELESS_PAIRING", "WIRELESS_RECONNECT", "SSH"]
+        let transportPass = values["USB_TRANSPORT"] == .pass
+            || (values["USB_TRANSPORT"] == .notApplicable
+                && values["WIRELESS_RECONNECT"] == .pass)
         let physicalPass = physicalKeys.allSatisfy { values[$0] == .pass }
-            && ddiCheck == .pass && developerServices == .pass
+            && transportPass && ddiCheck == .pass && developerServices == .pass
         let architecturePass = platform.values.allSatisfy { $0 }
         let extendedPass = !extendedHealth.isEmpty
             && extendedHealth.allSatisfy { $0.status == .pass || $0.status == .info }
@@ -363,7 +366,7 @@ struct BridgeCLI {
         let extendedFailure = FirstFailureAnalyzer().analyze(extendedHealth).firstFailingTransition
         let smokeFailure: String? = {
             if values["DEVICE_DISCOVERY"] != .pass { return "DEVICE_DISCOVERY" }
-            if values["USB_TRANSPORT"] != .pass { return "USB" }
+            if !transportPass { return "USB_OR_WIFI_TRANSPORT" }
             if values["PAIRING_RECORD"] != .pass { return "PAIRING" }
             if values["TRUST"] != .pass { return "TRUST" }
             if values["REMOTEXPC"] != .pass { return "REMOTEXPC" }

@@ -13,42 +13,35 @@ public actor ResearcherOperationsManager {
     }
 
     public func checkCoreDevice() async throws -> BridgeOperationResult {
-        let direct = "/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl"
-        let useDirect = FileManager.default.isExecutableFile(atPath: direct)
         return try await runner.run(ScriptSpecification(
             identifier: "research.check-coredevice",
-            executableURL: URL(fileURLWithPath: useDirect ? direct : "/usr/bin/xcrun"),
-            arguments: (useDirect ? [] : ["devicectl"]) + ["list", "devices"],
+            executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+            arguments: ["devicectl", "list", "devices"],
             timeout: .seconds(30)
         ))
     }
 
     public func checkDeveloperServices() async throws -> BridgeOperationResult {
-        let direct = "/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl"
-        let useDirect = FileManager.default.isExecutableFile(atPath: direct)
         return try await runner.run(ScriptSpecification(
             identifier: "research.check-developer-services",
-            executableURL: URL(fileURLWithPath: useDirect ? direct : "/usr/bin/xcrun"),
-            arguments: useDirect ? ["--version"] : ["--find", "devicectl"],
+            executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+            arguments: ["--find", "devicectl"],
             timeout: .seconds(15)
         ))
     }
 
     public func checkDDI(profile: DeviceProfile) async throws -> BridgeOperationResult {
         _ = try BridgeValidation.validateUDID(profile.udid)
-        let direct = "/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl"
-        let executable = FileManager.default.isExecutableFile(atPath: direct)
-            ? URL(fileURLWithPath: direct) : URL(fileURLWithPath: "/usr/bin/xcrun")
         let directory = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("0sky-ddi-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false,
                                                 attributes: [.posixPermissions: 0o700])
         defer { try? FileManager.default.removeItem(at: directory) }
         let json = directory.appendingPathComponent("ddi.json")
-        let prefix = executable.path == direct ? [] : ["devicectl"]
         let measured = try await runner.run(ScriptSpecification(
-            identifier: "research.check-ddi.\(profile.instanceName)", executableURL: executable,
-            arguments: prefix + ["device", "info", "ddiServices", "--device", profile.udid,
+            identifier: "research.check-ddi.\(profile.instanceName)",
+            executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+            arguments: ["devicectl", "device", "info", "ddiServices", "--device", profile.udid,
                                  "--no-auto-mount-ddis", "--json-output", json.path],
             workingDirectory: directory, timeout: .seconds(45)
         ))
@@ -78,8 +71,6 @@ public actor ResearcherOperationsManager {
     /// suspending, or modifying any device process.
     public func checkDebugserver(profile: DeviceProfile) async throws -> BridgeOperationResult {
         let udid = try BridgeValidation.validateUDID(profile.udid)
-        let direct = "/Applications/Xcode.app/Contents/Developer/usr/bin/lldb"
-        let useDirect = FileManager.default.isExecutableFile(atPath: direct)
         let commands = [
             "-b",
             "-o", "device select \(udid)",
@@ -88,8 +79,8 @@ public actor ResearcherOperationsManager {
         ]
         return try await runner.run(ScriptSpecification(
             identifier: "research.check-debugserver.\(profile.instanceName)",
-            executableURL: URL(fileURLWithPath: useDirect ? direct : "/usr/bin/xcrun"),
-            arguments: (useDirect ? [] : ["lldb"]) + commands,
+            executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+            arguments: ["lldb"] + commands,
             timeout: .seconds(30),
             maximumOutputBytes: 512 * 1_024
         ))

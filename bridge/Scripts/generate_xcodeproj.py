@@ -21,7 +21,6 @@ ui_tests = ["Tests/BridgeScreenSmokeTests/BridgeScreenSmokeTests.swift"]
 resources = [
     "0SkyBridge/Resources/bridge-operations.json",
     "0SkyBridge/Resources/AppIcon.icns",
-    "0SkyBridge/Resources/EULA.md",
 ]
 daemon = "0SkyBridge/Resources/com.liquidsky.0sky.bridge.helper.plist"
 agent = "0SkyBridge/Resources/com.liquidsky.0sky.bridge.service.plist"
@@ -139,7 +138,7 @@ copy_agent = phase(
     "\t\t\tdstPath = \"Contents/Library/LaunchAgents\";\n\t\t\tdstSubfolderSpec = 1;\n\t\t\tname = \"Embed Bridge Service Registration\";\n",
 )
 kit_phase = oid("phase:kit")
-script = "KIT=\\\"${SRCROOT}/exploitdev/srdsh-work/components/zero-sky/kit\\\"\\n[[ -d \\\"${KIT}/host-mac\\\" ]] || KIT=\\\"${SRCROOT}/kit\\\"\\n[[ -d \\\"${KIT}/host-mac\\\" ]] || KIT=\\\"${SRCROOT}/../kit\\\"\\n[[ -d \\\"${KIT}/host-mac\\\" ]] || { echo 'verified 0-Sky kit not found' >&2; exit 1; }\\nHOST=\\\"${SRCROOT}\\\"\\n[[ -f \\\"${HOST}/macos_host_setup.py\\\" ]] || HOST=\\\"${SRCROOT}/..\\\"\\n[[ -f \\\"${HOST}/macos_host_setup.py\\\" ]] || { echo 'macOS host setup sources not found' >&2; exit 1; }\\nRES=\\\"${TARGET_BUILD_DIR}/${CONTENTS_FOLDER_PATH}/Resources\\\"\\nmkdir -p \\\"${RES}/Kit\\\" \\\"${RES}/Scripts\\\"\\n/usr/bin/ditto --noqtn \\\"${KIT}\\\" \\\"${RES}/Kit\\\"\\n/usr/bin/ditto --noqtn \\\"${HOST}/macos_host_setup.py\\\" \\\"${RES}/Scripts/macos_host_setup.py\\\"\\n/usr/bin/ditto --noqtn \\\"${HOST}/zero_sky_user_config.py\\\" \\\"${RES}/Scripts/zero_sky_user_config.py\\\"\\n/usr/bin/ditto --noqtn \\\"${SRCROOT}/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command\\\" \\\"${RES}/Scripts/Install 0-Sky Dependencies.command\\\"\\nchmod -R u=rwX,go=rX \\\"${RES}\\\""
+script = '\\\"${SRCROOT}/Scripts/embed_verified_kit.sh\\\"'
 obj(kit_phase, f"\t\t\tisa = PBXShellScriptBuildPhase;\n\t\t\talwaysOutOfDate = 1;\n\t\t\tbuildActionMask = 2147483647;\n\t\t\tfiles = ();\n\t\t\tinputPaths = ();\n\t\t\tname = \"Embed Verified Enrollment Kit\";\n\t\t\toutputPaths = ();\n\t\t\trunOnlyForDeploymentPostprocessing = 0;\n\t\t\tshellPath = \"/bin/zsh\";\n\t\t\tshellScript = \"{script}\";")
 
 core_target = oid("target:core")

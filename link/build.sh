@@ -29,8 +29,9 @@ for spec in '120 AppIcon60x60@2x.png' '180 AppIcon60x60@3x.png'; do
     --out "$APP/$name" >/dev/null
 done
 
-if [[ -n ${ZEROSKY_KIT_SOURCE:-} ]]; then
-  KIT_SOURCE=${ZEROSKY_KIT_SOURCE:A}
+if [[ -n ${ZERO_SKY_KIT_SOURCE:-${ZEROSKY_KIT_SOURCE:-}} ]]; then
+  KIT_SOURCE=${ZERO_SKY_KIT_SOURCE:-${ZEROSKY_KIT_SOURCE:-}}
+  KIT_SOURCE=${KIT_SOURCE:A}
   [[ -d "$KIT_SOURCE" ]] || { print -u2 'ZEROSKY_KIT_SOURCE is not a directory'; exit 2; }
   case "$KIT_SOURCE" in
     *'/state'|*'/state/'*|*'/logs'|*'/logs/'*|*'/evidence'|*'/evidence/'*)
@@ -56,4 +57,4 @@ IPA="$OUT/0-Sky-Link-${VERSION}-source.ipa"
   cd "$OUT"
   /usr/bin/shasum -a 256 "${IPA:t}" > "SHA256SUMS-${VERSION}-source"
 )
-print "Built 0-Sky Link $VERSION ($BUILD_NUMBER): $IPA"
+print "Built 0-Sky Link $VERSION ($BUILD_NUMBER): ${IPA:t}"

@@ -133,6 +133,11 @@ final class BridgeScreenSmokeTests: XCTestCase {
         let authorization = app.checkBoxes["AuthorizationCertificationCheckbox"].firstMatch
         XCTAssertTrue(agreement.exists, "Agreement acceptance checkbox is missing")
         XCTAssertTrue(authorization.exists, "Authorization certification checkbox is missing")
+        XCTAssertTrue(app.buttons["DeclineAgreementButton"].exists,
+                      "Explicit decline action is missing")
+        XCTAssertTrue(app.scrollViews["EULAFullText"].exists,
+                      "Bundled EULA text is not visible")
+        XCTAssertFalse(accept.isEnabled, "EULA acceptance was enabled before affirmative action")
         agreement.click()
         authorization.click()
         XCTAssertTrue(accept.isEnabled, "Accept and Continue did not enable after certification")

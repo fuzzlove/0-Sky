@@ -1,0 +1,10 @@
+{
+  "schema": 1,
+  "eula_version": "1.0",
+  "effective_date": "2026-09-20",
+  "sha256": "6e953dd2290fe506664eac746e45d03c0e1dbb048646f58bba9ef33c05797ff0",
+  "legacy_acceptance": {
+    "eula_version": "1.0",
+    "sha256": "6e953dd2290fe506664eac746e45d03c0e1dbb048646f58bba9ef33c05797ff0"
+  }
+}

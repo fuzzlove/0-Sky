@@ -50,8 +50,11 @@ def run(argv: list[str], *, input_data: bytes | None = None,
     completed = subprocess.run(argv, input=input_data, stdout=subprocess.PIPE,
                                stderr=subprocess.PIPE, timeout=timeout, check=False)
     if check and completed.returncode:
-        detail = (completed.stdout + completed.stderr).decode("utf-8", "replace").strip()
-        raise RuntimeError(f"command failed ({completed.returncode}): {' '.join(argv)}\n{detail}")
+        # argv can contain an embedded remote program (and future callers may
+        # pass credentials). Never echo the command or its stdout on failure.
+        detail = completed.stderr.decode("utf-8", "replace").strip()[-1000:]
+        raise RuntimeError(f"command failed ({completed.returncode}) in "
+                           f"{Path(argv[0]).name}: {detail or 'no stderr'}")
     return completed
 
 
@@ -278,7 +281,9 @@ if len(token)<16: raise SystemExit("privileged bridge token is missing or invali
 bridge_path="/var/jb/usr/local/libexec/trollstorelite-srd-bridge.py"
 try: bridge_source=open(bridge_path,encoding="utf-8").read(512*1024)
 except OSError: raise SystemExit("Runtime Manager 2.4.10 or later is required; run Set Up iOS Components first")
-if "PAIRING_REGISTRY_SCHEMA = 2" not in bridge_source:
+if not ("PAIRING_REGISTRY_SCHEMA = 2" in bridge_source or
+        ("def pairing_host_id(" in bridge_source and
+         "elif valid and registry_schema == 2:" in bridge_source)):
  raise SystemExit("Runtime Manager 2.4.10 or later is required; run Set Up iOS Components first")
 body=json.load(sys.stdin)
 path="/var/jb/var/lib/0-sky/pairing.json"

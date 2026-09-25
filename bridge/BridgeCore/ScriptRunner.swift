@@ -147,7 +147,7 @@ public actor ScriptRunner {
     }
 
     public static var defaultExecutableRoots: [URL] {
-        [
+        var roots = [
             URL(fileURLWithPath: "/usr/bin"),
             URL(fileURLWithPath: "/bin"),
             URL(fileURLWithPath: "/usr/sbin"),
@@ -158,10 +158,13 @@ public actor ScriptRunner {
             // or every pinned 0-Sky virtual environment is rejected solely
             // because it is a symlink.
             URL(fileURLWithPath: "/opt/homebrew/Cellar"),
-            URL(fileURLWithPath: "/Applications/Xcode.app/Contents/Developer/usr/bin"),
             FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support/0-Sky"),
         ]
+        if let developerTool = HostToolResolver.xcrunTool("devicectl") {
+            roots.append(URL(fileURLWithPath: developerTool).deletingLastPathComponent())
+        }
+        return roots
     }
 
     public static var defaultWorkingRoots: [URL] {

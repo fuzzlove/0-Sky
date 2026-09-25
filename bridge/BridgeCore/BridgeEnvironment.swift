@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 public struct BridgeEnvironment: Sendable {
     public let events: EventBus
@@ -131,10 +132,8 @@ public struct BridgeEnvironment: Sendable {
             let candidate = directory.appendingPathComponent("venv/bin/python3")
             if FileManager.default.isExecutableFile(atPath: candidate.path) { return candidate }
         }
-        for path in ["/opt/homebrew/bin/python3", "/usr/bin/python3"] {
-            if FileManager.default.isExecutableFile(atPath: path) {
-                return URL(fileURLWithPath: path)
-            }
+        if let discovered = HostToolResolver.executable("python3") {
+            return URL(fileURLWithPath: discovered)
         }
         return nil
     }
@@ -156,6 +155,12 @@ public enum HostInspector {
         #if arch(arm64)
         return "arm64"
         #elseif arch(x86_64)
+        var translated: Int32 = 0
+        var size = MemoryLayout<Int32>.size
+        if sysctlbyname("sysctl.proc_translated", &translated, &size, nil, 0) == 0,
+           translated == 1 {
+            return "x86_64 (Rosetta on arm64)"
+        }
         return "x86_64"
         #else
         return "unknown"

@@ -149,12 +149,9 @@ public struct BootstrapAdapter: HealthCheckingAdapter {
 
 private func fridaHostExecutable() -> String? {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
-    let candidates = [
-        "\(home)/Library/Application Support/0-Sky/tools/frida-current/bin/frida",
-        "/opt/homebrew/bin/frida",
-        "/usr/local/bin/frida",
-    ]
-    return candidates.first(where: FileManager.default.isExecutableFile)
+    let managed = "\(home)/Library/Application Support/0-Sky/tools/frida-current/bin/frida"
+    if FileManager.default.isExecutableFile(atPath: managed) { return managed }
+    return HostToolResolver.executable("frida")
 }
 
 public struct FridaAdapter: HealthCheckingAdapter {

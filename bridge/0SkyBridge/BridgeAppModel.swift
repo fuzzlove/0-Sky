@@ -13,6 +13,7 @@ struct PairingWorkflowStep: Identifiable {
     let id: Int
     let title: String
     let state: State
+    let detail: String?
 }
 
 @MainActor
@@ -38,6 +39,7 @@ final class BridgeAppModel: ObservableObject {
     @Published var automaticReconnect = true
     @Published var startAtLogin = false
     @Published var selectedHasProfile = false
+    @Published var selectedProfileFailure: String?
     @Published var selectedPairedHostCount = 0
     @Published var workflowActive = false
     @Published var connectionMetrics: ConnectionMetrics?
@@ -287,6 +289,12 @@ final class BridgeAppModel: ObservableObject {
     }
 
     func refreshDetails() async {
+        let inspection = selectedDevice.map {
+            HostProfileInspector.inspect(supportURL: environment.paths.supportRoot, udid: $0.udid)
+        }
+        selectedProfileFailure = inspection?.failed == true
+            ? "\(inspection?.code ?? "ERR_PROFILE_VALIDATION"): \(inspection?.detail ?? "Host profile invalid.")"
+            : nil
         guard let device = selectedDevice,
               let profile = await environment.registry.profile(for: device.udid) else {
             services = []
@@ -296,7 +304,7 @@ final class BridgeAppModel: ObservableObject {
             workflowActive = selectedDevice != nil
             return
         }
-        selectedHasProfile = true
+        selectedHasProfile = inspection?.ready == true
         selectedPairedHostCount = profile.pairedHostCount
         workflowActive = true
         async let serviceValues = environment.services.allStatuses(profile: profile)
@@ -424,9 +432,10 @@ final class BridgeAppModel: ObservableObject {
                     } else {
                         result = try await self.environment.deviceRemoval.remove(profile: profile)
                     }
-                    completionMessage = result.serviceStopFailures.isEmpty
-                        ? "Device removed from this Mac. Research evidence was preserved; the Apple device was not modified."
-                        : "Device removed from this Mac. Some already-stopped services could not be booted out; their definitions were removed."
+                    completionMessage = "Device removed from this Mac. Research evidence and the Apple device were preserved. Reconnect over USB to install again."
+                    if let rollbackID = result.rollbackID {
+                        completionMessage += " Rollback backup: \(rollbackID)."
+                    }
                 } else {
                     await self.environment.events.publish(BridgeEvent(
                         event: .deviceRemoved, deviceID: deviceID,
@@ -1070,7 +1079,10 @@ final class BridgeAppModel: ObservableObject {
             PairingWorkflowStep(
                 id: index,
                 title: value.0,
-                state: value.1 ? .complete : (index == firstIncomplete ? .active : .pending)
+                state: value.1 ? .complete : (index == firstIncomplete
+                    ? (index == 2 && selectedProfileFailure != nil ? .failed : .active)
+                    : .pending),
+                detail: index == 2 ? selectedProfileFailure : nil
             )
         }
     }

@@ -3,6 +3,8 @@
 xcuserdata/
 DerivedData/
 .build/
+/bridge/0SkyBridge/Resources/Scripts/kit/
+.venv/
 build/
 out/
 dist/
@@ -31,6 +33,7 @@ state/
 logs/
 evidence/
 research_sessions/
+artifacts/
 packages/
 work/
 *.token
@@ -38,4 +41,5 @@ work/
 user-config.json
 pairing-records/
 known_hosts
+dummy_key
 control/TrollStoreLite/Resources/trollstorehelper

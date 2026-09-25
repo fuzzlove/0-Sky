@@ -9,12 +9,58 @@ public actor ServiceManager {
     }
 
     private let runner: ScriptRunner
+    private let agentsDirectory: URL
 
-    public init(runner: ScriptRunner) { self.runner = runner }
+    public init(
+        runner: ScriptRunner,
+        agentsDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/LaunchAgents")
+    ) {
+        self.runner = runner
+        self.agentsDirectory = agentsDirectory
+    }
 
     public func label(kind: Kind, profile: DeviceProfile) throws -> String {
         let instance = try BridgeValidation.validateInstance(profile.instanceName)
-        return "com.liquidskysecurity.crypstore-\(kind.rawValue).\(instance)"
+        let expected = "com.liquidskysecurity.crypstore-\(kind.rawValue).\(instance)"
+        guard kind == .usbmux,
+              !FileManager.default.fileExists(atPath: agentsDirectory
+                .appendingPathComponent("\(expected).plist").path) else { return expected }
+        // A repaired profile may reuse an exact-UDID iproxy LaunchAgent from
+        // an older instance name. Reuse that one instead of starting a second
+        // process on the working SSH port.
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: agentsDirectory, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+        )) ?? []
+        func hasPair(_ flag: String, _ value: String, in arguments: [String]) -> Bool {
+            arguments.indices.contains { index in
+                arguments[index] == flag && arguments.indices.contains(index + 1)
+                    && arguments[index + 1] == value
+            }
+        }
+        let matches = files.compactMap { file -> String? in
+            let name = file.lastPathComponent
+            guard name.hasPrefix("com.liquidskysecurity.crypstore-usbmux."),
+                  name.hasSuffix(".plist"),
+                  let values = try? file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+                  values.isRegularFile == true, values.isSymbolicLink != true,
+                  let data = try? Data(contentsOf: file),
+                  let plist = try? PropertyListSerialization.propertyList(
+                    from: data, format: nil
+                  ) as? [String: Any],
+                  let arguments = plist["ProgramArguments"] as? [String],
+                  arguments.first.map({ URL(fileURLWithPath: $0).lastPathComponent }) == "iproxy",
+                  hasPair("-u", profile.udid, in: arguments),
+                  hasPair("-s", "127.0.0.1", in: arguments),
+                  arguments.contains("\(profile.localPort):22"),
+                  let label = plist["Label"] as? String,
+                  label == String(name.dropLast(6)) else { return nil }
+            return label
+        }
+        if matches.count > 1 {
+            throw BridgeCoreError.operationFailed("Multiple exact-device SSH forward services claim port \(profile.localPort).")
+        }
+        return matches.first ?? expected
     }
 
     public func status(kind: Kind, profile: DeviceProfile) async -> ServiceStatus {
@@ -49,8 +95,7 @@ public actor ServiceManager {
 
     public func start(kind: Kind, profile: DeviceProfile) async throws -> BridgeOperationResult {
         let label = try label(kind: kind, profile: profile)
-        let plist = FileManager.default.homeDirectoryForCurrentUser
-            .appendingPathComponent("Library/LaunchAgents/\(label).plist")
+        let plist = agentsDirectory.appendingPathComponent("\(label).plist")
         guard FileManager.default.isReadableFile(atPath: plist.path) else {
             throw BridgeCoreError.dependencyMissing(plist.path)
         }

@@ -137,13 +137,10 @@ public struct CoreDeviceDiscoveryBackend: DeviceDiscoveryBackend {
         let destination = outputDirectory
             .appendingPathComponent("0sky-devicectl-\(UUID().uuidString).json")
         defer { try? FileManager.default.removeItem(at: destination) }
-        let direct = "/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl"
-        let useDirect = FileManager.default.isExecutableFile(atPath: direct)
         let specification = ScriptSpecification(
             identifier: "device.discovery.coredevice",
-            executableURL: URL(fileURLWithPath: useDirect ? direct : "/usr/bin/xcrun"),
-            arguments: (useDirect ? [] : ["devicectl"])
-                + ["list", "devices", "--json-output", destination.path],
+            executableURL: URL(fileURLWithPath: "/usr/bin/xcrun"),
+            arguments: ["devicectl", "list", "devices", "--json-output", destination.path],
             timeout: .seconds(20)
         )
         let result = try await runner.run(specification)

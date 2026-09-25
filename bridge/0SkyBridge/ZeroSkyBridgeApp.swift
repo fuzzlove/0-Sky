@@ -5,14 +5,17 @@ import BridgeCore
 @main
 struct ZeroSkyBridgeApp: App {
     @StateObject private var model = BridgeAppModel()
-    @AppStorage(LicenseAgreementMetadata.acceptedVersionKey)
-    private var acceptedAgreementVersion = ""
-    @AppStorage(LicenseAgreementMetadata.acceptedAtKey)
-    private var acceptedAgreementTimestamp = ""
+    private let document: LicenseAgreementDocument?
+    private let acceptanceStore = LicenseAcceptanceStore()
+    @State private var agreementAccepted: Bool
     @State private var bridgeStarted = false
 
-    private var agreementAccepted: Bool {
-        LicenseAgreementMetadata.isCurrent(acceptedVersion: acceptedAgreementVersion)
+    init() {
+        let loaded = LicenseAgreementDocument.load()
+        document = loaded
+        _agreementAccepted = State(initialValue: loaded.map {
+            LicenseAcceptanceStore().isAccepted($0.metadata)
+        } ?? false)
     }
 
     var body: some Scene {
@@ -23,7 +26,7 @@ struct ZeroSkyBridgeApp: App {
                         .frame(minWidth: 1080, minHeight: 700)
                         .onAppear { startBridgeOnce() }
                 } else {
-                    LicenseAgreementView(onAccept: acceptAgreement)
+                    LicenseAgreementView(document: document, onAccept: acceptAgreement)
                 }
             }
         }
@@ -54,13 +57,14 @@ struct ZeroSkyBridgeApp: App {
         }
     }
 
-    private func acceptAgreement() {
-        acceptedAgreementTimestamp = ISO8601DateFormatter().string(from: Date())
-        acceptedAgreementVersion = LicenseAgreementMetadata.currentVersion
+    private func acceptAgreement() -> Bool {
+        guard let document, acceptanceStore.accept(document.metadata) else { return false }
+        agreementAccepted = true
+        return true
     }
 
     private func startBridgeOnce() {
-        guard !bridgeStarted else { return }
+        guard agreementAccepted, document != nil, !bridgeStarted else { return }
         bridgeStarted = true
         model.start()
     }

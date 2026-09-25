@@ -1,46 +1,49 @@
 import AppKit
 import BridgeCore
+import CryptoKit
 import Foundation
 import SwiftUI
 
-enum LicenseAgreementDocument {
-    static var resourceURL: URL? {
-        if let direct = Bundle.main.url(forResource: "EULA", withExtension: "md") {
-            return direct
-        }
-        let candidates = (Bundle.allBundles + Bundle.allFrameworks).compactMap {
-            $0.url(forResource: "EULA", withExtension: "md")
-        }
-        if let bundled = candidates.first { return bundled }
-        guard let resources = Bundle.main.resourceURL else { return nil }
-        let packageBundle = resources.appendingPathComponent(
-            "0SkyBridge_0SkyBridge.bundle/EULA.md", isDirectory: false
-        )
-        return FileManager.default.isReadableFile(atPath: packageBundle.path)
-            ? packageBundle : nil
-    }
+struct LicenseAgreementDocument {
+    let url: URL
+    let text: String
+    let metadata: LicenseAgreementMetadata
 
-    static var text: String? {
-        guard let url = resourceURL,
-              let value = try? String(contentsOf: url, encoding: .utf8),
-              value.contains("**Version:** \(LicenseAgreementMetadata.currentVersion)"),
-              value.contains(LicenseAgreementMetadata.requiredAuthorizationStatement)
-        else { return nil }
-        return value
+    static func load() -> Self? {
+        var bundles = [Bundle.main]
+        #if SWIFT_PACKAGE
+        bundles.append(Bundle.module)
+        #endif
+        for bundle in bundles {
+            let legalText = bundle.url(forResource: "EULA", withExtension: "md", subdirectory: "Legal")
+            let legalMetadata = bundle.url(forResource: "EULA", withExtension: "json", subdirectory: "Legal")
+            guard let legalText, let legalMetadata,
+                  let bytes = try? Data(contentsOf: legalText),
+                  let metadataBytes = try? Data(contentsOf: legalMetadata),
+                  let metadata = try? LicenseAgreementMetadata(data: metadataBytes),
+                  let text = String(data: bytes, encoding: .utf8) else { continue }
+            let digest = SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+            guard digest == metadata.sha256,
+                  text.contains("**Version:** \(metadata.eulaVersion)"),
+                  text.contains(LicenseAgreementMetadata.requiredAuthorizationStatement)
+            else { continue }
+            return Self(url: legalText, text: text, metadata: metadata)
+        }
+        return nil
     }
 
     static func openExternally() -> Bool {
-        guard let resourceURL else { return false }
-        return NSWorkspace.shared.open(resourceURL)
+        guard let document = load() else { return false }
+        return NSWorkspace.shared.open(document.url)
     }
 }
 
 struct LicenseAgreementView: View {
-    let onAccept: () -> Void
+    let document: LicenseAgreementDocument?
+    let onAccept: () -> Bool
     @State private var acceptsAgreement = false
     @State private var certifiesAuthorization = false
-
-    private let agreementText = LicenseAgreementDocument.text
+    @State private var acceptanceError: String?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -49,9 +52,11 @@ struct LicenseAgreementView: View {
                     .font(.system(size: 38))
                     .foregroundStyle(.blue)
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("0-Sky Authorized Security Research Terms")
+                    Text("0-Sky End User License Agreement")
                         .font(.title.bold())
-                    Text("Agreement version \(LicenseAgreementMetadata.currentVersion) • Effective \(LicenseAgreementMetadata.effectiveDate)")
+                    Text(document.map {
+                        "Agreement version \($0.metadata.eulaVersion) • Effective \($0.metadata.effectiveDate)"
+                    } ?? "Agreement unavailable")
                         .foregroundStyle(.secondary)
                 }
             }
@@ -63,16 +68,24 @@ struct LicenseAgreementView: View {
                         .textSelection(.enabled)
                         .padding(12)
                 }
+                .accessibilityIdentifier("EULAFullText")
                 .frame(minHeight: 360)
             }
 
             Toggle("I have read and agree to the End User License Agreement and Authorized Security Research Terms.",
                    isOn: $acceptsAgreement)
+                .toggleStyle(.checkbox)
                 .accessibilityIdentifier("AcceptAgreementCheckbox")
 
             Toggle(LicenseAgreementMetadata.requiredAuthorizationStatement,
                    isOn: $certifiesAuthorization)
+                .toggleStyle(.checkbox)
                 .accessibilityIdentifier("AuthorizationCertificationCheckbox")
+
+            if let acceptanceError {
+                Text(acceptanceError).foregroundStyle(.red)
+                    .accessibilityIdentifier("EULAAcceptanceError")
+            }
 
             HStack {
                 Text("Acceptance is recorded only on this Mac as the agreement version and timestamp. No device identifier or credential is included.")
@@ -82,9 +95,14 @@ struct LicenseAgreementView: View {
                 Button("Decline and Quit", role: .cancel) {
                     NSApplication.shared.terminate(nil)
                 }
-                Button("Accept and Continue") { onAccept() }
+                .accessibilityIdentifier("DeclineAgreementButton")
+                Button("Accept and Continue") {
+                    if !onAccept() {
+                        acceptanceError = "Acceptance could not be saved. Check this account's preferences and try again."
+                    }
+                }
                     .buttonStyle(.borderedProminent)
-                    .disabled(agreementText == nil || !acceptsAgreement || !certifiesAuthorization)
+                    .disabled(document == nil || !acceptsAgreement || !certifiesAuthorization)
                     .accessibilityIdentifier("AcceptAndContinueButton")
             }
         }
@@ -93,14 +111,14 @@ struct LicenseAgreementView: View {
     }
 
     private var renderedAgreement: AttributedString {
-        guard let agreementText else {
+        guard let document else {
             return AttributedString(
                 "The bundled agreement could not be loaded or validated. Reinstall 0-Sky Bridge before continuing."
             )
         }
         return (try? AttributedString(
-            markdown: agreementText,
+            markdown: document.text,
             options: .init(interpretedSyntax: .full)
-        )) ?? AttributedString(agreementText)
+        )) ?? AttributedString(document.text)
     }
 }
