@@ -48,9 +48,8 @@ contains the updated source and no installer assets. The external signed device
 payloads must pass the release sanitization gate before new installers can be
 published.
 
-Prebuilt Apple Silicon and Intel macOS installers remain available under the
-earlier [`v1.0.0-pre.1`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.1).
-Those installers predate the source changes in `v1.0.0-pre.2`.
+The earlier installer prerelease has been withdrawn. No verified installer
+assets are currently published for this source revision.
 
 ## Security and privacy
 
