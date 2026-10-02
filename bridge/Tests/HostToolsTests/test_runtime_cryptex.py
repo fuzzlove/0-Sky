@@ -47,10 +47,12 @@ class RuntimeCryptexTests(unittest.TestCase):
             with (mock.patch.object(SYNC, "ssh", return_value=completed),
                   mock.patch.object(SYNC, "run", return_value=completed)):
                 record = SYNC.copy_preference_bundle(
-                    [], bundle_name, root, repair_device=False)
+                    [], bundle_name, root, repair_device=False,
+                    principal_class="AXNPrefsListController")
             info_path = root / "Library/PreferenceBundles/AxonPrefs.bundle/Info.plist"
             info = plistlib.loads(info_path.read_bytes())
             self.assertEqual(info["CFBundleExecutable"], bundle_name)
+            self.assertEqual(info["NSPrincipalClass"], "AXNPrefsListController")
             self.assertTrue(record["synthesized_info_plist"])
             self.assertEqual(record["source_sha256"], hashlib.sha256(executable).hexdigest())
             self.assertEqual(record["info_plist_sha256"],
@@ -63,7 +65,19 @@ class RuntimeCryptexTests(unittest.TestCase):
             with mock.patch.object(SYNC, "ssh", return_value=completed):
                 with self.assertRaisesRegex(RuntimeError, "exact legacy executable"):
                     SYNC.copy_preference_bundle(
-                        [], "AxonPrefs", Path(folder), repair_device=False)
+                        [], "AxonPrefs", Path(folder), repair_device=False,
+                        principal_class="AXNPrefsListController")
+
+    def test_legacy_preference_bundle_requires_safe_controller_class(self):
+        archive = self._preference_archive("AxonPrefs", {"AxonPrefs": b"binary"})
+        completed = SimpleNamespace(returncode=0, stdout=archive, stderr=b"")
+        for controller in (None, "../../General"):
+            with self.subTest(controller=controller), tempfile.TemporaryDirectory() as folder:
+                with mock.patch.object(SYNC, "ssh", return_value=completed):
+                    with self.assertRaisesRegex(RuntimeError, "safe descriptor controller"):
+                        SYNC.copy_preference_bundle(
+                            [], "AxonPrefs", Path(folder), repair_device=False,
+                            principal_class=controller)
 
     def test_sealed_daemon_is_executable(self):
         payload = b"\xcf\xfa\xed\xfe" + b"signed daemon fixture"

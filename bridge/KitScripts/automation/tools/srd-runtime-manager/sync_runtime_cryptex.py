@@ -443,7 +443,8 @@ def deploy_native_cli(base: list[str], launcher: pathlib.Path) -> None:
 
 
 def copy_preference_bundle(base: list[str], bundle_name: str, root: pathlib.Path,
-                           *, repair_device: bool) -> dict:
+                           *, repair_device: bool,
+                           principal_class: str | None = None) -> dict:
     """Copy and authorize one installed PreferenceLoader bundle.
 
     The bundle name comes from an installed descriptor but is still treated as
@@ -504,11 +505,16 @@ def copy_preference_bundle(base: list[str], bundle_name: str, root: pathlib.Path
         legacy_executable = destination / bundle_name
         if not legacy_executable.is_file():
             raise RuntimeError(f"{relative} has no Info.plist or exact legacy executable")
+        if (not isinstance(principal_class, str)
+                or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.$]{0,254}", principal_class)):
+            raise RuntimeError(
+                f"{relative} has no Info.plist or safe descriptor controller class")
         info = {
             "CFBundleExecutable": bundle_name,
             "CFBundleIdentifier": "codes.openai.research.preference." + bundle_name,
             "CFBundleName": bundle_name,
             "CFBundlePackageType": "BNDL",
+            "NSPrincipalClass": principal_class,
         }
         info_path.write_bytes(plistlib.dumps(
             info, fmt=plistlib.FMT_XML, sort_keys=True))
@@ -1261,12 +1267,18 @@ def main() -> int:
                 value = plistlib.loads(payload)
                 entry = value.get("entry") if isinstance(value, dict) else None
                 bundle_name = entry.get("bundle") if isinstance(entry, dict) else None
+                principal_class = entry.get("detail") if isinstance(entry, dict) else None
             except (ValueError, TypeError, plistlib.InvalidFileException) as error:
                 raise RuntimeError(f"invalid preference descriptor: {descriptor}") from error
             if not isinstance(entry, dict):
                 raise RuntimeError(f"preference descriptor has no entry: {descriptor}")
             if bundle_name is not None and not isinstance(bundle_name, str):
                 raise RuntimeError(f"preference descriptor has an invalid bundle: {descriptor}")
+            if (principal_class is not None and
+                    (not isinstance(principal_class, str) or not re.fullmatch(
+                        r"[A-Za-z_][A-Za-z0-9_.$]{0,254}", principal_class))):
+                raise RuntimeError(
+                    f"preference descriptor has an invalid controller class: {descriptor}")
             descriptor_relative = pathlib.PurePosixPath(descriptor).relative_to("/var/jb")
             descriptor_destination = root / descriptor_relative
             descriptor_destination.parent.mkdir(parents=True, exist_ok=True)
@@ -1279,13 +1291,16 @@ def main() -> int:
             if isinstance(bundle_name, str) and bundle_name:
                 preference_bundles[bundle_name] = {"package": tweak.get("package"),
                                                    "descriptor": descriptor,
+                                                   "principal_class": principal_class,
                                                    "descriptor_sha256":
                                                        hashlib.sha256(payload).hexdigest()}
     preference_manifest = []
     for bundle_name in sorted(preference_bundles, key=str.casefold):
-        record = copy_preference_bundle(base, bundle_name, root,
-                                        repair_device=not args.build_only)
-        record.update(preference_bundles[bundle_name])
+        metadata = preference_bundles[bundle_name]
+        record = copy_preference_bundle(
+            base, bundle_name, root, repair_device=not args.build_only,
+            principal_class=metadata.get("principal_class"))
+        record.update(metadata)
         preference_manifest.append(record)
 
     # A tweak and its pane often link a companion library by @rpath.  Trusting
