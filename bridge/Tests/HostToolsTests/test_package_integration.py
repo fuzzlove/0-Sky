@@ -88,6 +88,14 @@ class BridgePackageCommandTests(unittest.TestCase):
     def test_crane_binary_transformations_are_exact(self):
         bridge = self.bridge
         expected = [{
+            "adapter": "ios27-native-menu-subtitle-v1",
+            "path": "/var/jb/Library/MobileSubstrate/DynamicLibraries/CraneSB.dylib",
+            "original_sha256": "2448ee43ab7ebe53322f117d1335171048337f127d9f1a3139b2c48e15badc30",
+            "adapted_sha256": "fced01a6d7bf59a1a5ac90842f1e7cb0e8e83ae66e5e7612f6faf12115c83e1f",
+            "change": "use inherited UIMenuElement subtitle storage for CRSubtitleMenu",
+            "reason": ("iOS 27 renders copied context-menu subtitles from UIKit's "
+                       "native menu-element state"),
+        }, {
             "adapter": "ios27-shared-cache-hook-v1",
             "path": "/var/jb/Library/MobileSubstrate/DynamicLibraries/CraneSupport.dylib",
             "original_sha256": "91f1d8969ad16051645e8dd34c4e67b749e2b80e23a9eb83b15e79323d5ca5f1",
@@ -103,6 +111,14 @@ class BridgePackageCommandTests(unittest.TestCase):
             "change": "deterministic ad-hoc signature for the rootless support library",
             "reason": ("sandboxed iOS 27 daemon injection requires the dependency bytes "
                        "to match the active SRD trust-cache generation"),
+        }, {
+            "adapter": "ios27-springboard-shortcut-provider-v1",
+            "path": "/var/jb/Library/MobileSubstrate/DynamicLibraries/CraneSBCompat.dylib",
+            "source_sha256": "6891c3c33f4e2853e233a10d43fceca6c2b0cb0dba3de1c50f8b86b386a538dd",
+            "adapted_sha256": "7a14cb0b25f15113dc1146f504a9cb06d10b422abcd04b4a40423f3912e3934d",
+            "filter_sha256": "e7dc57a8e03d8bfbdcc532669806e91849452e5974645aad9dffde2d6e2a90d5",
+            "change": "replace Crane's marker in the iOS 27 effective shortcut array",
+            "reason": "iOS 27 removed UIMenu._interfaceActionGroupForActions:",
         }]
         bridge.validate_crane_binary_transformations("com.opa334.crane", expected)
         bridge.validate_crane_binary_transformations("com.opa334.cranelite", [])

@@ -1575,6 +1575,17 @@ def validate_crane_binary_transformations(package, value):
     expected = []
     if package == "com.opa334.crane":
         expected = [{
+            "adapter": "ios27-native-menu-subtitle-v1",
+            "path": ("/var/jb/Library/MobileSubstrate/DynamicLibraries/"
+                     "CraneSB.dylib"),
+            "original_sha256": ("2448ee43ab7ebe53322f117d13351710"
+                                "48337f127d9f1a3139b2c48e15badc30"),
+            "adapted_sha256": ("fced01a6d7bf59a1a5ac90842f1e7cb"
+                               "0e8e83ae66e5e7612f6faf12115c83e1f"),
+            "change": "use inherited UIMenuElement subtitle storage for CRSubtitleMenu",
+            "reason": ("iOS 27 renders copied context-menu subtitles from UIKit's "
+                       "native menu-element state"),
+        }, {
             "adapter": "ios27-shared-cache-hook-v1",
             "path": ("/var/jb/Library/MobileSubstrate/DynamicLibraries/"
                      "CraneSupport.dylib"),
@@ -1595,6 +1606,18 @@ def validate_crane_binary_transformations(package, value):
             "change": "deterministic ad-hoc signature for the rootless support library",
             "reason": ("sandboxed iOS 27 daemon injection requires the dependency bytes "
                        "to match the active SRD trust-cache generation"),
+        }, {
+            "adapter": "ios27-springboard-shortcut-provider-v1",
+            "path": ("/var/jb/Library/MobileSubstrate/DynamicLibraries/"
+                     "CraneSBCompat.dylib"),
+            "source_sha256": ("6891c3c33f4e2853e233a10d43fceca6"
+                              "c2b0cb0dba3de1c50f8b86b386a538dd"),
+            "adapted_sha256": ("7a14cb0b25f15113dc1146f504a9cb06"
+                               "d10b422abcd04b4a40423f3912e3934d"),
+            "filter_sha256": ("e7dc57a8e03d8bfbdcc532669806e918"
+                              "49452e5974645aad9dffde2d6e2a90d5"),
+            "change": "replace Crane's marker in the iOS 27 effective shortcut array",
+            "reason": "iOS 27 removed UIMenu._interfaceActionGroupForActions:",
         }]
     if value != expected:
         raise RuntimeError(package + ": binary transformations differ from the reviewed contract")
@@ -1675,8 +1698,36 @@ def package_adapter_manifest(package, payload):
         "kind": "control-app-allowlist",
         "path": "/var/jb/var/lib/srd-runtime/tweak-targets/com.opa334.crane.json",
     })
+    required_dylibs = [root + "/CraneSB.dylib", root + "/CraneSupport.dylib"]
+    process_selectors = [{
+        "dylib": root + "/CraneSB.dylib",
+        "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+        "sandbox_dependencies": [
+            "/var/jb/usr/lib/libcrane.dylib",
+            "/var/jb/usr/lib/libsandy.dylib",
+            "/var/jb/usr/lib/libellekit.dylib",
+        ],
+    }]
+    if package == "com.opa334.crane":
+        required_dylibs.insert(1, root + "/CraneSBCompat.dylib")
+        process_selectors.append({
+            "dylib": root + "/CraneSBCompat.dylib",
+            "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+        })
+    process_selectors.append({
+        "dylib": root + "/CraneSupport.dylib",
+        "executable": "/usr/sbin/cfprefsd",
+        "environment": {
+            "XPC_SERVICE_NAME": "com.apple.cfprefsd.xpc.daemon",
+        },
+        "sandbox_dependencies": [
+            "/var/jb/usr/lib/libcrane.dylib",
+            "/var/jb/usr/lib/libsandy.dylib",
+            "/var/jb/usr/lib/libellekit.dylib",
+        ],
+    })
     expected_runtime = {
-        "required_dylibs": [root + "/CraneSB.dylib", root + "/CraneSupport.dylib"],
+        "required_dylibs": required_dylibs,
         "configuration_dependent": [{
             "dylib": root + "/ Crane.dylib",
             "legacy_filter": "com.apple.Foundation",
@@ -1687,26 +1738,7 @@ def package_adapter_manifest(package, payload):
                 "/var/jb/usr/lib/libellekit.dylib",
             ],
         }],
-        "process_selectors": [{
-            "dylib": root + "/CraneSB.dylib",
-            "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
-            "sandbox_dependencies": [
-                "/var/jb/usr/lib/libcrane.dylib",
-                "/var/jb/usr/lib/libsandy.dylib",
-                "/var/jb/usr/lib/libellekit.dylib",
-            ],
-        }, {
-            "dylib": root + "/CraneSupport.dylib",
-            "executable": "/usr/sbin/cfprefsd",
-            "environment": {
-                "XPC_SERVICE_NAME": "com.apple.cfprefsd.xpc.daemon",
-            },
-            "sandbox_dependencies": [
-                "/var/jb/usr/lib/libcrane.dylib",
-                "/var/jb/usr/lib/libsandy.dylib",
-                "/var/jb/usr/lib/libellekit.dylib",
-            ],
-        }],
+        "process_selectors": process_selectors,
     }
     if runtime != expected_runtime:
         raise RuntimeError(package + ": runtime adapter differs from the reviewed contract")

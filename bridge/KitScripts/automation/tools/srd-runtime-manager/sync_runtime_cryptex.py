@@ -184,7 +184,8 @@ finally: os.close(fd)
     return result.stdout
 
 
-def include_offline_python(root: pathlib.Path) -> None:
+def include_offline_python(root: pathlib.Path,
+                           offline_root: pathlib.Path | None = None) -> None:
     """Trust the immutable first-install Python payload.
 
     Procursus accepts and unpacks these packages before the runtime trust
@@ -193,7 +194,9 @@ def include_offline_python(root: pathlib.Path) -> None:
     bytes into the generation solely so generate-trust-cache admits the
     byte-identical /var/jb files used after mount.
     """
-    offline = REPO.parent / "offline-python"
+    offline = (offline_root or REPO.parent / "offline-python").resolve()
+    if offline.is_symlink() or not offline.is_dir():
+        raise RuntimeError(f"immutable offline Python directory is unavailable: {offline}")
     packages = [
         "libgdbm6_1.23_iphoneos-arm64.deb",
         "libpython3.9_3.9.9-1_iphoneos-arm64.deb",
@@ -333,8 +336,36 @@ def reviewed_package_runtime_adapter(base: list[str], package: str) -> dict | No
         "kind": "control-app-allowlist",
         "path": "/var/jb/var/lib/srd-runtime/tweak-targets/com.opa334.crane.json",
     })
+    required_dylibs = [root + "/CraneSB.dylib", root + "/CraneSupport.dylib"]
+    process_selectors = [{
+        "dylib": root + "/CraneSB.dylib",
+        "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+        "sandbox_dependencies": [
+            "/var/jb/usr/lib/libcrane.dylib",
+            "/var/jb/usr/lib/libsandy.dylib",
+            "/var/jb/usr/lib/libellekit.dylib",
+        ],
+    }]
+    if package == "com.opa334.crane":
+        required_dylibs.insert(1, root + "/CraneSBCompat.dylib")
+        process_selectors.append({
+            "dylib": root + "/CraneSBCompat.dylib",
+            "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+        })
+    process_selectors.append({
+        "dylib": root + "/CraneSupport.dylib",
+        "executable": "/usr/sbin/cfprefsd",
+        "environment": {
+            "XPC_SERVICE_NAME": "com.apple.cfprefsd.xpc.daemon",
+        },
+        "sandbox_dependencies": [
+            "/var/jb/usr/lib/libcrane.dylib",
+            "/var/jb/usr/lib/libsandy.dylib",
+            "/var/jb/usr/lib/libellekit.dylib",
+        ],
+    })
     expected = {
-        "required_dylibs": [root + "/CraneSB.dylib", root + "/CraneSupport.dylib"],
+        "required_dylibs": required_dylibs,
         "configuration_dependent": [{
             "dylib": root + "/ Crane.dylib",
             "legacy_filter": "com.apple.Foundation",
@@ -345,26 +376,7 @@ def reviewed_package_runtime_adapter(base: list[str], package: str) -> dict | No
                 "/var/jb/usr/lib/libellekit.dylib",
             ],
         }],
-        "process_selectors": [{
-            "dylib": root + "/CraneSB.dylib",
-            "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
-            "sandbox_dependencies": [
-                "/var/jb/usr/lib/libcrane.dylib",
-                "/var/jb/usr/lib/libsandy.dylib",
-                "/var/jb/usr/lib/libellekit.dylib",
-            ],
-        }, {
-            "dylib": root + "/CraneSupport.dylib",
-            "executable": "/usr/sbin/cfprefsd",
-            "environment": {
-                "XPC_SERVICE_NAME": "com.apple.cfprefsd.xpc.daemon",
-            },
-            "sandbox_dependencies": [
-                "/var/jb/usr/lib/libcrane.dylib",
-                "/var/jb/usr/lib/libsandy.dylib",
-                "/var/jb/usr/lib/libellekit.dylib",
-            ],
-        }],
+        "process_selectors": process_selectors,
     }
     if (not isinstance(value, dict) or value.get("schema") != 1 or
             value.get("adapter") != "crane-family-v2" or
@@ -1206,6 +1218,10 @@ def main() -> int:
     parser.add_argument("--output", type=pathlib.Path)
     parser.add_argument("--base-root", type=pathlib.Path,
                         help="known-good runtime root to extend (defaults to source snapshot)")
+    parser.add_argument("--offline-python-root", type=pathlib.Path,
+                        help="directory containing the four immutable rootless Python packages")
+    parser.add_argument("--native-install-root", type=pathlib.Path,
+                        help="directory containing the reviewed native Cryptex installer inputs")
     parser.add_argument("--frida-root", type=pathlib.Path,
                         help="verified extracted Frida iOS payload to trust and seal")
     parser.add_argument("--package", action="append", default=[],
@@ -1236,7 +1252,11 @@ def main() -> int:
     if base_root.is_symlink() or not base_root.is_dir():
         raise SystemExit(f"known-good runtime base root is unavailable: {base_root}")
     shutil.copytree(base_root, root, symlinks=True)
-    include_offline_python(root)
+    include_offline_python(root, args.offline_python_root)
+    native_install_root = (args.native_install_root or NATIVE).resolve()
+    if native_install_root.is_symlink() or not native_install_root.is_dir():
+        raise SystemExit(
+            f"reviewed native Cryptex installer is unavailable: {native_install_root}")
     base = ssh_base(args.host, args.port, args.key,
                     known_hosts=args.known_hosts, host_alias=args.host_alias)
 
@@ -1511,9 +1531,10 @@ def main() -> int:
     sealed_manifest.parent.mkdir(parents=True, exist_ok=True)
     sealed_manifest.write_text(encoded_manifest)
 
-    shutil.copy2(NATIVE / "build_and_install.sh", output / "build_and_install.sh")
-    shutil.copy2(NATIVE / "install_cryptex_native.py", output / "install_cryptex_native.py")
-    shutil.copy2(NATIVE / "BuildManifest.plist", output / "BuildManifest.plist")
+    shutil.copy2(native_install_root / "build_and_install.sh", output / "build_and_install.sh")
+    shutil.copy2(native_install_root / "install_cryptex_native.py",
+                 output / "install_cryptex_native.py")
+    shutil.copy2(native_install_root / "BuildManifest.plist", output / "BuildManifest.plist")
     os.chmod(output / "build_and_install.sh", 0o755)
     env = os.environ.copy()
     # The generated installer imports pymobiledevice3.  Keep it on the same

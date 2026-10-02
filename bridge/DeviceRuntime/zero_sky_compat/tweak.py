@@ -21,6 +21,7 @@ from .classification import legacy_status
 from .engine import Engine
 from .environment import detect
 from .integration import default_state
+from . import macho
 
 
 INJECTION_ROOTS = (
@@ -87,6 +88,28 @@ CRANE_IOS27_SUPPORT_PATCHES = {
         2: {"offset": 0xCD5C, "target": 0x13150},     # arm64e
     },
 }
+# Crane 1.3.9 implements ``CRSubtitleMenu.subtitle`` with an associated
+# object.  UIKit on the measured iOS 27 build now copies and renders menu
+# subtitles from UIMenuElement's native state, bypassing Crane's legacy copy
+# paths.  Remove only the two subclass overrides by retargeting their compact
+# Objective-C method-list selectors to otherwise unrelated, existing Crane
+# selectors.  Calls to ``subtitle`` and ``setSubtitle:`` then resolve to the
+# inherited UIMenuElement implementation while Crane's four copy overrides
+# remain intact.  The offsets and signed relative-selector values are
+# identical in the reviewed arm64 and arm64e slices and are checked before
+# mutation.
+CRANE_IOS27_SPRINGBOARD_SUBTITLE_PATCHES = {
+    "2448ee43ab7ebe53322f117d1335171048337f127d9f1a3139b2c48e15badc30": {
+        0: (
+            {"offset": 0x1DEE0, "expected": 0xBC00, "replacement": 0xB370},
+            {"offset": 0x1DEEC, "expected": 0xBB54, "replacement": 0xBA54},
+        ),
+        2: (
+            {"offset": 0x1DEE0, "expected": 0xBC00, "replacement": 0xB370},
+            {"offset": 0x1DEEC, "expected": 0xBB54, "replacement": 0xBA54},
+        ),
+    },
+}
 CRANE_IOS27_LIBCRANE_SOURCE_SHA256 = (
     "c367a60abdd759bc8682521ccc5bdec6bfee1869673b822b85fe31f298d2f058"
 )
@@ -95,6 +118,15 @@ CRANE_IOS27_LIBCRANE_SIGNED_SHA256 = (
 )
 CRANE_IOS27_LIBCRANE_IDENTIFIER = (
     "codes.openai.research.support." + CRANE_IOS27_LIBCRANE_SOURCE_SHA256[:20]
+)
+CRANE_IOS27_SPRINGBOARD_COMPAT_SOURCE_SHA256 = (
+    "6891c3c33f4e2853e233a10d43fceca6c2b0cb0dba3de1c50f8b86b386a538dd"
+)
+CRANE_IOS27_SPRINGBOARD_COMPAT_SHA256 = (
+    "7a14cb0b25f15113dc1146f504a9cb06d10b422abcd04b4a40423f3912e3934d"
+)
+CRANE_IOS27_SPRINGBOARD_COMPAT_FILTER_SHA256 = (
+    "e7dc57a8e03d8bfbdcc532669806e91849452e5974645aad9dffde2d6e2a90d5"
 )
 ARM64_CPU_TYPE = 0x0100000C
 ARM64_SUBTYPE_MASK = 0x00FFFFFF
@@ -120,11 +152,36 @@ def _crane_runtime_contract(package: str) -> dict:
         "kind": "control-app-allowlist",
         "path": CRANE_CONTROL_ALLOWLIST,
     })
-    return {
-        "required_dylibs": [
-            root + "/CraneSB.dylib",
-            root + "/CraneSupport.dylib",
+    required_dylibs = [root + "/CraneSB.dylib", root + "/CraneSupport.dylib"]
+    process_selectors = [{
+        "dylib": root + "/CraneSB.dylib",
+        "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+        "sandbox_dependencies": [
+            "/var/jb/usr/lib/libcrane.dylib",
+            "/var/jb/usr/lib/libsandy.dylib",
+            "/var/jb/usr/lib/libellekit.dylib",
         ],
+    }]
+    if package == "com.opa334.crane":
+        required_dylibs.insert(1, root + "/CraneSBCompat.dylib")
+        process_selectors.append({
+            "dylib": root + "/CraneSBCompat.dylib",
+            "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+        })
+    process_selectors.append({
+        "dylib": root + "/CraneSupport.dylib",
+        "executable": "/usr/sbin/cfprefsd",
+        "environment": {
+            "XPC_SERVICE_NAME": "com.apple.cfprefsd.xpc.daemon",
+        },
+        "sandbox_dependencies": [
+            "/var/jb/usr/lib/libcrane.dylib",
+            "/var/jb/usr/lib/libsandy.dylib",
+            "/var/jb/usr/lib/libellekit.dylib",
+        ],
+    })
+    return {
+        "required_dylibs": required_dylibs,
         "configuration_dependent": [{
             "dylib": root + "/ Crane.dylib",
             "legacy_filter": "com.apple.Foundation",
@@ -135,26 +192,7 @@ def _crane_runtime_contract(package: str) -> dict:
                 "/var/jb/usr/lib/libellekit.dylib",
             ],
         }],
-        "process_selectors": [{
-            "dylib": root + "/CraneSB.dylib",
-            "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
-            "sandbox_dependencies": [
-                "/var/jb/usr/lib/libcrane.dylib",
-                "/var/jb/usr/lib/libsandy.dylib",
-                "/var/jb/usr/lib/libellekit.dylib",
-            ],
-        }, {
-            "dylib": root + "/CraneSupport.dylib",
-            "executable": "/usr/sbin/cfprefsd",
-            "environment": {
-                "XPC_SERVICE_NAME": "com.apple.cfprefsd.xpc.daemon",
-            },
-            "sandbox_dependencies": [
-                "/var/jb/usr/lib/libcrane.dylib",
-                "/var/jb/usr/lib/libsandy.dylib",
-                "/var/jb/usr/lib/libellekit.dylib",
-            ],
-        }],
+        "process_selectors": process_selectors,
     }
 DEPENDENCY_ALIASES = {
     "mobilesubstrate": ("ellekit", "cydiasubstrate"),
@@ -306,6 +344,66 @@ def _adapt_crane_support_ios27(root: Path, package: str) -> list[dict]:
     }]
 
 
+def _adapt_crane_springboard_subtitles_ios27(root: Path, package: str) -> list[dict]:
+    """Use UIKit's native menu-subtitle state for an exact CraneSB build."""
+    if package != "com.opa334.crane":
+        return []
+    relative = Path(
+        "var/jb/Library/MobileSubstrate/DynamicLibraries/CraneSB.dylib")
+    path = root / relative
+    if not path.is_file() or path.is_symlink():
+        raise ValueError("paid Crane has no regular CraneSB.dylib")
+    original_hash = _sha256(path)
+    specification = CRANE_IOS27_SPRINGBOARD_SUBTITLE_PATCHES.get(original_hash)
+    if specification is None:
+        raise ValueError(
+            "paid CraneSB differs from the reviewed iOS 27 menu-subtitle adapter")
+
+    payload = bytearray(path.read_bytes())
+    if len(payload) < 8 or struct.unpack_from(">I", payload)[0] != 0xCAFEBABE:
+        raise ValueError("reviewed CraneSB is not the expected fat Mach-O")
+    slice_count = struct.unpack_from(">I", payload, 4)[0]
+    if slice_count != len(specification):
+        raise ValueError("reviewed CraneSB slice count changed")
+    observed = set()
+    for index in range(slice_count):
+        header = 8 + index * 20
+        if header + 20 > len(payload):
+            raise ValueError("truncated CraneSB fat header")
+        cpu_type, cpu_subtype, slice_offset, slice_size, _ = struct.unpack_from(
+            ">iiIII", payload, header)
+        subtype = cpu_subtype & ARM64_SUBTYPE_MASK
+        rules = specification.get(subtype)
+        if cpu_type != ARM64_CPU_TYPE or rules is None or subtype in observed:
+            raise ValueError("unexpected CraneSB architecture")
+        observed.add(subtype)
+        for rule in rules:
+            patch_offset = rule["offset"]
+            absolute = slice_offset + patch_offset
+            if patch_offset + 4 > slice_size or absolute + 4 > len(payload):
+                raise ValueError("CraneSB subtitle patch is outside its slice")
+            current = struct.unpack_from("<I", payload, absolute)[0]
+            if current != rule["expected"]:
+                raise ValueError("CraneSB subtitle method-list selector changed")
+            struct.pack_into("<I", payload, absolute, rule["replacement"])
+    if observed != set(specification):
+        raise ValueError("CraneSB is missing a reviewed architecture")
+    path.write_bytes(payload)
+    path.chmod(0o755)
+    adapted_hash = _sha256(path)
+    if adapted_hash != "fced01a6d7bf59a1a5ac90842f1e7cb0e8e83ae66e5e7612f6faf12115c83e1f":
+        raise ValueError("CraneSB menu-subtitle adaptation differs from reviewed bytes")
+    return [{
+        "adapter": "ios27-native-menu-subtitle-v1",
+        "path": "/" + relative.as_posix(),
+        "original_sha256": original_hash,
+        "adapted_sha256": adapted_hash,
+        "change": "use inherited UIMenuElement subtitle storage for CRSubtitleMenu",
+        "reason": ("iOS 27 renders copied context-menu subtitles from UIKit's "
+                   "native menu-element state"),
+    }]
+
+
 def _sign_crane_library_ios27(root: Path, package: str) -> list[dict]:
     """Produce the exact trust-cached libcrane bytes used by iOS 27 SRDs.
 
@@ -352,6 +450,90 @@ def _sign_crane_library_ios27(root: Path, package: str) -> list[dict]:
         "change": "deterministic ad-hoc signature for the rootless support library",
         "reason": ("sandboxed iOS 27 daemon injection requires the dependency bytes "
                    "to match the active SRD trust-cache generation"),
+    }]
+
+
+def _build_crane_springboard_compat_ios27(root: Path, package: str) -> list[dict]:
+    """Build the exact iOS 27 shortcut-provider companion for paid Crane."""
+    if package != "com.opa334.crane":
+        return []
+    source = Path(__file__).with_name("shims") / "crane_springboard_ios27.m"
+    if (not source.is_file() or source.is_symlink() or
+            _sha256(source) != CRANE_IOS27_SPRINGBOARD_COMPAT_SOURCE_SHA256):
+        raise ValueError("Crane SpringBoard compatibility source differs")
+    destination = (root / "var/jb/Library/MobileSubstrate/DynamicLibraries/"
+                   "CraneSBCompat.dylib")
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="0sky-crane-sb-", dir=root) as temporary:
+        work = Path(temporary)
+        sdk_result = subprocess.run(
+            ["/usr/bin/xcrun", "--sdk", "iphoneos", "--show-sdk-path"],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, timeout=30, check=False)
+        if sdk_result.returncode:
+            raise ValueError("Xcode iPhoneOS SDK is required for Crane adaptation")
+        sdk = sdk_result.stdout.decode("utf-8", "strict").strip()
+        slices = []
+        for architecture in ("arm64", "arm64e"):
+            output = work / ("CraneSBCompat." + architecture + ".dylib")
+            completed = subprocess.run([
+                "/usr/bin/xcrun", "--sdk", "iphoneos", "clang",
+                "-arch", architecture, "-isysroot", sdk,
+                "-miphoneos-version-min=15.0", "-Os", "-fobjc-arc",
+                "-fvisibility=hidden", "-dynamiclib", "-Wl,-dead_strip",
+                "-install_name",
+                ("/var/jb/Library/MobileSubstrate/DynamicLibraries/"
+                 "CraneSBCompat.dylib"),
+                "-framework", "Foundation", str(source), "-o", str(output),
+            ], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+               stderr=subprocess.PIPE, timeout=120, check=False)
+            if completed.returncode:
+                raise ValueError("Crane SpringBoard compatibility build failed: " +
+                                 completed.stderr.decode("utf-8", "replace")[-500:])
+            slices.append(output)
+        combined = work / "CraneSBCompat.dylib"
+        completed = subprocess.run(
+            ["/usr/bin/xcrun", "lipo", "-create", *(str(item) for item in slices),
+             "-output", str(combined)],
+            stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE, timeout=30, check=False)
+        if completed.returncode:
+            raise ValueError("Crane SpringBoard compatibility lipo failed")
+        completed = subprocess.run([
+            "/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none",
+            "--identifier", "codes.openai.research.crane-springboard-compat",
+            str(combined),
+        ], stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+           stderr=subprocess.PIPE, timeout=30, check=False)
+        if completed.returncode:
+            raise ValueError("Crane SpringBoard compatibility signing failed")
+        try:
+            slices = macho.parse(combined)
+        except (OSError, ValueError) as error:
+            raise ValueError("Crane SpringBoard compatibility Mach-O is invalid") from error
+        if ({item.get("architecture") for item in slices} != {"arm64", "arm64e"}
+                or any(not item.get("uuid") for item in slices)):
+            raise ValueError(
+                "Crane SpringBoard compatibility requires UUID-bearing arm64 slices")
+        if _sha256(combined) != CRANE_IOS27_SPRINGBOARD_COMPAT_SHA256:
+            raise ValueError("Crane SpringBoard compatibility output differs")
+        destination.write_bytes(combined.read_bytes())
+    destination.chmod(0o755)
+    filter_path = destination.with_suffix(".plist")
+    filter_path.write_bytes(plistlib.dumps(
+        {"Filter": {"Bundles": ["com.apple.springboard"]}},
+        fmt=plistlib.FMT_XML, sort_keys=True))
+    filter_path.chmod(0o644)
+    if _sha256(filter_path) != CRANE_IOS27_SPRINGBOARD_COMPAT_FILTER_SHA256:
+        raise ValueError("Crane SpringBoard compatibility filter differs")
+    return [{
+        "adapter": "ios27-springboard-shortcut-provider-v1",
+        "path": "/var/jb/Library/MobileSubstrate/DynamicLibraries/CraneSBCompat.dylib",
+        "source_sha256": CRANE_IOS27_SPRINGBOARD_COMPAT_SOURCE_SHA256,
+        "adapted_sha256": CRANE_IOS27_SPRINGBOARD_COMPAT_SHA256,
+        "filter_sha256": CRANE_IOS27_SPRINGBOARD_COMPAT_FILTER_SHA256,
+        "change": "replace Crane's marker in the iOS 27 effective shortcut array",
+        "reason": "iOS 27 removed UIMenu._interfaceActionGroupForActions:",
     }]
 
 
@@ -516,8 +698,10 @@ def adapt_verified_deb(source, destination_directory, *,
             "adapter": "srd-service-starter-v1",
             "behavior": "defer-to-transactional-service-backend",
         }]
-        binary_transformations = (_adapt_crane_support_ios27(root, package) +
-                                  _sign_crane_library_ios27(root, package))
+        binary_transformations = (_adapt_crane_springboard_subtitles_ios27(root, package) +
+                                  _adapt_crane_support_ios27(root, package) +
+                                  _sign_crane_library_ios27(root, package) +
+                                  _build_crane_springboard_compat_ios27(root, package))
         manifest_path = root / "var/jb/usr/share/0-sky/package-adapters" / (package + ".json")
         manifest_path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)
         manifest = {

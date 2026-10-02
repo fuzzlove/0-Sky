@@ -74,7 +74,8 @@ def thin(data, file_size=None):
     result = {'architecture': architecture,
               'cpu_subtype': subtype & 0xffffff, 'filetype': filetype,
               'dependencies': [], 'rpaths': [], 'install_name': None,
-              'minimum_os': None, 'platform': None, 'signed': False}
+              'minimum_os': None, 'platform': None, 'signed': False,
+              'uuid': None}
     offset = header_size
     for _ in range(count):
         if offset + 8 > end:
@@ -114,6 +115,10 @@ def thin(data, file_size=None):
             if start + size > (file_size if file_size is not None else len(data)):
                 raise ValueError('invalid signature bounds')
             result['signed'] = size > 0
+        elif command == 0x1b:
+            if length != 24 or result['uuid'] is not None:
+                raise ValueError('invalid UUID command')
+            result['uuid'] = data[offset + 8:offset + 24].hex()
         offset += length
     if offset != end:
         raise ValueError('load command count mismatch')
