@@ -78,7 +78,8 @@ still be admitted through the authorized SRD trust/cryptex workflow.
      --source "$ZERO_SKY_CHECKOUT" \
      --dest /tmp/0-sky-restored \
      --ref 0sky-reproducibility-2026-10-02 \
-     --prepare-external
+     --prepare-external \
+     --create-venv --python /opt/homebrew/bin/python3.12
    ```
 
 5. Build/validate without touching a device:
@@ -89,7 +90,7 @@ still be admitted through the authorized SRD trust/cryptex workflow.
    cd ../control/TrollStoreLite
    python3 tests/test_device_compatibility.py
    cd ../../
-   python3 -m unittest discover -s tools/tests -p 'test_*.py'
+   .venv/bin/python -m unittest discover -s tools/tests -p 'test_*.py'
    ```
 
 6. Optionally reproduce the host-only AFC2 packages after supplying the two
@@ -135,4 +136,3 @@ reproducible and the remaining non-exportable inputs must be reacquired. A
 private operator bundle, if later needed, must be encrypted and kept outside
 Git. It may contain only separately acquired signing material and recovery
 receipts; it must never be copied into this repository or source archive.
-

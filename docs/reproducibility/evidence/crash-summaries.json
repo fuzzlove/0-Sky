@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "target": {"product_type": "iPhone13,2", "build": "24A5390f"},
+  "process": "lockdownd",
+  "events": [
+    {"local_time": "2026-10-01T18:34:30-05:00", "exception": "EXC_BAD_ACCESS/KERN_PROTECTION_FAILURE", "termination": "CODESIGNING: Invalid Page", "phase": "before service logic"},
+    {"local_time": "2026-10-01T18:45:51-05:00", "exception": "EXC_BAD_ACCESS", "termination": "CODESIGNING: Invalid Page", "phase": "before service logic"},
+    {"local_time": "2026-10-01T19:56:56-05:00", "exception": "EXC_BREAKPOINT", "termination": "PAC_EXCEPTION", "phase": "unverified"},
+    {"local_time": "2026-10-01T20:04:21-05:00", "exception": "EXC_BREAKPOINT", "termination": "PAC_EXCEPTION", "phase": "unverified"},
+    {"local_time": "2026-10-01T20:12:38-05:00", "exception": "EXC_BAD_ACCESS/KERN_MEMORY_ERROR", "termination": "namespace 0x2A code 10", "phase": "unverified"}
+  ],
+  "raw_reports_in_checkpoint": false
+}

@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "target": {"product_type": "iPhone13,2", "os": "27.0", "build": "24A5390f", "arch": "arm64e"},
+  "hypothesis": "The service must be present before lockdownd parses its embedded registry; a pre-main registration mechanism may be required.",
+  "hypothesis_verified": false,
+  "variants": [
+    {
+      "name": "import-pointer-v1",
+      "path": "addons/PoC/appsync-afc2d-srd-port/variants/import-pointer-v1/afc2dService.xm",
+      "sha256": "18cfdf1a6357283d0f0a13d88eae12a0f9ddcb2c0cbc235de73204a5f72bcc0e",
+      "status": "failed",
+      "result": "CODESIGNING: Invalid Page before service logic"
+    },
+    {
+      "name": "import-pointer-v2",
+      "path": "addons/PoC/appsync-afc2d-srd-port/variants/import-pointer-v2/afc2dService.xm",
+      "sha256": "1e772db601b48fbf14e53a54ab6a18755f8b5f65579cf2cde5f02880eb0774ee",
+      "status": "failed",
+      "result": "CODESIGNING: Invalid Page before service logic"
+    },
+    {
+      "name": "current-service-ark-candidate",
+      "path": "addons/PoC/appsync-afc2d-srd-port/patches/afc2d/0001-0sky-ios26-system-afcd.patch",
+      "status": "unverified",
+      "result": "Host checks available; installed candidate identity not freshly proven"
+    }
+  ]
+}

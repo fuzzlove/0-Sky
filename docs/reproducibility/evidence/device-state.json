@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "captured": "2026-10-02",
+  "device": {
+    "product_type": "iPhone13,2",
+    "marketing_model": "iPhone 12",
+    "product_version": "27.0",
+    "build_version": "24A5390f",
+    "unique_identifier": "<OPERATOR_SUPPLIED>",
+    "transport_observed": ["USB", "network"]
+  },
+  "read_only_afc2": {
+    "status": "pass",
+    "mode": "read-only",
+    "root_markers": ["Applications", "System", "private", "usr", "var"],
+    "mount_stopped": true,
+    "installed_package_identity": "unverified"
+  },
+  "trust": {
+    "lockdown_pairing_material_exported": false,
+    "ssh_strict_host_key": "failed-stale-pin",
+    "pairing_records_in_artifact": false
+  },
+  "fresh_package_inventory": "unavailable",
+  "device_mutations_performed": false
+}
