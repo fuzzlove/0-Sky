@@ -66,6 +66,15 @@ CRANE_PAID_HELPER_ENTITLEMENTS = {
         "com.apple.apsd",
     ],
 }
+# Exact Crane 1.3.9 helper after the package repair signer replaced its
+# legacy ldid blob with a valid, entitlement-free ad-hoc CodeDirectory. This
+# one reviewed derivative can be restored to the entitlement contract above;
+# an arbitrary validly signed executable must still fail closed.
+CRANE_ENTITLEMENT_REPAIR_SOURCE_SHA256 = {
+    "com.opa334.crane": {
+        "5bc3c17b085f2dae973c6a5a2ce33c9c28d4afe1830c5ceef43f516ed74697ab",
+    },
+}
 
 
 PREFERENCE_ROOT = pathlib.PurePosixPath(
@@ -245,6 +254,57 @@ def ssh_base(host: str, port: int, key: pathlib.Path, *,
 def ssh(base: list[str], command: str, *, data=None, timeout=300, check=True, show_output=True):
     return run(base + [command], data=data, timeout=timeout, check=check,
                show_output=show_output)
+
+
+def transition_package_adapter_service(base: list[str], package: str,
+                                       action: str, *, check: bool = True) -> dict | None:
+    """Stop or start one reviewed service around a runtime Cryptex swap.
+
+    A companion executes directly from the mounted runtime generation. It
+    must be retired before that generation is replaced, then resolved and
+    bootstrapped again from the new mount. Leaving it alive across an unmount
+    produces KERN_MEMORY_ERROR/SIGBUS faults in otherwise unrelated framework
+    code as dyld faults executable pages back in.
+    """
+    if package not in ("com.opa334.crane", "com.opa334.cranelite"):
+        raise ValueError("unsupported reviewed package adapter")
+    if action not in ("activate", "deactivate"):
+        raise ValueError("unsupported package adapter transition")
+    code = r'''import importlib.util,json,pathlib,sys
+path='/var/jb/usr/local/libexec/trollstorelite-srd-bridge.py'
+sys.path.insert(0,str(pathlib.Path(path).parent))
+spec=importlib.util.spec_from_file_location('zero_sky_device_bridge',path)
+if spec is None or spec.loader is None:raise SystemExit('device bridge unavailable')
+module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+package,action=sys.argv[1:]
+payload=module.package_payload(package)
+if payload.get('adapters')!=['/var/jb/usr/share/0-sky/package-adapters/'+package+'.json']:
+ raise SystemExit('reviewed package adapter unavailable')
+function=(module.activate_package_adapter if action=='activate' else
+          module.deactivate_package_adapter)
+print(json.dumps(function(package,payload),sort_keys=True,separators=(',',':')))'''
+    completed = ssh(
+        base, "/var/jb/usr/bin/python3 -c " + shlex.quote(code) + " " +
+        shlex.quote(package) + " " + shlex.quote(action),
+        timeout=60, check=False, show_output=False)
+    if completed.returncode:
+        if check:
+            detail = completed.stdout.decode("utf-8", "replace")[-600:]
+            raise RuntimeError(
+                f"{package}: service {action} failed before runtime transition: {detail}")
+        return None
+    try:
+        result = json.loads(completed.stdout.decode("utf-8", "replace").splitlines()[-1])
+    except (IndexError, UnicodeError, ValueError, json.JSONDecodeError) as error:
+        if check:
+            raise RuntimeError(
+                f"{package}: service {action} returned invalid evidence") from error
+        return None
+    if not isinstance(result, dict) or result.get("result") != "PASS":
+        if check:
+            raise RuntimeError(f"{package}: service {action} did not pass")
+        return None
+    return result
 
 
 def reviewed_package_runtime_adapter(base: list[str], package: str) -> dict | None:
@@ -602,6 +662,29 @@ def reviewed_legacy_companion_entitlements(package: str | None, remote: str,
     return None
 
 
+def read_companion_entitlements(binary: pathlib.Path) -> dict | None:
+    """Decode a companion's effective entitlement set with the reviewed tool.
+
+    A syntactically valid ad-hoc CodeDirectory is not sufficient for Crane:
+    package repair can preserve the executable while replacing its legacy
+    entitlement blob with an entitlement-free signature.  Always measure the
+    effective set before accepting a reviewed helper.
+    """
+    ldid = find_host_tool("ldid")
+    if ldid is None:
+        raise RuntimeError("ldid is required to verify the reviewed Crane helper")
+    extracted = subprocess.run(
+        [ldid, "-e", str(binary)], stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
+    if extracted.returncode or not extracted.stdout.strip():
+        return None
+    try:
+        value = plistlib.loads(extracted.stdout)
+    except Exception:
+        return None
+    return value if isinstance(value, dict) else None
+
+
 def bundle_tree_sha256(root: pathlib.Path) -> str:
     digest = hashlib.sha256()
     for path in sorted(root.rglob("*"), key=lambda item: str(item.relative_to(root))):
@@ -804,29 +887,28 @@ def copy_companion_executable(base: list[str], remote: str,
         check=False, show_output=False,
     )
     signature_state = "codesign-verified"
-    if verification.returncode:
-        expected_legacy = reviewed_legacy_companion_entitlements(
-            package, remote, reviewed_adapter)
+    expected_legacy = reviewed_legacy_companion_entitlements(
+        package, remote, reviewed_adapter)
+    effective_entitlements = (read_companion_entitlements(destination)
+                              if expected_legacy is not None else None)
+    entitlement_repair_allowed = (
+        expected_legacy is not None and
+        effective_entitlements != expected_legacy and
+        verification.returncode == 0 and
+        source_digest in CRANE_ENTITLEMENT_REPAIR_SOURCE_SHA256.get(package, set())
+    )
+    if (expected_legacy is not None and effective_entitlements != expected_legacy
+            and not entitlement_repair_allowed):
+        raise RuntimeError("Crane helper entitlement set differs from the reviewed adapter")
+    if verification.returncode or entitlement_repair_allowed:
         if expected_legacy is None:
             raise RuntimeError(
                 f"package companion has no valid entitlement-preserving signature: {remote}"
             )
-        ldid = find_host_tool("ldid")
-        if ldid is None:
-            raise RuntimeError("ldid is required to verify the reviewed Crane helper")
-        extracted = subprocess.run(
-            [ldid, "-e", str(destination)], stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
-        try:
-            entitlements = plistlib.loads(extracted.stdout)
-        except Exception as error:
-            raise RuntimeError("Crane helper entitlements could not be decoded") from error
-        if extracted.returncode or entitlements != expected_legacy:
-            raise RuntimeError("Crane helper entitlement set differs from the reviewed adapter")
-        # The upstream helper carries the exact reviewed entitlement set in a
-        # legacy ldid blob that current codesign rejects.  Preserve that set,
-        # but encode it in a valid ad-hoc CodeDirectory inside the immutable
-        # Cryptex copy.  The dpkg-owned input remains byte-for-byte unchanged.
+        # The upstream helper either carries the reviewed legacy ldid blob or
+        # has been ad-hoc re-signed without it by package repair. Encode the
+        # exact reviewed contract in the immutable Cryptex copy. The dpkg-owned
+        # input remains byte-for-byte unchanged.
         with tempfile.NamedTemporaryFile(suffix=".plist") as entitlement_file:
             entitlement_file.write(plistlib.dumps(expected_legacy,
                                                    fmt=plistlib.FMT_XML,
@@ -1453,26 +1535,39 @@ def main() -> int:
                 # size for both base and Frida-extended generations.
                 "SRDSH_IMAGE_SIZE": "192m",
                 "SRDSH_BUILD_ONLY": "1" if args.build_only else "0"})
+    service_packages = sorted(runtime_adapters, key=str.casefold)
+    if not args.build_only:
+        for package in service_packages:
+            transition_package_adapter_service(base, package, "deactivate")
     try:
         run([output / "build_and_install.sh"], cwd=output, env=env, timeout=1200)
+        if not args.build_only:
+            # cryptexd has now enrolled the launcher's CodeDirectory. Deploy the
+            # byte-identical CLI copies only after the trust update succeeds.
+            deploy_native_cli(base, launcher)
+            ssh(base, "rm -f /var/mobile/pl/srd-runtime-paused; "
+                 "/var/jb/usr/bin/killall -TERM Preferences SpringBoard 2>/dev/null || true; "
+                 "/var/jb/usr/bin/python3 /var/jb/usr/local/libexec/srd-runtime-manager.py sync || true")
+            time.sleep(4)
+            for package in service_packages:
+                transition_package_adapter_service(base, package, "activate")
+            verification = ssh(base,
+                "ps ax -o pid=,command= | grep -E '[s]rd-runtime-manager|[c]atvnc|[l]ocalfenced'; "
+                "tail -30 /var/mobile/Library/Logs/srd-runtime-manager.log 2>/dev/null || true",
+                check=False)
+            (output / "device-verification.txt").write_bytes(verification.stdout)
     except Exception:
         if not args.build_only:
             ssh(base, "rm -f /var/mobile/pl/srd-runtime-paused", check=False)
+            # If the Cryptex transaction itself failed, the old generation is
+            # still active. If a later verification failed, resolve against the
+            # new generation. Either way, make a bounded best effort to leave
+            # the reviewed service available while preserving the real error.
+            for package in service_packages:
+                transition_package_adapter_service(
+                    base, package, "activate", check=False)
         cleanup_transient_build_files(output, root)
         raise
-    if not args.build_only:
-        # cryptexd has now enrolled the launcher's CodeDirectory. Deploy the
-        # byte-identical CLI copies only after the trust update succeeds.
-        deploy_native_cli(base, launcher)
-        ssh(base, "rm -f /var/mobile/pl/srd-runtime-paused; "
-             "/var/jb/usr/bin/killall -TERM Preferences SpringBoard 2>/dev/null || true; "
-             "/var/jb/usr/bin/python3 /var/jb/usr/local/libexec/srd-runtime-manager.py sync || true")
-        time.sleep(4)
-        verification = ssh(base,
-            "ps ax -o pid=,command= | grep -E '[s]rd-runtime-manager|[c]atvnc|[l]ocalfenced'; "
-            "tail -30 /var/mobile/Library/Logs/srd-runtime-manager.log 2>/dev/null || true",
-            check=False)
-        (output / "device-verification.txt").write_bytes(verification.stdout)
     cleanup_transient_build_files(output, root)
     print(f"RUNTIME_SYNC_SUCCESS={output}")
     return 0
