@@ -384,8 +384,9 @@ NSString* safeExportFilenameComponent(NSString* value)
             if(opened && !jitStatus) return;
             NSString* message = opened
                 ? [NSString stringWithFormat:@"JIT operation failed: %d", jitStatus]
-                : @"This component has no current functional compatibility approval. Open Compatibility to inspect its diagnostics.";
-            UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Compatibility"
+                : @"LaunchServices could not open this registered application. Verify that its registration is current and try its Home Screen icon.";
+            UIAlertController* alert = [UIAlertController alertControllerWithTitle:
+                opened ? @"JIT Failed" : @"Open Failed"
                 message:message preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"Close" style:UIAlertActionStyleCancel handler:nil]];
             [TSPresentationDelegate presentViewController:alert animated:YES completion:nil];

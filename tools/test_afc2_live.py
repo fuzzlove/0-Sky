@@ -22,7 +22,7 @@ MAC_APP = ROOT / ".build/afc2-test-macos/0SkyBridge-AFC2-Test.app"
 CONTROL_DEB = (
     ROOT
     / "control/TrollStoreLite/packages/"
-    "com.opa334.trollstorelite_3.5.26_iphoneos-arm64.deb"
+    "com.opa334.trollstorelite_3.5.28_iphoneos-arm64.deb"
 )
 AFC2_DEB = (
     ROOT

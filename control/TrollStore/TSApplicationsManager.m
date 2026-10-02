@@ -407,9 +407,11 @@ extern NSUserDefaults* trollStoreUserDefaults();
 
 - (BOOL)openApplicationWithBundleID:(NSString *)appId
 {
-    NSDictionary* envelope = [self coreRequestOperation:@"getCompatibilityAdmission"
-        parameters:@{@"component": appId ?: @"", @"action": @"launch"} error:nil];
-    if(![envelope[@"success"] boolValue] || ![envelope[@"result"][@"allowed"] boolValue]) return NO;
+    if(![appId isKindOfClass:NSString.class] || !appId.length) return NO;
+    // This mirrors opening an already registered application from its Home
+    // Screen icon. Compatibility admission remains mandatory for package
+    // installation, adaptation, and other mutations; it must not turn a
+    // LaunchServices request into a false-negative functional verdict.
     return [[LSApplicationWorkspace defaultWorkspace] openApplicationWithBundleID:appId];
 }
 

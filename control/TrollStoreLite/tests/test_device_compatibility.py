@@ -14,6 +14,7 @@ INTELLIGENCE_CONTROLLER = ROOT.parent / "TrollStore" / "TSIntelligenceTableViewC
 CONTROL_CENTER = ROOT.parent / "TrollStore" / "TSControlCenterTableViewController.m"
 INVENTORY_CONTROLLER = ROOT.parent / "TrollStore" / "TSInventoryTableViewController.m"
 COMPATIBILITY_CONTROLLER = ROOT.parent / "TrollStore" / "TSCompatibilityTableViewController.m"
+APPLICATIONS_MANAGER = ROOT.parent / "TrollStore" / "TSApplicationsManager.m"
 CRANE_CONTROLLER = ROOT.parent / "TrollStore" / "TSCraneSettingsViewController.m"
 SCENE_DELEGATE = ROOT.parent / "TrollStore" / "TSSceneDelegate.m"
 BLUETOOTH_FALLBACK = ROOT.parent / "TrollStore" / "TSBluetoothFallback.m"
@@ -218,6 +219,22 @@ class DeviceCompatibilityTests(unittest.TestCase):
         self.assertIn("TSCompatibilityArray", source)
         self.assertNotIn('component[@"compatibility_state"] ?:', source)
         self.assertNotIn('component[@"runtime_validation"][@"communication"]', source)
+
+    def test_registered_apps_launch_without_package_admission_false_positive(self):
+        manager = APPLICATIONS_MANAGER.read_text()
+        start = manager.index("- (BOOL)openApplicationWithBundleID:")
+        end = manager.index("- (int)enableJITForBundleID:", start)
+        launch = manager[start:end]
+        self.assertIn("LSApplicationWorkspace", launch)
+        self.assertIn("already registered application", launch)
+        self.assertNotIn("getCompatibilityAdmission", launch)
+        self.assertNotIn("functional compatibility approval", SOURCE.read_text())
+        self.assertIn("LaunchServices could not open", SOURCE.read_text())
+        entitlements = plistlib.loads((ROOT / "entitlements.plist").read_bytes())
+        for entitlement in ("com.apple.springboard.launchapplications",
+                            "com.apple.backboardd.launchapplications",
+                            "com.apple.frontboard.launchapplications"):
+            self.assertIs(entitlements.get(entitlement), True)
 
 if __name__ == "__main__":
     unittest.main()
