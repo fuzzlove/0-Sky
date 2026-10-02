@@ -21,7 +21,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: brew install dpkg
-      - run: python3 -m pip install --only-binary=:all: 'cryptography==50.0.1'
+      - run: "python3 -m pip install --only-binary=:all: 'cryptography==50.0.1'"
       - run: python3 -m unittest discover -s tools/tests -q
       - run: PYTHONPATH=bridge/DeviceRuntime python3 -m unittest discover -s bridge/Tests/HostToolsTests -q
       - run: cd bridge && swift run BridgeCoreTests
