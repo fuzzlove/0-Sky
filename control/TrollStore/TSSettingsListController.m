@@ -423,7 +423,7 @@ extern NSUserDefaults* trollStoreUserDefaults(void);
 #endif
 
 		PSSpecifier* otherGroupSpecifier = [PSSpecifier emptyGroupSpecifier];
-		[otherGroupSpecifier setProperty:[NSString stringWithFormat:@"%@ %@\n\nPart of the %@ platform.\n\nProvides device management, packages, diagnostics, privacy, networking, automation, recovery, and research utilities.\n\n%@\n\nUpstream TrollStore attribution:\n© 2022-2026\n\nCredits:\n@opa334 (Trollstore)\n0-Sky Project\n[at]BetterCallSol\nGoogle TAG, @alfiecg_dev: CoreTrust bug\n@lunotech11, @SerenaKit, @tylinux, @TheRealClarity, @dhinakg, @khanhduytran0: Various contributions\n@ProcursusTeam: uicache, ldid\n@cstar_ow: uicache\n@saurik: ldid", APP_NAME, [self getTrollStoreVersion], TS_PRODUCT_FAMILY_NAME, TS_AUTHORIZED_USE_NOTICE_LONG] forKey:@"footerText"];
+		[otherGroupSpecifier setProperty:[NSString stringWithFormat:@"%@ %@\n\nPart of the %@ platform.\n\nProvides device management, packages, diagnostics, privacy, networking, automation, recovery, and research utilities.\n\n%@\n\nUpstream TrollStore attribution:\n© 2022-2026\n\nCredits:\n@opa334 (Trollstore)\n0-Sky Project\n@BetterCallSol\nGoogle TAG, @alfiecg_dev: CoreTrust bug\n@lunotech11, @SerenaKit, @tylinux, @TheRealClarity, @dhinakg, @khanhduytran0: Various contributions\n@ProcursusTeam: uicache, ldid\n@cstar_ow: uicache\n@saurik: ldid", APP_NAME, [self getTrollStoreVersion], TS_PRODUCT_FAMILY_NAME, TS_AUTHORIZED_USE_NOTICE_LONG] forKey:@"footerText"];
 		[_specifiers addObject:otherGroupSpecifier];
 
 		PSSpecifier* advancedLinkSpecifier = [PSSpecifier preferenceSpecifierNamed:@"Advanced"
