@@ -197,14 +197,23 @@ with urllib.request.urlopen(request,timeout=10) as response:
             return {}
 
     runtime_healthy = False
+    app_runtime_healthy = False
     if not args.dry_run and not package_changes and not args.link_only:
-        runtime_healthy = injection_ready(runtime_snapshot())
+        snapshot = runtime_snapshot()
+        runtime_healthy = injection_ready(snapshot)
+        # An app-only Control update needs the authenticated installer broker,
+        # not a fresh ElleKit generation.  Treating a healthy broker with a
+        # temporarily incomplete injection snapshot as a rebuild request can
+        # replace an otherwise stable runtime before the IPA is even uploaded.
+        app_runtime_healthy = bool(args.apps_only and snapshot.get("crypstore_ok"))
     if args.link_only:
         # A missing Link icon must not trigger an unrelated runtime/Cryptex
         # reinstall. Require the existing authenticated broker to be usable.
         if not args.dry_run and not runtime_snapshot():
             raise SystemExit("Link-only repair requires the existing authenticated device bridge")
         log("LINK_ONLY=PASS; existing runtime left unchanged")
+    elif app_runtime_healthy:
+        log("APP_ONLY_RUNTIME=PASS — authenticated Control installer is healthy; runtime left unchanged")
     elif runtime_healthy:
         log("FULL INJECTION OBTAINED — healthy ElleKit generation preserved; no unsafe reinstall")
     else:
@@ -326,7 +335,7 @@ raise SystemExit(0 if result.get('status')==0 else 1)
             else: raise SystemExit("0-Sky Control bridge did not become ready")
         if args.apps or args.commissary:
             install_ipa(packages/"Commissary-Universal.ipa",
-                        "com.liquidsky.CrypStore", version="3.4.4", build="3.4.4.4")
+                        "com.liquidsky.CrypStore", version="3.5.25", build="3.5.25.0")
         if args.apps:
             sileo = support/"apps/Sileo-0-Sky.ipa"
             if sileo.is_file():

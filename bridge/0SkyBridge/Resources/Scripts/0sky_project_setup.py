@@ -931,7 +931,7 @@ def direct_components_current(target: dict[str, Any], identity: Path) -> bool:
     link = app_info(target, identity, "codes.liquidsky.research.zerosky")
     return (
         package_version(target, identity, "com.catvnc.server") == "0.0.2"
-        and app_info(target, identity, "com.liquidsky.CrypStore").get("version") == "3.4.4"
+        and app_info(target, identity, "com.liquidsky.CrypStore").get("version") == "3.5.25"
         and link.get("version") == "1.9.0"
         and link.get("build") == "48"
         and link.get("distribution") == "0-Sky Link"
@@ -1346,7 +1346,7 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         if args.force_components or not direct_components_current(target, args.identity):
             bootstrap_components(python, target, args.identity, run_dir)
         else:
-            log(f"{target['instance']}: latest CatVNC 0.0.2, 0-Sky Control 3.4.4, and 0-Sky Link 1.9.0 already present; preserving them")
+            log(f"{target['instance']}: latest CatVNC 0.0.2, 0-Sky Control 3.5.25, and 0-Sky Link 1.9.0 already present; preserving them")
 
         ensure_bootsplash_launcher(target, args.identity, run_dir)
 
@@ -1381,7 +1381,7 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         )
         final["mcm_registration_parity"] = mcm_parity
         passed = (final["catvnc"] == "0.0.2" and
-                  final["commissary"].get("version") == "3.4.4" and
+                  final["commissary"].get("version") == "3.5.25" and
                   final["zero_sky"].get("version") == "1.9.0" and
                   final["zero_sky"].get("build") == "48" and
                   final["zero_sky"].get("distribution") == "0-Sky Link" and
