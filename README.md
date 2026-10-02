@@ -1,5 +1,7 @@
 # 0-Sky
 
+Note: This is a work in progress and the building blocks for where the project is currently.
+
 0-Sky is an authorized Apple Security Research Device control plane. This
 repository publishes the source for the three first-party applications:
 
