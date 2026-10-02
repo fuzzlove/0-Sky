@@ -487,10 +487,32 @@ def copy_preference_bundle(base: list[str], bundle_name: str, root: pathlib.Path
             output.chmod(member.mode & 0o777)
 
     info_path = destination / "Info.plist"
-    try:
-        info = plistlib.loads(info_path.read_bytes())
-    except Exception as error:
-        raise RuntimeError(f"invalid {relative}/Info.plist: {error}") from error
+    if info_path.exists():
+        try:
+            info = plistlib.loads(info_path.read_bytes())
+        except Exception as error:
+            raise RuntimeError(f"invalid {relative}/Info.plist: {error}") from error
+        synthesized_info = False
+    else:
+        # Older PreferenceLoader bundles commonly omit Info.plist and name the
+        # Mach-O exactly after the descriptor's bundle value.  Keep that
+        # compatibility narrow: do not guess among executables and never
+        # accept a link or special file (the bounded tar reader above already
+        # rejects both).  The generated metadata exists only in this sealed
+        # Cryptex generation.  The original executable hash is still recorded
+        # before the existing audited re-sign/repair path runs below.
+        legacy_executable = destination / bundle_name
+        if not legacy_executable.is_file():
+            raise RuntimeError(f"{relative} has no Info.plist or exact legacy executable")
+        info = {
+            "CFBundleExecutable": bundle_name,
+            "CFBundleIdentifier": "codes.openai.research.preference." + bundle_name,
+            "CFBundleName": bundle_name,
+            "CFBundlePackageType": "BNDL",
+        }
+        info_path.write_bytes(plistlib.dumps(
+            info, fmt=plistlib.FMT_XML, sort_keys=True))
+        synthesized_info = True
     executable_name = info.get("CFBundleExecutable") if isinstance(info, dict) else None
     if (not isinstance(executable_name, str) or not executable_name
             or "/" in executable_name or executable_name in (".", "..")):
@@ -516,7 +538,8 @@ def copy_preference_bundle(base: list[str], bundle_name: str, root: pathlib.Path
     return {"bundle": bundle_name, "executable": executable_name,
             "sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
             "source_sha256": source_sha256,
-            "resigned": resigned}
+            "resigned": resigned, "synthesized_info_plist": synthesized_info,
+            "info_plist_sha256": hashlib.sha256(info_path.read_bytes()).hexdigest()}
 
 
 def copy_support_library(base: list[str], remote: str, root: pathlib.Path,
