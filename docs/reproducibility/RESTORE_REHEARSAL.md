@@ -14,8 +14,10 @@ check-in, restore, restart, or fuzzing.
 
 The first post-tag archive rehearsal correctly failed because its checksum
 sidecar contained the temporary staging path. The script was corrected, and
-the final checkpoint uses the non-overwriting `-r1` tag. The provisional local
-tags were not pushed or published.
+the corrected checkpoint first used a non-overwriting `-r1` tag. Before push,
+remote `main` had advanced to `0ee4cff4bfb8369e51f4626d1da334f8589dfbe6`.
+That history was merged without a force push, and the publishable checkpoint
+therefore uses the new `-r2` tag. Provisional local tags were not published.
 
 ## Passing checks
 

@@ -1,7 +1,7 @@
 # Checkpoint state
 
 Checkpoint date: 2026-10-02. Canonical tag:
-`0sky-reproducibility-2026-10-02-r1`.
+`0sky-reproducibility-2026-10-02-r2`.
 
 ## Verified
 

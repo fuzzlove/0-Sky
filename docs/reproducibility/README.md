@@ -63,7 +63,7 @@ still be admitted through the authorized SRD trust/cryptex workflow.
 
    ```sh
    git clone https://github.com/fuzzlove/0-Sky.git "$ZERO_SKY_CHECKOUT"
-   git -C "$ZERO_SKY_CHECKOUT" checkout 0sky-reproducibility-2026-10-02-r1
+   git -C "$ZERO_SKY_CHECKOUT" checkout 0sky-reproducibility-2026-10-02-r2
    python3 "$ZERO_SKY_CHECKOUT/scripts/reproducibility/verify_manifest.py" \
      --repo "$ZERO_SKY_CHECKOUT"
    ```
@@ -77,7 +77,7 @@ still be admitted through the authorized SRD trust/cryptex workflow.
    "$ZERO_SKY_CHECKOUT/scripts/reproducibility/restore.sh" \
      --source "$ZERO_SKY_CHECKOUT" \
      --dest /tmp/0-sky-restored \
-     --ref 0sky-reproducibility-2026-10-02-r1 \
+     --ref 0sky-reproducibility-2026-10-02-r2 \
      --prepare-external \
      --create-venv --python /opt/homebrew/bin/python3.12
    ```
@@ -99,7 +99,7 @@ still be admitted through the authorized SRD trust/cryptex workflow.
    ```sh
    scripts/reproducibility/restore.sh \
      --source . --dest /tmp/0-sky-afc2 \
-     --ref 0sky-reproducibility-2026-10-02-r1 \
+     --ref 0sky-reproducibility-2026-10-02-r2 \
      --afcd-input /secure/input/afcd \
      --lockdownd-input /secure/input/lockdownd \
      --build-afc2
