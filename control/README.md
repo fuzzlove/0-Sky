@@ -1,6 +1,6 @@
 # 0-Sky Control source
 
-0-Sky Control 3.5.25 is the device-side package, health, privacy, networking,
+0-Sky Control 3.5.26 is the device-side package, health, privacy, networking,
 automation, recovery, and research-management application. It is derived from
 TrollStore; upstream source attribution and the GPL license are retained.
 

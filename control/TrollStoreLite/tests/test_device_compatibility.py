@@ -13,6 +13,7 @@ AUTOMATION_CONTROLLER = ROOT.parent / "TrollStore" / "TSAutomationTableViewContr
 INTELLIGENCE_CONTROLLER = ROOT.parent / "TrollStore" / "TSIntelligenceTableViewController.m"
 CONTROL_CENTER = ROOT.parent / "TrollStore" / "TSControlCenterTableViewController.m"
 INVENTORY_CONTROLLER = ROOT.parent / "TrollStore" / "TSInventoryTableViewController.m"
+COMPATIBILITY_CONTROLLER = ROOT.parent / "TrollStore" / "TSCompatibilityTableViewController.m"
 CRANE_CONTROLLER = ROOT.parent / "TrollStore" / "TSCraneSettingsViewController.m"
 SCENE_DELEGATE = ROOT.parent / "TrollStore" / "TSSceneDelegate.m"
 BLUETOOTH_FALLBACK = ROOT.parent / "TrollStore" / "TSBluetoothFallback.m"
@@ -209,6 +210,14 @@ class DeviceCompatibilityTests(unittest.TestCase):
         self.assertNotIn("scheduledTimer", center)
         self.assertIn("self.viewControllers = @[controlCenterNavigationController", root)
         self.assertNotIn("healthNavigationController", root)
+
+    def test_compatibility_view_handles_json_null_values(self):
+        source = COMPATIBILITY_CONTROLLER.read_text()
+        self.assertIn("TSCompatibilityString", source)
+        self.assertIn("TSCompatibilityDictionary", source)
+        self.assertIn("TSCompatibilityArray", source)
+        self.assertNotIn('component[@"compatibility_state"] ?:', source)
+        self.assertNotIn('component[@"runtime_validation"][@"communication"]', source)
 
 if __name__ == "__main__":
     unittest.main()

@@ -335,7 +335,7 @@ raise SystemExit(0 if result.get('status')==0 else 1)
             else: raise SystemExit("0-Sky Control bridge did not become ready")
         if args.apps or args.commissary:
             install_ipa(packages/"Commissary-Universal.ipa",
-                        "com.liquidsky.CrypStore", version="3.5.25", build="3.5.25.0")
+                        "com.liquidsky.CrypStore", version="3.5.26", build="3.5.26.0")
         if args.apps:
             sileo = support/"apps/Sileo-0-Sky.ipa"
             if sileo.is_file():

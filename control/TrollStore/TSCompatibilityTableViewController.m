@@ -1,6 +1,21 @@
 #import "TSCompatibilityTableViewController.h"
 #import "TSApplicationsManager.h"
 
+static NSString* TSCompatibilityString(id value, NSString* fallback)
+{
+    return [value isKindOfClass:NSString.class] && [value length] ? value : fallback;
+}
+
+static NSDictionary* TSCompatibilityDictionary(id value)
+{
+    return [value isKindOfClass:NSDictionary.class] ? value : @{};
+}
+
+static NSArray* TSCompatibilityArray(id value)
+{
+    return [value isKindOfClass:NSArray.class] ? value : @[];
+}
+
 @interface TSCompatibilityTableViewController ()
 @property(nonatomic, strong) NSArray<NSDictionary*>* components;
 @property(nonatomic, assign) BOOL loading;
@@ -67,18 +82,28 @@
         cell.detailTextLabel.text = @"Run the installed-component audit from the paired Mac.";
         return cell;
     }
-    NSDictionary* component = self.components[indexPath.row];
-    NSString* state = component[@"compatibility_state"] ?: component[@"status"] ?: @"UNKNOWN";
-    cell.textLabel.text = [NSString stringWithFormat:@"%@ • %@", component[@"component"] ?: @"Component", [state stringByReplacingOccurrencesOfString:@"_" withString:@" "]];
-    NSDictionary* environment = component[@"environment"];
+    NSDictionary* component = TSCompatibilityDictionary(self.components[indexPath.row]);
+    NSString* state = TSCompatibilityString(component[@"compatibility_state"],
+        TSCompatibilityString(component[@"status"], @"UNKNOWN"));
+    cell.textLabel.text = [NSString stringWithFormat:@"%@ • %@",
+        TSCompatibilityString(component[@"component"], @"Component"),
+        [state stringByReplacingOccurrencesOfString:@"_" withString:@" "]];
+    NSDictionary* environment = TSCompatibilityDictionary(component[@"environment"]);
     BOOL services = NO;
-    for(NSDictionary* item in component[@"components"])
-        if([item[@"kind"] isEqual:@"service"] || [item[@"kind"] isEqual:@"xpc_service"]) services = YES;
+    for(id value in TSCompatibilityArray(component[@"components"])) {
+        NSDictionary* item = TSCompatibilityDictionary(value);
+        NSString* kind = TSCompatibilityString(item[@"kind"], @"");
+        if([kind isEqual:@"service"] || [kind isEqual:@"xpc_service"]) services = YES;
+    }
+    NSDictionary* runtime = TSCompatibilityDictionary(component[@"runtime_validation"]);
+    NSDictionary* communication = TSCompatibilityDictionary(runtime[@"communication"]);
     NSString* serviceState = services
-        ? ([component[@"runtime_validation"][@"communication"][@"passed"] boolValue] ? @"Verified" : @"Unverified")
+        ? ([communication[@"passed"] boolValue] ? @"Verified" : @"Unverified")
         : @"Not required";
     cell.detailTextLabel.text = [NSString stringWithFormat:@"iOS %@ • %@\nService: %@",
-        environment[@"ios_version"] ?: @"Unknown", component[@"root_requirement"] ?: @"Unknown root requirement", serviceState];
+        TSCompatibilityString(environment[@"ios_version"], @"Unknown"),
+        TSCompatibilityString(component[@"root_requirement"], @"Unknown root requirement"),
+        serviceState];
     cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
     cell.isAccessibilityElement = YES;
     cell.accessibilityLabel = cell.textLabel.text;
@@ -90,18 +115,24 @@
 {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     if(indexPath.row >= self.components.count) return;
-    NSDictionary* component = self.components[indexPath.row];
+    NSDictionary* component = TSCompatibilityDictionary(self.components[indexPath.row]);
     UIViewController* detail = [UIViewController new];
-    detail.title = component[@"component"] ?: @"Component diagnostics";
+    detail.title = TSCompatibilityString(component[@"component"], @"Component diagnostics");
     UITextView* text = [UITextView new];
     text.editable = NO;
     text.font = [UIFont preferredFontForTextStyle:UIFontTextStyleBody];
     text.backgroundColor = UIColor.systemBackgroundColor;
-    NSString* state = component[@"compatibility_state"] ?: component[@"status"] ?: @"UNKNOWN";
+    NSString* state = TSCompatibilityString(component[@"compatibility_state"],
+        TSCompatibilityString(component[@"status"], @"UNKNOWN"));
     NSMutableString* diagnostics = [NSMutableString stringWithFormat:@"Compatibility: %@\nPipeline: %@\nRoot requirement: %@\n\n",
-        state, component[@"pipeline_phase"] ?: @"DISCOVER", component[@"root_requirement"] ?: @"Unknown"];
-    for(NSDictionary* issue in component[@"issues"])
-        [diagnostics appendFormat:@"%@\n%@\n\n", issue[@"code"], issue[@"detail"]];
+        state, TSCompatibilityString(component[@"pipeline_phase"], @"DISCOVER"),
+        TSCompatibilityString(component[@"root_requirement"], @"Unknown")];
+    for(id value in TSCompatibilityArray(component[@"issues"])) {
+        NSDictionary* issue = TSCompatibilityDictionary(value);
+        [diagnostics appendFormat:@"%@\n%@\n\n",
+            TSCompatibilityString(issue[@"code"], @"UNSPECIFIED"),
+            TSCompatibilityString(issue[@"detail"], @"No detail recorded")];
+    }
     self.selectedManifest = component;
     UIBarButtonItem* advanced = [[UIBarButtonItem alloc]
         initWithTitle:@"Evidence" style:UIBarButtonItemStylePlain target:self action:@selector(showAdvancedManifest)];
@@ -114,20 +145,22 @@
 }
 - (void)analyzeSelectedManifest
 {
-    NSString* key = self.selectedManifest[@"registry_key"];
+    NSString* key = TSCompatibilityString(self.selectedManifest[@"registry_key"], nil);
     if(!key.length) return;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         NSError* error = nil;
         NSDictionary* envelope = [[TSApplicationsManager sharedInstance]
             coreRequestOperation:@"analyzeCompatibility"
             parameters:@{@"registryKey": key} error:&error];
-        NSDictionary* component = [envelope[@"result"][@"component"] isKindOfClass:NSDictionary.class]
-            ? envelope[@"result"][@"component"] : nil;
+        NSDictionary* result = TSCompatibilityDictionary(envelope[@"result"]);
+        NSDictionary* component = [result[@"component"] isKindOfClass:NSDictionary.class]
+            ? result[@"component"] : nil;
         dispatch_async(dispatch_get_main_queue(), ^{
-            NSString* state = component[@"compatibility_state"] ?: @"UNKNOWN";
+            NSString* state = TSCompatibilityString(component[@"compatibility_state"], @"UNKNOWN");
             UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Compatibility Analysis"
                 message:component ? [state stringByReplacingOccurrencesOfString:@"_" withString:@" "]
-                                  : error.localizedDescription ?: envelope[@"errorMessage"] ?: @"Analysis unavailable"
+                                  : error.localizedDescription ?:
+                                    TSCompatibilityString(envelope[@"errorMessage"], @"Analysis unavailable")
                 preferredStyle:UIAlertControllerStyleAlert];
             [alert addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
             [self presentViewController:alert animated:YES completion:nil];
@@ -137,19 +170,20 @@
 }
 - (void)showAdvancedManifest
 {
-    NSString* key = self.selectedManifest[@"registry_key"];
+    NSString* key = TSCompatibilityString(self.selectedManifest[@"registry_key"], nil);
     if(!key.length) return;
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         NSDictionary* envelope = [[TSApplicationsManager sharedInstance]
             coreRequestOperation:@"getCompatibilityDetail" parameters:@{@"registryKey": key} error:nil];
-        NSDictionary* manifest = envelope[@"result"][@"component"];
+        NSDictionary* result = TSCompatibilityDictionary(envelope[@"result"]);
+        NSDictionary* manifest = TSCompatibilityDictionary(result[@"component"]);
         dispatch_async(dispatch_get_main_queue(), ^{
             UIViewController* detail = [UIViewController new];
             detail.title = @"Validation Manifest";
             UITextView* text = [UITextView new];
             text.editable = NO;
             text.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightRegular];
-            NSData* data = [manifest isKindOfClass:NSDictionary.class]
+            NSData* data = manifest.count
                 ? [NSJSONSerialization dataWithJSONObject:manifest options:NSJSONWritingPrettyPrinted error:nil] : nil;
             text.text = data ? [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding]
                 : @"Detailed compatibility evidence is unavailable.";
