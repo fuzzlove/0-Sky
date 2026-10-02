@@ -12,6 +12,11 @@ not part of the restore contract).
 No device-changing command was run. No SRD was selected for installation,
 check-in, restore, restart, or fuzzing.
 
+The first post-tag archive rehearsal correctly failed because its checksum
+sidecar contained the temporary staging path. The script was corrected, and
+the final checkpoint uses the non-overwriting `-r1` tag. The provisional local
+tags were not pushed or published.
+
 ## Passing checks
 
 | Check | Result |

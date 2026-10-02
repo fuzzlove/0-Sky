@@ -1,7 +1,7 @@
 # Checkpoint state
 
 Checkpoint date: 2026-10-02. Canonical tag:
-`0sky-reproducibility-2026-10-02`.
+`0sky-reproducibility-2026-10-02-r1`.
 
 ## Verified
 
@@ -42,4 +42,3 @@ Checkpoint date: 2026-10-02. Canonical tag:
 
 The exact commit IDs and archive hashes are recorded in
 `RESTORE_REHEARSAL.md` after the final rehearsal.
-

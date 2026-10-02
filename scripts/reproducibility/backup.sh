@@ -46,9 +46,14 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/0sky-backup.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 git -C "$repo" archive --format=tar --prefix="0-Sky/" "$commit" > "$tmp/source.tar"
 gzip -n -9 < "$tmp/source.tar" > "$tmp/$name"
-shasum -a 256 "$tmp/$name" > "$tmp/$name.sha256"
+(
+  cd "$tmp"
+  shasum -a 256 "$name" > "$name.sha256"
+)
 mv "$tmp/$name" "$archive"
 mv "$tmp/$name.sha256" "$archive.sha256"
-shasum -a 256 -c "$archive.sha256"
+(
+  cd "$output"
+  shasum -a 256 -c "$name.sha256"
+)
 echo "BACKUP=PASS"
-
