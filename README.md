@@ -18,6 +18,20 @@ The source tree deliberately excludes device identifiers, pairing records,
 credentials, tokens, SSH keys, provisioning profiles, certificates, research
 sessions, logs, compiled applications, and device-derived evidence.
 
+## Screenshots
+
+The root-filesystem image is a public redacted copy with the operator name and
+device-unique identifiers removed. It shows the interface state only and does
+not identify which experimental AFC2 package variant is installed.
+
+[![0-Sky Bridge showing the root filesystem mounted in Finder](docs/assets/root-filesystem-mounted-redacted.png)](docs/assets/root-filesystem-mounted-redacted.png)
+
+<p align="center">
+  <a href="docs/assets/research-environment-launch.jpeg"><img src="docs/assets/research-environment-launch.jpeg" alt="0-Sky Research Environment launch screen" width="30%"></a>
+  <a href="docs/assets/research-environment-active.jpeg"><img src="docs/assets/research-environment-active.jpeg" alt="0-Sky Research Environment active component check" width="30%"></a>
+  <a href="docs/assets/control-dashboard-status.png"><img src="docs/assets/control-dashboard-status.png" alt="0-Sky Control dashboard" width="30%"></a>
+</p>
+
 ## Requirements
 
 See [`REQUIREMENTS.md`](REQUIREMENTS.md) for complete host, SDK, dependency,
@@ -45,10 +59,10 @@ any reusable signing credential.
 
 ## Pre-releases
 
-[`v1.0.0-pre.2`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.2)
-contains the updated source and no installer assets. The external signed device
-payloads must pass the release sanitization gate before new installers can be
-published.
+[`v1.0.0-pre.4`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.4)
+is the latest source prerelease and includes the clean-checkout and CI repairs.
+It contains no installer assets. External signed device payloads must pass the
+release sanitization gate before new installers can be published.
 
 The earlier installer prerelease has been withdrawn. No verified installer
 assets are currently published for this source revision.
