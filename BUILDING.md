@@ -1,5 +1,9 @@
 # Building from a clean checkout
 
+The production Universal 2 package workflow is documented in
+[`docs/BUILDING.md`](docs/BUILDING.md) and
+[`docs/UNIVERSAL_BUILD_AUDIT.md`](docs/UNIVERSAL_BUILD_AUDIT.md).
+
 Supported host source-build targets are macOS 15+ on arm64 or x86_64, with
 Xcode/Command Line Tools providing Swift 6, the macOS 15 SDK, and a compatible
 iPhoneOS SDK. Select Xcode with `xcode-select` or `DEVELOPER_DIR`. Python 3.12,
@@ -42,6 +46,16 @@ produces an **unsigned** local app under the chosen derived-data directory.
 The build requires the prepared kit's deterministic `PORTABILITY.json` marker;
 passing the raw external kit directly is rejected.
 
+For a new Mac, the finished app must contain
+`Contents/Resources/Kit/SHA256SUMS`, `host-mac/install.py`, the offline
+wheelhouse and lockfile, and the 0-Sky Link IPA. Run the bundled
+`Contents/Resources/Scripts/Install 0-Sky Dependencies.command` after
+installation to install the pinned host requirements. If the app reports a
+missing dependency kit, inspect that **same app bundle**; a failed Xcode build
+or an older backup app may be launchable while its kit is absent. Do not copy
+the raw development kit into a signed app: that changes the app signature and
+bypasses the release privacy gate. Rebuild with a prepared, sanitized kit.
+
 The final app-wide sanitization gate currently blocks distribution with this
 local external kit because several signed device binaries retain their
 builders' home-directory paths. The Mac executable's debug/source paths are
@@ -69,3 +83,16 @@ USB trust, CoreDevice availability, root SSH, and device payload validation
 remain separate checks. iOS/iPadOS 17+ is the minimum target; 27+ is a
 capability probe, not a guarantee that every future OS build has matching
 Apple or project payloads.
+
+## Host mitmproxy for research
+
+Run `python3 tools/build_host_mitmproxy.py` with Python 3.12 or newer. The
+builder checks out the reviewed `mitmproxy/mitmproxy` release commit, builds a
+wheel with a fixed source timestamp, installs it in a versioned Mac virtual
+environment, tests both command-line entry points and a localhost HTTP proxy
+request, then activates `mitmproxy-current`. It preserves an existing managed
+environment when replacing a directory and records package versions and the
+built wheel hash in `0sky-provenance.json`. The Bridge worker detects this
+managed host tool; the script does not change iPhone proxy or certificate
+settings. Third-party dependency hashes are not release-locked by this helper,
+so its successful local build does not by itself clear the release gate.

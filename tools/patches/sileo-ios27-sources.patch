@@ -1,0 +1,146 @@
+diff --git a/Sileo/Backend/Repo Manager/RepoManager.swift b/Sileo/Backend/Repo Manager/RepoManager.swift
+--- a/Sileo/Backend/Repo Manager/RepoManager.swift
++++ b/Sileo/Backend/Repo Manager/RepoManager.swift
+@@ -55,24 +55,26 @@
+     // swiftlint:disable:next force_try
+     lazy private var dataDetector = try! NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue)
+ 
+-    #if targetEnvironment(simulator) || TARGET_SANDBOX
+     private var sourcesURL: URL {
+         FileManager.default.documentDirectory.appendingPathComponent("sileo.sources")
+     }
+-    #endif
+ 
+     init() {
+         #if targetEnvironment(simulator) || TARGET_SANDBOX
+         parseSourcesFile(at: sourcesURL)
+         #else
+-        fixLists()
+-        let directory = URL(fileURLWithPath: CommandPath.sourcesListD)
+-        let alternative = URL(fileURLWithPath: CommandPath.alternativeSources)
+-        for item in (directory.implicitContents + alternative.implicitContents)  {
+-            if item.pathExtension == "list" {
+-                parseListFile(at: item)
+-            } else if item.pathExtension == "sources" {
+-                parseSourcesFile(at: item)
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            parseSourcesFile(at: sourcesURL)
++        } else {
++            fixLists()
++            let directory = URL(fileURLWithPath: CommandPath.sourcesListD)
++            let alternative = URL(fileURLWithPath: CommandPath.alternativeSources)
++            for item in (directory.implicitContents + alternative.implicitContents)  {
++                if item.pathExtension == "list" {
++                    parseListFile(at: item)
++                } else if item.pathExtension == "sources" {
++                    parseSourcesFile(at: item)
++                }
+             }
+         }
+         #endif
+@@ -306,6 +308,13 @@
+         }
+         return listsURL
+         #else
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            let listsURL = FileManager.default.documentDirectory.appendingPathComponent("lists")
++            if !listsURL.dirExists {
++                try? FileManager.default.createDirectory(at: listsURL, withIntermediateDirectories: true)
++            }
++            return listsURL
++        }
+         return URL(fileURLWithPath: CommandPath.lists)
+         #endif
+     }
+@@ -413,6 +422,7 @@
+ 
+     private func fixLists() {
+         #if !targetEnvironment(simulator) && !TARGET_SANDBOX
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 { return }
+         spawnAsRoot(args: [CommandPath.mkdir, "-p", CommandPath.lists])
+         spawnAsRoot(args: [CommandPath.chown, "-R", "root:wheel", CommandPath.lists])
+         spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", CommandPath.lists])
+@@ -1123,6 +1133,28 @@
+     }
+ 
+     func update(force: Bool, forceReload: Bool, isBackground: Bool, repos: [Repo] = RepoManager.shared.repoList, completion: @escaping (Bool, NSAttributedString) -> Void) {
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            DispatchQueue.global(qos: .userInitiated).async {
++                PackageListManager.shared.initWait()
++                let result = SileoBridgeAPT.request(operation: "refresh", packages: [])
++                if result.0 == 0 {
++                    PackageListManager.shared.installChange()
++                }
++                for repo in repos {
++                    repo.packageDict = PackageListManager.readPackages(repoContext: repo)
++                    repo.isLoaded = true
++                    self.postProgressNotification(repo)
++                }
++                DispatchQueue.main.async {
++                    NotificationCenter.default.post(name: PackageListManager.reloadNotification, object: nil)
++                    let explanation = result.0 == 0 ?
++                        "Sources loaded from the trusted 0-Sky Bridge cache." :
++                        "0-Sky Bridge source refresh failed: \(result.2)"
++                    completion(result.0 != 0, NSAttributedString(string: explanation))
++                }
++            }
++            return
++        }
+         DispatchQueue.global(qos: .userInitiated).async {
+             PackageListManager.shared.initWait()
+             DispatchQueue.main.async {
+@@ -1238,21 +1270,23 @@
+             }
+             
+             #else
+-
+-            let sileoList = "\(CommandPath.prefix)/etc/apt/sources.list.d/sileo.sources"
+-            let tempPath = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+-            do {
+-                try rawRepoList.write(to: tempPath, atomically: true, encoding: .utf8)
+-            } catch {
+-                return
+-            }
+-            
+-            #if targetEnvironment(macCatalyst)
+-            spawnAsRoot(args: [CommandPath.cp, "-f", "\(tempPath.path)", "\(sileoList)"])
+-            #else
+-            spawnAsRoot(args: [CommandPath.cp, "--reflink=never", "-f", "\(tempPath.path)", "\(sileoList)"])
+-            #endif
+-            spawnAsRoot(args: [CommandPath.chmod, "0644", "\(sileoList)"])
++            if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++                try? rawRepoList.write(to: sourcesURL, atomically: true, encoding: .utf8)
++            } else {
++                let sileoList = "\(CommandPath.prefix)/etc/apt/sources.list.d/sileo.sources"
++                let tempPath = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
++                do {
++                    try rawRepoList.write(to: tempPath, atomically: true, encoding: .utf8)
++                } catch {
++                    return
++                }
++                #if targetEnvironment(macCatalyst)
++                spawnAsRoot(args: [CommandPath.cp, "-f", "\(tempPath.path)", "\(sileoList)"])
++                #else
++                spawnAsRoot(args: [CommandPath.cp, "--reflink=never", "-f", "\(tempPath.path)", "\(sileoList)"])
++                #endif
++                spawnAsRoot(args: [CommandPath.chmod, "0644", "\(sileoList)"])
++            }
+ 
+             #endif
+         } else {
+diff --git a/Sileo/Backend/Package Manager/PackageListManager.swift b/Sileo/Backend/Package Manager/PackageListManager.swift
+--- a/Sileo/Backend/Package Manager/PackageListManager.swift
++++ b/Sileo/Backend/Package Manager/PackageListManager.swift
+@@ -184,7 +184,11 @@
+         var toWrite: URL?
+         var dict = [String: Package]()
+         if installed {
+-            tmpPackagesFile = CommandPath.dpkgDir.appendingPathComponent("status").resolvingSymlinksInPath()
++            if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++                tmpPackagesFile = FileManager.default.documentDirectory.appendingPathComponent("sileo-dpkg-status")
++            } else {
++                tmpPackagesFile = CommandPath.dpkgDir.appendingPathComponent("status").resolvingSymlinksInPath()
++            }
+             toWrite = tmpPackagesFile
+         } else if let override = packagesFile {
+             tmpPackagesFile = override

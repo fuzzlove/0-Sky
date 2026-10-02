@@ -1,0 +1,939 @@
+diff --git a/Doodle.plist b/Doodle.plist
+index 959e01c..1b71eba 100644
+--- a/Doodle.plist
++++ b/Doodle.plist
+@@ -1,8 +1,7 @@
+ {
+ 	Filter = {
+ 		Bundles = (
+-			"com.apple.springboard",
+-			"com.apple.Preferences"
++			"com.apple.springboard"
+ 		);
+ 	};
+ }
+\ No newline at end of file
+diff --git a/Makefile b/Makefile
+index 0a40651..643c0a0 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,7 +1,7 @@
+-TARGET := iphone:clang:latest:14.0
+-INSTALL_TARGET_PROCESSES = SpringBoard Preferences
++TARGET := iphone:clang:latest:26.0
++INSTALL_TARGET_PROCESSES = SpringBoard
+ ARCHS = arm64 arm64e
+-SYSROOT = $(THEOS)/sdks/iPhoneOS14.5.sdk
++SYSROOT = $(shell xcrun --sdk iphoneos --show-sdk-path)
+ DEBUG = 1
+ FINALPACKAGE = 0
+ THEOS_PACKAGE_SCHEME=rootless
+@@ -11,10 +11,10 @@ include $(THEOS)/makefiles/common.mk
+ TWEAK_NAME = Doodle
+ 
+ $(TWEAK_NAME)_FILES = Tweak.xm PasscodeView.xm
+-$(TWEAK_NAME)_PRIVATE_FRAMEWORKS = BulletinBoard
+-$(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wno-deprecated-declarations
++$(TWEAK_NAME)_FRAMEWORKS = Security
++OSKY_DOODLE_IOS27_ENABLE ?= 0
++$(TWEAK_NAME)_CFLAGS = -fobjc-arc -Wno-deprecated-declarations -DOSKY_DOODLE_IOS27_ENABLE=$(OSKY_DOODLE_IOS27_ENABLE)
+ $(TWEAK_NAME)_LDFLAGS = -ld_classic
+ 
+ include $(THEOS_MAKE_PATH)/tweak.mk
+-SUBPROJECTS += doodleprefs
+ include $(THEOS_MAKE_PATH)/aggregate.mk
+diff --git a/PasscodeView.h b/PasscodeView.h
+index 877cebb..529d71f 100644
+--- a/PasscodeView.h
++++ b/PasscodeView.h
+@@ -4,11 +4,7 @@
+ static NSString *domain = @"com.nahtedetihw.doodleprefs";
+ static NSString *preferencesNotification = @"com.nahtedetihw.doodleprefs/ReloadPrefs";
+ 
+-#define DEFAULTS_OBJECT_FOR_KEY(key) [[NSUserDefaults standardUserDefaults] objectForKey:key inDomain:domain]
+-
+-@interface UIView (Private)
+-- (UIViewController *)_viewControllerForAncestor;
+-@end
++#define DEFAULTS_OBJECT_FOR_KEY(key) [[[NSUserDefaults alloc] initWithSuiteName:domain] objectForKey:key]
+ 
+ @interface UIColor (Private) 
+ + (id)tableCellGroupedBackgroundColor;
+@@ -75,11 +71,11 @@ static NSString *preferencesNotification = @"com.nahtedetihw.doodleprefs/ReloadP
+ 
+ @protocol PasscodeViewDelegate <NSObject>
+ - (void)passcodeEntered:(BOOL)isCorrect;
++- (void)showKeypad;
+ @end
+ 
+ @interface PasscodeView : UIView
+-@property (nonatomic, strong) _UIBackdropView *blurView;
+-@property (nonatomic, strong) _UIBackdropViewSettings *settings;
++@property (nonatomic, strong) UIVisualEffectView *blurView;
+ @property (nonatomic, strong) CAShapeLayer *drawingLayer;
+ @property (nonatomic, weak) id<PasscodeViewDelegate> delegate;
+ // @property (nonatomic, assign) BOOL recordingMode;
+diff --git a/PasscodeView.xm b/PasscodeView.xm
+index 2dbe565..bb9072e 100644
+--- a/PasscodeView.xm
++++ b/PasscodeView.xm
+@@ -1,5 +1,6 @@
+ #import "PasscodeView.h"
+ #import <AudioToolbox/AudioServices.h>
++#include <math.h>
+ #include <rootless.h>
+ 
+ #define plistPath ROOT_PATH_NS(@"/var/mobile/Library/Preferences/com.nahtedetihw.doodleprefs.plist")
+@@ -74,22 +75,11 @@ static void loadPreferencesPasscode() {
+     UIAction *keypadAction = [UIAction actionWithTitle:@"Show Keypad" image:[UIImage systemImageNamed:@"circle.grid.3x3.fill"] identifier:nil handler:^(__kindof UIAction *_Nonnull action) {
+         AudioServicesPlaySystemSound(1519);
+         self.blurView.hidden = YES;
+-        [[self _viewControllerForAncestor] performSelector:@selector(showKeypad)];
++        if ([self.delegate respondsToSelector:@selector(showKeypad)])
++            [self.delegate showKeypad];
+     }];
+ 
+-    UIAction *respringAction = [UIAction actionWithTitle:@"Respring" image:[UIImage systemImageNamed:@"arrow.clockwise.circle.fill"] identifier:nil handler:^(__kindof UIAction *_Nonnull action) {
+-        pid_t pid;
+-        const char* args[] = {"sbreload", NULL};
+-        posix_spawn(&pid, ROOT_PATH("/usr/bin/sbreload"), NULL, NULL, (char* const*)args, NULL);
+-    }];
+-
+-    UIAction *safemodeAction = [UIAction actionWithTitle:@"Safe Mode" image:[UIImage systemImageNamed:@"exclamationmark.triangle.fill"] identifier:nil handler:^(__kindof UIAction *_Nonnull action) {
+-        pid_t pid;
+-        const char* args[] = {"killall", "-SEGV", "SpringBoard", NULL};
+-        posix_spawn(&pid, ROOT_PATH("/usr/bin/killall"), NULL, NULL, (char* const*)args, NULL);
+-    }];
+-
+-    UIMenu *menuActions = [UIMenu menuWithTitle:@"" children:@[safemodeAction, respringAction, keypadAction]];
++    UIMenu *menuActions = [UIMenu menuWithTitle:@"" children:@[keypadAction]];
+ 
+     self.keypadButton.menu = menuActions;
+     self.keypadButton.showsMenuAsPrimaryAction = YES;
+@@ -134,27 +124,16 @@ static void loadPreferencesPasscode() {
+ }
+ 
+ - (void)addBlurView {
+-    NSInteger style = 0;
+-    switch ([DEFAULTS_OBJECT_FOR_KEY(@"blurStyle") integerValue]) {
+-        default:
+-        case 0: // Dark
+-            style = 4009;
+-            break;
+-        case 1: // Transparent
+-            style = 2;
+-            break;
+-        case 2: // Light
+-            style = 2060;
+-            break;
+-    }
+-    _UIBackdropViewSettings *settings = [_UIBackdropViewSettings settingsForStyle:style];
+-    self.blurView = [[_UIBackdropView alloc] initWithFrame:self.bounds autosizesToFitSuperview:YES settings:settings]; // Add blur view as a subview
+-
++    NSInteger selected = [DEFAULTS_OBJECT_FOR_KEY(@"blurStyle") integerValue];
++    UIBlurEffectStyle style = selected == 2 ? UIBlurEffectStyleLight : UIBlurEffectStyleDark;
++    self.blurView = [[UIVisualEffectView alloc]
++        initWithEffect:selected == 1 ? nil : [UIBlurEffect effectWithStyle:style]];
++    self.blurView.frame = self.bounds;
+     [self insertSubview:self.blurView atIndex:0];
+ }
+ 
+ - (void)setupDrawingLayer {
+-    BOOL useSolidColor = [[[NSUserDefaults standardUserDefaults] objectForKey:@"strokeStyle" inDomain:domain] integerValue] == 0;
++    BOOL useSolidColor = [DEFAULTS_OBJECT_FOR_KEY(@"strokeStyle") integerValue] == 0;
+ 
+     self.drawingLayer = [CAShapeLayer layer];
+     self.drawingLayer.frame = self.bounds;
+@@ -215,6 +194,7 @@ static void loadPreferencesPasscode() {
+     // Normalize paths
+     UIBezierPath *normalizedPath1 = [self normalizePath:path1];
+     UIBezierPath *normalizedPath2 = [self normalizePath:path2];
++    if (!normalizedPath1 || !normalizedPath2) return NO;
+     
+     // Resample the paths to ensure they have the same number of points
+     NSArray *points1 = [self resamplePath:normalizedPath1 toPointCount:100];
+@@ -237,7 +217,6 @@ static void loadPreferencesPasscode() {
+     }
+     
+     CGFloat distance = [self distanceBetweenPoints:points1 andPoints:points2];
+-    NSLog(@"Distance between paths: %f", distance); // Debugging
+     return distance < maxDistance;
+ }
+ 
+@@ -245,18 +224,17 @@ static void loadPreferencesPasscode() {
+ - (UIBezierPath *)normalizePath:(UIBezierPath *)path {
+     // Get the bounding box of the path
+     CGRect boundingBox = CGPathGetBoundingBox(path.CGPath);
+-    NSLog(@"Original Bounding Box: %@", NSStringFromCGRect(boundingBox));
++    if (CGRectIsEmpty(boundingBox) || boundingBox.size.width < 1 ||
++        boundingBox.size.height < 1) return nil;
+     
+     // Calculate the scale factor to fit the path within the bounds of the view
+     CGFloat scaleX = self.bounds.size.width / boundingBox.size.width;
+     CGFloat scaleY = self.bounds.size.height / boundingBox.size.height;
+     CGFloat scaleFactor = MIN(scaleX, scaleY);
+-    NSLog(@"Scale Factor: %f", scaleFactor);
+     
+     // Calculate the translation to move the path to the origin within the bounds of the view
+     CGFloat translationX = -boundingBox.origin.x * scaleFactor + (self.bounds.size.width - boundingBox.size.width * scaleFactor) / 2;
+     CGFloat translationY = -boundingBox.origin.y * scaleFactor + (self.bounds.size.height - boundingBox.size.height * scaleFactor) / 2;
+-    NSLog(@"Translation: (%f, %f)", translationX, translationY);
+     
+     // Apply the transformation
+     CGAffineTransform transform = CGAffineTransformIdentity;
+@@ -265,7 +243,6 @@ static void loadPreferencesPasscode() {
+     
+     UIBezierPath *normalizedPath = [path copy];
+     [normalizedPath applyTransform:transform];
+-    NSLog(@"Normalized Path Bounding Box: %@", NSStringFromCGRect(CGPathGetBoundingBox(normalizedPath.CGPath)));
+     
+     return normalizedPath;
+ }
+@@ -274,7 +251,6 @@ static void loadPreferencesPasscode() {
+     NSMutableArray *points = [NSMutableArray array];
+     CGPathApply(path.CGPath, (__bridge void *)(points), GetPointsFromBezierPath);
+ 
+-    NSLog(@"Original Points: %@", points);
+ 
+     // Ensure the points array has at least 2 points
+     if (points.count < 2) return points;
+@@ -296,7 +272,7 @@ static void loadPreferencesPasscode() {
+         CGPoint p0 = [self pointFromDictionary:points[i-1]];
+         CGPoint p1 = [self pointFromDictionary:points[i]];
+         CGFloat d = [self distanceBetweenPoint:p0 andPoint:p1];
+-        if (accumulatedLength + d >= segmentLength) {
++        if (d > 0 && accumulatedLength + d >= segmentLength) {
+             CGFloat t = (segmentLength - accumulatedLength) / d;
+             CGFloat nx = p0.x + t * (p1.x - p0.x);
+             CGFloat ny = p0.y + t * (p1.y - p0.y);
+@@ -312,7 +288,6 @@ static void loadPreferencesPasscode() {
+         [resampledPoints addObject:points.lastObject];
+     }
+ 
+-    NSLog(@"Resampled Points: %@", resampledPoints);
+     
+     return resampledPoints;
+ }
+@@ -332,14 +307,12 @@ static void loadPreferencesPasscode() {
+     }
+ 
+     CGFloat averageDistance = totalDistance / count;
+-    NSLog(@"Average distance: %f", averageDistance);
+     return averageDistance;
+ }
+ 
+ - (NSArray *)samplePointsFromPath:(UIBezierPath *)path {
+     NSMutableArray *points = [NSMutableArray array];
+     CGPathApply(path.CGPath, (__bridge void *)(points), GetPointsFromBezierPath);
+-    NSLog(@"Sampled points: %@", points);
+     return [points copy];
+ }
+ 
+@@ -378,19 +351,33 @@ void GetPointsFromBezierPath(void *info, const CGPathElement *element) {
+         [pathsData addObject:points];
+     }
+ 
+-    [[NSUserDefaults standardUserDefaults] setObject:pathsData forKey:@"paths" inDomain:domain];
+-    [[NSUserDefaults standardUserDefaults] synchronize];
++    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:domain];
++    [defaults setObject:pathsData forKey:@"paths"];
++    [defaults synchronize];
+ }
+ 
+ - (void)loadRecordedPaths {
++    [recordedPaths removeAllObjects];
+     NSDictionary *dict = [[NSUserDefaults alloc] persistentDomainForName:domain];
+-    if ([dict.allKeys containsObject:@"paths"]) {
+-        NSArray *pathsData = [dict objectForKey:@"paths"];
++    NSArray *pathsData = [dict objectForKey:@"paths"];
++    if ([pathsData isKindOfClass:NSArray.class] && pathsData.count == 3) {
+         for (NSArray *pointsData in pathsData) {
++            if (![pointsData isKindOfClass:NSArray.class] || pointsData.count < 8 ||
++                pointsData.count > 1024) { [recordedPaths removeAllObjects]; break; }
+             UIBezierPath *path = [UIBezierPath bezierPath];
+             BOOL moveToPoint = YES;
+-            for (NSDictionary *pointDict in pointsData) {
++            BOOL validPath = YES;
++            for (id pointDict in pointsData) {
++                if (![pointDict isKindOfClass:NSDictionary.class] ||
++                    ![pointDict[@"x"] isKindOfClass:NSNumber.class] ||
++                    ![pointDict[@"y"] isKindOfClass:NSNumber.class]) {
++                    validPath = NO; break;
++                }
+                 CGPoint point = [self pointFromDictionary:pointDict];
++                if (!isfinite(point.x) || !isfinite(point.y) ||
++                    point.x < 0 || point.y < 0 || point.x > 8192 || point.y > 8192) {
++                    validPath = NO; break;
++                }
+                 if (moveToPoint) {
+                     [path moveToPoint:point];
+                     moveToPoint = NO;
+@@ -398,6 +385,9 @@ void GetPointsFromBezierPath(void *info, const CGPathElement *element) {
+                     [path addLineToPoint:point];
+                 }
+             }
++            if (!validPath || moveToPoint || CGPathIsEmpty(path.CGPath)) {
++                [recordedPaths removeAllObjects]; break;
++            }
+             [recordedPaths addObject:path];
+         }
+     }
+@@ -431,7 +421,7 @@ void GetPointsFromBezierPath(void *info, const CGPathElement *element) {
+         reductedString = [reductedString stringByAppendingString:@"ff"];
+     }
+     
+-    unsigned int baseValue;
++    unsigned int baseValue = 0;
+     [[NSScanner scannerWithString:reductedString] scanHexInt:&baseValue];
+     float red = ((baseValue >> 24) & 0xFF)/255.0f;
+     float green = ((baseValue >> 16) & 0xFF)/255.0f;
+@@ -443,6 +433,8 @@ void GetPointsFromBezierPath(void *info, const CGPathElement *element) {
+ @end
+ 
+ __attribute__((constructor)) static void init() {
++    if (!OSKY_DOODLE_IOS27_ENABLE ||
++        [NSProcessInfo processInfo].operatingSystemVersion.majorVersion != 27) return;
+     loadPreferencesPasscode();
+     CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPreferencesPasscode, (CFStringRef)preferencesNotification, NULL, CFNotificationSuspensionBehaviorCoalesce);
+-}
+\ No newline at end of file
++}
+diff --git a/Tweak.h b/Tweak.h
+index 4153a0f..94427c2 100644
+--- a/Tweak.h
++++ b/Tweak.h
+@@ -1,8 +1,7 @@
+ #import <UIKit/UIKit.h>
+ #import "PasscodeView.h"
+-#import <BulletinBoard/BBServer.h>
+-#import <BulletinBoard/BBDataProvider.h>
+-#import <BulletinBoard/BBSectionInfoSettings.h>
++#include <math.h>
++@class BBSectionIcon;
+ #import <mach-o/dyld.h>
+ #include <rootless.h>
+ 
+@@ -10,16 +9,11 @@
+ #define SYSTEM_VERSION_GREATER_THAN(v) ([[[UIDevice currentDevice] systemVersion] compare:v options:NSNumericSearch] == NSOrderedDescending)
+ #define SYSTEM_VERSION_LESS_THAN(v) ([[[UIDevice currentDevice] systemVersion] compare:v options:NSNumericSearch] == NSOrderedAscending)
+ 
+-static BOOL O7vqUsMWyCOs = false;
+ static BOOL enabled;
+ static BOOL hideLockIcon;
+-static BOOL showOnStartup;
+-static BOOL disableBiomentrics;
+-static NSString *realPasscode;
+-static NSData *passcodeData;
+-static NSMutableArray *paths;
++static NSArray *paths;
+ 
+-@interface UIColor (Private)
++@interface UIColor (DoodleTweakPrivate)
+ + (id)tableCellGroupedBackgroundColor;
+ + (id)opaqueSeparatorColor;
+ @end
+@@ -54,13 +48,29 @@ static NSMutableArray *paths;
+ - (void)doodleTimerFired;
+ @end
+ 
++static BOOL DoodleValidPaths(id value) {
++    if (![value isKindOfClass:NSArray.class] || [value count] != 3) return NO;
++    for (id path in value) {
++        if (![path isKindOfClass:NSArray.class] || [path count] < 2 ||
++            [path count] > 2048) return NO;
++        for (id point in path) {
++            if (![point isKindOfClass:NSDictionary.class] ||
++                ![point[@"x"] isKindOfClass:NSNumber.class] ||
++                ![point[@"y"] isKindOfClass:NSNumber.class]) return NO;
++            double x = [point[@"x"] doubleValue];
++            double y = [point[@"y"] doubleValue];
++            if (!isfinite(x) || !isfinite(y) || x < 0 || y < 0 ||
++                x > 8192 || y > 8192) return NO;
++        }
++    }
++    return YES;
++}
++
+ static void loadPreferencesDoodle() {
+     enabled = [DEFAULTS_OBJECT_FOR_KEY(@"enabled") boolValue] ?: NO;
+     hideLockIcon = [DEFAULTS_OBJECT_FOR_KEY(@"hideLockIcon") boolValue] ?: NO;
+-    disableBiomentrics = [DEFAULTS_OBJECT_FOR_KEY(@"disableBiomentrics") boolValue] ?: NO;
+-    passcodeData = DEFAULTS_OBJECT_FOR_KEY(@"passcodeData") ?: [NSData new];
+-    paths = DEFAULTS_OBJECT_FOR_KEY(@"paths") ?: nil;
+-    showOnStartup = [DEFAULTS_OBJECT_FOR_KEY(@"showOnStartup") boolValue] ?: NO;
++    id candidate = DEFAULTS_OBJECT_FOR_KEY(@"paths");
++    paths = DoodleValidPaths(candidate) ? candidate : nil;
+ }
+ 
+ @interface SBLockScreenManager : NSObject
+@@ -162,7 +172,7 @@ static void loadPreferencesDoodle() {
+ @property (nonatomic, assign) BOOL clearable;
+ @end
+ 
+-@interface BBServer (Doodle)
++@interface BBServer : NSObject
+ - (void)publishBulletin:(id)arg1 destinations:(unsigned long long)arg2;
+ - (id)dataProviderForSectionID:(NSString *)arg1;
+ - (void)withdrawBulletinRequestsWithPublisherBulletinID:(NSString *)arg1 forSectionID:(NSString *)arg2;
+@@ -190,4 +200,4 @@ static void loadPreferencesDoodle() {
+ @end
+ 
+ @interface PLPlatterHeaderContentView : UIView
+-@end
+\ No newline at end of file
++@end
+diff --git a/Tweak.xm b/Tweak.xm
+index 52dd671..83c3ed2 100644
+--- a/Tweak.xm
++++ b/Tweak.xm
+@@ -1,66 +1,102 @@
+ #import "Tweak.h"
+-#import "NSData+AES256.m"
+-
+-#define qk1k0vov53BXSJJjGS39 ROOT_PATH_NS(@"/var/lib/dpkg/info/com.nahtedetihw.doodle.list")
++#import <Security/Security.h>
++#import <objc/runtime.h>
++
++#ifndef OSKY_DOODLE_IOS27_ENABLE
++#define OSKY_DOODLE_IOS27_ENABLE 0
++#endif
++
++static BOOL DoodleMethodMatches(const char *className, const char *selector,
++                                const char *encoding) {
++    Class cls = objc_getClass(className);
++    Method method = cls ? class_getInstanceMethod(cls, sel_registerName(selector)) : NULL;
++    const char *observed = method ? method_getTypeEncoding(method) : NULL;
++    return observed && strcmp(observed, encoding) == 0;
++}
++
++static BOOL DoodleAPISafe(void) {
++    Class passcode = objc_getClass("CSPasscodeViewController");
++    Ivar keypad = passcode ? class_getInstanceVariable(passcode, "_passcodeLockView") : NULL;
++    const char *keypadType = keypad ? ivar_getTypeEncoding(keypad) : NULL;
++    return keypadType && strcmp(keypadType,
++        "@\"UIView<SBUIPasscodeLockView_Private>\"") == 0 &&
++        DoodleMethodMatches("CSPasscodeViewController", "showProudLock", "B16@0:8") &&
++        DoodleMethodMatches("CSPasscodeViewController", "viewDidLoad", "v16@0:8") &&
++        DoodleMethodMatches("CSPasscodeViewController", "viewWillAppear:", "v20@0:8B16") &&
++        DoodleMethodMatches("CSPasscodeViewController", "viewDidLayoutSubviews", "v16@0:8") &&
++        DoodleMethodMatches("CSPasscodeViewController",
++            "viewWillTransitionToSize:withTransitionCoordinator:", "v40@0:8{CGSize=dd}16@32") &&
++        DoodleMethodMatches("SBFUserAuthenticationController",
++            "_evaluateAuthenticationAttempt:outError:", "q32@0:8@16^@24") &&
++        DoodleMethodMatches("SBLockScreenManager",
++            "_attemptUnlockWithPasscode:mesa:finishUIUnlock:completion:",
++            "B40@0:8@16B24B28@?32");
++}
++
++// SpringBoard owns this item. It is unavailable until the first native unlock
++// after boot, when the system keypad remains the fallback.
++static NSDictionary *DoodleCredentialQuery(void) {
++    return @{(__bridge id)kSecClass: (__bridge id)kSecClassGenericPassword,
++             (__bridge id)kSecAttrService: @"com.nahtedetihw.doodle.ios27",
++             (__bridge id)kSecAttrAccount: @"device-unlock"};
++}
++
++static NSString *DoodleStoredPasscode(void);
++
++static BOOL DoodleStorePasscode(NSString *passcode) {
++    if (![passcode isKindOfClass:NSString.class] || !passcode.length ||
++        passcode.length > 128) return NO;
++    NSData *bytes = [passcode dataUsingEncoding:NSUTF8StringEncoding];
++    if (!bytes.length || bytes.length > 1024) return NO;
++    NSMutableDictionary *entry = [DoodleCredentialQuery() mutableCopy];
++    entry[(__bridge id)kSecAttrAccessible] =
++        (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly;
++    entry[(__bridge id)kSecValueData] = bytes;
++    OSStatus result = SecItemAdd((__bridge CFDictionaryRef)entry, NULL);
++    if (result == errSecDuplicateItem) {
++        NSDictionary *update = @{(__bridge id)kSecValueData: bytes,
++            (__bridge id)kSecAttrAccessible:
++                (__bridge id)kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly};
++        result = SecItemUpdate((__bridge CFDictionaryRef)DoodleCredentialQuery(),
++                               (__bridge CFDictionaryRef)update);
++    }
++    if (result != errSecSuccess ||
++        ![DoodleStoredPasscode() isEqualToString:passcode]) return NO;
++    // Retire the older release's weakly encrypted preference only after the
++    // device-only Keychain item has been written successfully.
++    NSUserDefaults *defaults = [[NSUserDefaults alloc] initWithSuiteName:domain];
++    [defaults removeObjectForKey:@"passcodeData"];
++    [defaults synchronize];
++    return YES;
++}
++
++static NSString *DoodleStoredPasscode(void) {
++    NSMutableDictionary *query = [DoodleCredentialQuery() mutableCopy];
++    query[(__bridge id)kSecReturnData] = @YES;
++    query[(__bridge id)kSecMatchLimit] = (__bridge id)kSecMatchLimitOne;
++    CFTypeRef output = NULL;
++    OSStatus result = SecItemCopyMatching((__bridge CFDictionaryRef)query, &output);
++    if (result != errSecSuccess || !output) return nil;
++    id bytes = CFBridgingRelease(output);
++    if (![bytes isKindOfClass:NSData.class]) return nil;
++    return [[NSString alloc] initWithData:bytes encoding:NSUTF8StringEncoding];
++}
+ 
+ static NSInteger failedAttempts = 0;
+-BBServer *bannerServer = nil;
+-dispatch_queue_t bannerQueue;
+-
+ BOOL hasDynamicIsland() {
+     UIWindow *keyWindow = [[UIApplication sharedApplication] keyWindow];
+     return keyWindow.safeAreaInsets.top >= 51;
+ }
+ 
+ %group Doodle
+-%hook SBIconController
+-- (void)viewDidAppear:(BOOL)animated {
+-    %orig;
+-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+-        if (paths == NULL) {
+-            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (CFStringRef)@"com.nahtedetihw.doodleprefs/doodlePathsBanner", nil, nil, true);
+-        }
+-    });
+-}
+-%end
+-
+-%hook SBLockScreenBiometricAuthenticationCoordinator
+-- (BOOL)isEnabled {
+-    return !disableBiomentrics;
+-}
+-%end
+-
+-%hook SBBootDefaults
+-- (void)setDontLockAfterCrash:(BOOL)arg1 {
+-    %orig(NO);
+-}
+-- (BOOL)dontLockAfterCrash {
+-    return NO;
+-}
+-%end
+-
+-%hook SBLockScreenManager
+-- (void)_handleBacklightLevelWillChange:(id)arg1 {
+-    %orig;
+-    if (showOnStartup) {
+-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+-            [self showPasscode];
+-        });
+-    }
+-}
+-%new
+-- (void)showPasscode {
+-    if (showOnStartup && [self isLockScreenVisible] && [self _isPasscodeVisible] == NO) [self setPasscodeVisible:YES animated:YES];
+-}
+-%end
+-
+ %hook CSPasscodeViewController
+ %property (nonatomic, strong) UIImageView *fakeWallpaperView;
+ %property (nonatomic, strong) PasscodeView *passcodeView;
+ %property (nonatomic, strong) NSTimer *doodleTimer;
+ - (BOOL)showProudLock {
+     if (!hasDynamicIsland()) {
+-        return self.passcodeView.hidden ? %orig : !hideLockIcon;
++        if (!self.passcodeView || self.passcodeView.hidden) return %orig;
++        return !hideLockIcon;
+     }
+     return %orig;
+ }
+@@ -75,8 +111,7 @@ BOOL hasDynamicIsland() {
+ 
+ - (void)viewWillAppear:(BOOL)arg1 {
+     %orig;
+-    NSDictionary *dict = [[NSUserDefaults alloc] persistentDomainForName:domain];
+-    if (![dict.allKeys containsObject:@"paths"]) {
++    if (!paths.count || !DoodleStoredPasscode()) {
+         UIView *passcodeLockView = MSHookIvar<UIView *>(self, "_passcodeLockView");
+         passcodeLockView.hidden = NO;
+         self.fakeWallpaperView.hidden = YES;
+@@ -120,13 +155,14 @@ BOOL hasDynamicIsland() {
+ - (void)addPasscodeView {
+     if (!self.passcodeView) self.passcodeView = [[PasscodeView alloc] initWithFrame:self.view.bounds];
+     self.passcodeView.delegate = self;
+-    if (!passcodeData) {
++    if (!DoodleStoredPasscode()) {
+         self.passcodeView.hidden = YES;
+     } else {
+         self.passcodeView.hidden = NO;
+         [self.passcodeView loadRecordedPaths];
+     }
+-    [self.view insertSubview:self.passcodeView atIndex:2];
++    [self.view insertSubview:self.passcodeView
++                    atIndex:MIN((NSUInteger)2, self.view.subviews.count)];
+     
+     self.passcodeView.translatesAutoresizingMaskIntoConstraints = false;
+     [self.passcodeView.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:0].active = YES;
+@@ -140,12 +176,18 @@ BOOL hasDynamicIsland() {
+     if (isCorrect) {
+         failedAttempts = 0;
+ 
+-        NSString *userIdentifier = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
+-
+-        NSData *realPasscodeData = [passcodeData AES256DecryptWithKey:userIdentifier]; //decrypt the data
+-        NSString *realPasscode = [NSString stringWithUTF8String:[[[NSString alloc] initWithData:realPasscodeData encoding:NSUTF8StringEncoding] UTF8String]];
+-
+-        [[%c(SBLockScreenManager) sharedInstance] _attemptUnlockWithPasscode:realPasscode mesa:NO finishUIUnlock:YES completion:nil];
++        NSString *realPasscode = DoodleStoredPasscode();
++        if (realPasscode.length) {
++            BOOL accepted = [[%c(SBLockScreenManager) sharedInstance]
++                _attemptUnlockWithPasscode:realPasscode mesa:NO
++                finishUIUnlock:YES completion:nil];
++            if (!accepted) {
++                SecItemDelete((__bridge CFDictionaryRef)DoodleCredentialQuery());
++                [self showKeypad];
++            }
++        } else {
++            [self showKeypad];
++        }
+     } else {
+         //[self.passcodeView clearCurrentPath];
+         failedAttempts++;
+@@ -169,7 +211,7 @@ BOOL hasDynamicIsland() {
+ %new
+ - (void)addFakeWallpaperView {
+     if (!self.fakeWallpaperView) self.fakeWallpaperView = [[UIImageView alloc] initWithFrame:self.view.bounds];
+-    if (!passcodeData || ![passcodeData length]) {
++    if (!DoodleStoredPasscode()) {
+         self.fakeWallpaperView.hidden = YES;
+     } else {
+         self.fakeWallpaperView.hidden = NO;
+@@ -177,7 +219,8 @@ BOOL hasDynamicIsland() {
+     
+     [self setFakeWallpaperImage];
+     
+-    [self.view insertSubview:self.fakeWallpaperView atIndex:1];
++    [self.view insertSubview:self.fakeWallpaperView
++                    atIndex:MIN((NSUInteger)1, self.view.subviews.count)];
+     
+     self.fakeWallpaperView.translatesAutoresizingMaskIntoConstraints = false;
+     [self.fakeWallpaperView.topAnchor constraintEqualToAnchor:self.view.topAnchor constant:0].active = YES;
+@@ -188,309 +231,40 @@ BOOL hasDynamicIsland() {
+ 
+ %new
+ - (void)setFakeWallpaperImage {
+-    if (SYSTEM_VERSION_GREATER_THAN(@"16.0") && [UIDevice currentDevice].userInterfaceIdiom != UIUserInterfaceIdiomPad) {
+-        if ([UIDevice currentDevice].userInterfaceIdiom == UIUserInterfaceIdiomPad) {
+-            SBWallpaperController *wallpaperController = [%c(SBWallpaperController) sharedInstance];
+-            SBWWallpaperViewController *wallpaperViewController = MSHookIvar<SBWWallpaperViewController *>(wallpaperController, "_wallpaperViewController");
+-            UIGraphicsBeginImageContext([wallpaperViewController view].frame.size);
+-            [[wallpaperViewController view].layer renderInContext:UIGraphicsGetCurrentContext()];
+-            UIImage *wallpaperImage = UIGraphicsGetImageFromCurrentImageContext();
+-            UIGraphicsEndImageContext();
+-            self.fakeWallpaperView.image = wallpaperImage;
+-        } else {
+-            SBWallpaperController *wallpaperController = [%c(SBWallpaperController) sharedInstance];
+-            PBUIPosterWallpaperRemoteViewController *wallpaperRemoteController = MSHookIvar<PBUIPosterWallpaperRemoteViewController *>(wallpaperController, "_rootWallpaperViewController");
+-            PBUIPosterWallpaperViewController *wallpaperViewController = MSHookIvar<PBUIPosterWallpaperViewController *>(wallpaperRemoteController, "_viewController");
+-            UIGraphicsBeginImageContext([wallpaperViewController view].frame.size);
+-            [[wallpaperViewController view].layer renderInContext:UIGraphicsGetCurrentContext()];
+-            UIImage *wallpaperImage = UIGraphicsGetImageFromCurrentImageContext();
+-            UIGraphicsEndImageContext();
+-            self.fakeWallpaperView.image = wallpaperImage;
+-        }
+-    } else {
+-        SBWallpaperController *wallpaperController = [%c(SBWallpaperController) sharedInstance];
+-        SBWWallpaperViewController *wallpaperViewController = MSHookIvar<SBWWallpaperViewController *>(wallpaperController, "_wallpaperViewController");
+-        UIGraphicsBeginImageContext([wallpaperViewController view].frame.size);
+-        [[wallpaperViewController view].layer renderInContext:UIGraphicsGetCurrentContext()];
+-        UIImage *wallpaperImage = UIGraphicsGetImageFromCurrentImageContext();
+-        UIGraphicsEndImageContext();
+-        self.fakeWallpaperView.image = wallpaperImage;
+-    }
++    // The old wallpaper-controller ivars are unstable on iOS 27. Use a
++    // predictable surface behind the pattern without touching private state.
++    self.fakeWallpaperView.image = nil;
++    self.fakeWallpaperView.backgroundColor = [UIColor colorWithWhite:0.08 alpha:1.0];
+ }
+ %end
+ %end
+ 
+ %group Setup
+-%hook SBBootDefaults
+-- (void)setDontLockAfterCrash:(BOOL)arg1 {
+-    %orig(NO);
+-}
+-
+-- (BOOL)dontLockAfterCrash {
+-    return NO;
+-}
+-%end
+-
+-%hook SBLockScreenBiometricAuthenticationCoordinator
+-- (BOOL)isEnabled {
+-    return NO; // Disable biometric auto unlock to record passcode
+-}
+-%end
+-
+ %hook SBFUserAuthenticationController
+ - (long long)_evaluateAuthenticationAttempt:(SBFAuthenticationRequest *)arg1 outError:(id*)arg2 {
+     long long orig = %orig;
+-
+-    NSString *userIdentifier = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
+-
+-    if (orig == 2 && ![arg1.passcode isEqualToString:@""] && arg1.passcode != NULL) {
+-        NSData *passcodeData = [[arg1.passcode dataUsingEncoding:NSUTF8StringEncoding] AES256EncryptWithKey:userIdentifier];
+-
+-        [[NSUserDefaults standardUserDefaults] setObject:passcodeData forKey:@"passcodeData" inDomain:domain];
+-        [[NSUserDefaults standardUserDefaults] synchronize];
+-
+-        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+-            CFNotificationCenterPostNotification(CFNotificationCenterGetDarwinNotifyCenter(), (CFStringRef)@"com.nahtedetihw.doodleprefs/doodlePasscodeBanner", nil, nil, true);
+-        });
+-
+-        /* UIAlertController *passcode = [UIAlertController alertControllerWithTitle:@"Doodle" message:@"\nPasscode saved.\nDevice will now respring" preferredStyle:UIAlertControllerStyleAlert];
+-        [((SBIconController *)[%c(SBIconController) sharedInstance]) presentViewController:passcode animated:YES completion:^(void) {
+-            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(3 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+-                pid_t pid;
+-                const char* args[] = {"sbreload", NULL};
+-                posix_spawn(&pid, ROOT_PATH("/usr/bin/sbreload"), NULL, NULL, (char* const*)args, NULL);
+-            });
+-        }]; */
++    if (enabled && orig == 2 && arg1.passcode.length &&
++        ![DoodleStoredPasscode() isEqualToString:arg1.passcode]) {
++        DoodleStorePasscode(arg1.passcode);
+     }
+     return orig;
+ }
+ %end
+ %end
+ 
+-%group Banners
+-void doodlePasscodeBanner() {
+-	BBBulletinRequest *bulletin = [%c(BBBulletinRequest) new];
+-    NSProcessInfo *processInfo = [NSProcessInfo processInfo];
+-	[bulletin setTitle:@"Doodle"];
+-    [bulletin setMessage:@"Passcode saved. Tap to respring device"];
+-    [bulletin setSectionID:@"com.apple.Preferences"];
+-    [bulletin setBulletinID:[processInfo globallyUniqueString]];
+-    [bulletin setRecordID:[processInfo globallyUniqueString]];
+-    [bulletin setDate:[NSDate date]];
+-    [bulletin setClearable:NO];
+-    [bulletin setLockScreenPriority:0];
+-	[bulletin setTurnsOnDisplay:YES];
+-
+-    if ([bannerServer respondsToSelector:@selector(publishBulletin:destinations:)]) {
+-        dispatch_sync(bannerQueue, ^{
+-            [bannerServer publishBulletin:bulletin destinations:15];
+-        });
+-    }
+-}
+-
+-void doodlePathsBanner() {
+-	BBBulletinRequest *bulletin = [%c(BBBulletinRequest) new];
+-    NSProcessInfo *processInfo = [NSProcessInfo processInfo];
+-	[bulletin setTitle:@"Doodle"];
+-    [bulletin setMessage:@"Tap to record your Doodle pattern"];
+-    [bulletin setSectionID:@"com.apple.Preferences"];
+-    [bulletin setBulletinID:[processInfo globallyUniqueString]];
+-    [bulletin setRecordID:[processInfo globallyUniqueString]];
+-    [bulletin setDate:[NSDate date]];
+-    [bulletin setClearable:NO];
+-    [bulletin setLockScreenPriority:0];
+-	[bulletin setTurnsOnDisplay:YES];
+-
+-    if ([bannerServer respondsToSelector:@selector(publishBulletin:destinations:)]) {
+-        dispatch_sync(bannerQueue, ^{
+-            [bannerServer publishBulletin:bulletin destinations:15];
+-        });
+-    }
+-}
+-
+-%hook BBServer
+-- (id)initWithQueue:(id)arg1 {
+-    bannerServer = %orig;
+-    bannerQueue = [self valueForKey:@"_queue"];
+-    return bannerServer;
+-}
+-%end
+-
+-%hook NCNotificationShortLookViewController
+-- (void)_handleTapOnView:(id)arg1 {
+-    NCNotificationShortLookView *shortView = (NCNotificationShortLookView *)self.viewForPreview;
+-    if ([shortView.primaryText isEqualToString:@"Doodle"]) {
+-        if ([shortView.secondaryText isEqualToString:@"Passcode saved. Tap to respring device"]) {
+-            pid_t pid;
+-            const char* args[] = {"sbreload", NULL};
+-            posix_spawn(&pid, ROOT_PATH("/usr/bin/sbreload"), NULL, NULL, (char* const*)args, NULL);
+-        } else if ([shortView.secondaryText isEqualToString:@"Tap to record your Doodle pattern"]) {
+-            BOOL shuffle = 0;
+-            uint32_t count = _dyld_image_count();
+-            for (uint32_t i = 0; i < count; i++) {
+-                if (strstr(_dyld_get_image_name(i), "Shuffle.dylib")) {
+-                    shuffle = 1;
+-                }
+-            }
+-            if (shuffle) {
+-                [((SpringBoard *)[%c(SpringBoard) sharedApplication]) applicationOpenURL:[NSURL URLWithString:@"prefs:root=Tweaks&path=Doodle"]];
+-            } else {
+-                [((SpringBoard *)[%c(SpringBoard) sharedApplication]) applicationOpenURL:[NSURL URLWithString:@"prefs:root=Doodle"]];
+-            }
+-            [[%c(SBLockScreenManager) sharedInstance] unlockUIFromSource:2 withOptions:nil];
+-        }
+-    } else {
+-		%orig;
+-	}
+-}
+-%end
+-
+-%hook NCBadgedIconView
+-- (UIView *)iconView {
+-	UIView *original = %orig;
+-	if ([self.superview isKindOfClass:%c(NCNotificationSeamlessContentView)]) {
+-		NCNotificationSeamlessContentView *parent = (NCNotificationSeamlessContentView *)self.superview;
+-		if ([parent.primaryText isEqualToString:@"Doodle"]) {
+-			[(UIImageView *)original setImage:[UIImage imageWithContentsOfFile:ROOT_PATH_NS(@"/Library/PreferenceBundles/doodleprefs.bundle/headerIcon@3x.png")]];
+-		}
+-	}
+-	return original;
+-}
+-%end
+-
+-%hook NCNotificationShortLookView
+-- (void)layoutSubviews {
+-	%orig;
+-	if ([self.primaryText isEqualToString:@"Doodle"]) {
+-		if ([self respondsToSelector:@selector(imageIndicator)]) {
+-			[(UIImageView *)self.imageIndicator setImage:[UIImage imageWithContentsOfFile:ROOT_PATH_NS(@"/Library/PreferenceBundles/doodleprefs.bundle/headerIcon@3x.png")]];
+-		}
+-	}
+-}
+-%end
+-
+-%hook PLPlatterHeaderContentView
+-- (NSArray *)iconButtons {
+-	if ([self.superview isKindOfClass:%c(NCNotificationShortLookView)]) {
+-		NCNotificationShortLookView *parent = (NCNotificationShortLookView *)self.superview;
+-        if ([parent.primaryText isEqualToString:@"Doodle"]) {
+-			UIImage *iconImage = [UIImage imageWithContentsOfFile:ROOT_PATH_NS(@"/Library/PreferenceBundles/doodleprefs.bundle/headerIcon@3x.png")];
+-			
+-			UIGraphicsBeginImageContextWithOptions(CGSizeMake(20, 20), NO, 0.0);
+-			[iconImage drawInRect:CGRectMake(0, 0, 20, 20)];
+-			UIImage *iconButtonImage = UIGraphicsGetImageFromCurrentImageContext();    
+-			UIGraphicsEndImageContext();
+-
+-			UIButton *iconButton = [%orig firstObject];
+-			[iconButton setImage:iconButtonImage forState:UIControlStateNormal];
+-		}
+-	}
+-	return %orig;
+-}
+-%end
+-%end
+-
+-%group Settings
+-%hook UIViewController
+-- (void)viewDidLoad {
+-	%orig;
+-    if ([self isKindOfClass:%c(PSSplitViewController)] || [self isKindOfClass:%c(DDLRecordingController)]) {
+-        self.view.backgroundColor = [UIColor clearColor];
+-        if (self.view.alpha == 0.0) {
+-            self.view.alpha = 1.0;
+-        }
+-    }
+-}
+-- (void)viewWillAppear:(BOOL)animated {
+-	%orig;
+-    if ([self isKindOfClass:%c(PSSplitViewController)] || [self isKindOfClass:%c(DDLRecordingController)]) {
+-        [self.transitionCoordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
+-            [self.viewIfLoaded setAlpha:1.0f];
+-        } completion:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
+-            
+-        }];
+-    }
+-}
+-- (void)viewWillDisappear:(BOOL)animated {
+-    %orig;
+-	if ([self isKindOfClass:%c(PSSplitViewController)] || [self isKindOfClass:%c(DDLRecordingController)]) {
+-        [self.transitionCoordinator animateAlongsideTransition:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
+-            [self.viewIfLoaded setAlpha:0.0f];
+-        } completion:^(id<UIViewControllerTransitionCoordinatorContext>  _Nonnull context) {
+-            
+-        }];
+-    }
+-}
+-%end
+-
+-%hook UISwitch
+-- (void)layoutSubviews {
+-	%orig;
+-    if ([[self _viewControllerForAncestor] isKindOfClass:%c(DDLPreferencesListController)]) {
+-	    [self setOnTintColor:[UIColor systemBlueColor]];
+-    }
+-}
+-- (void)setOnTintColor:(UIColor *)arg1 {
+-    if ([[self _viewControllerForAncestor] isKindOfClass:%c(DDLPreferencesListController)]) {
+-	    arg1 = [UIColor systemBlueColor];
+-    }
+-    %orig;
+-}
+-%end
+-%end
+-
+-%group WallpaperSB
+-%hook SBDeviceApplicationSceneHandle
+-- (NSInteger)backgroundStyle {
+-	if ([self.application.bundleIdentifier isEqualToString:@"com.apple.Preferences"]) {
+-        UIApplicationSceneSettings *settings = (UIApplicationSceneSettings *)self.sceneIfExists.settings;
+-        if ((settings == nil) || (![settings isKindOfClass:NSClassFromString(@"UIApplicationSceneSettings")])) {
+-            return %orig;
+-        }
+-        return 4;
+-    }
+-    return %orig;
+-}
+-- (BOOL)translucent {
+-	if ([self.application.bundleIdentifier isEqualToString:@"com.apple.Preferences"]) {
+-        return YES;
+-    }
+-	return %orig;
+-}
+-%end
+-
+-%hook SBDeviceApplicationSceneView
+-- (void)_sceneHandleDidUpdateSettingsWithDiff:(id)arg0 previousSettings:(id)arg1 {
+-	%orig;
+-	if ([self.application.bundleIdentifier isEqualToString:@"com.apple.Preferences"]) {
+-        SBDeviceApplicationSceneHandle *sceneHandle = (SBDeviceApplicationSceneHandle *)self.sceneHandle;
+-        if (![sceneHandle isKindOfClass:NSClassFromString(@"SBDeviceApplicationSceneHandle")]) return;
+-        self.backgroundView.wallpaperStyle = sceneHandle.wallpaperStyle;
+-    }
+-}
+-%end
+-%end
+-
+ %ctor {
++    // Candidate runtime activation is an explicit build choice. The default
++    // probe never hooks SpringBoard even if it is accidentally installed.
++    if (!OSKY_DOODLE_IOS27_ENABLE ||
++        [NSProcessInfo processInfo].operatingSystemVersion.majorVersion != 27 ||
++        !DoodleAPISafe()) return;
+     loadPreferencesDoodle(); // Load prefs
+-    CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)loadPreferencesDoodle, (CFStringRef)preferencesNotification, NULL, CFNotificationSuspensionBehaviorCoalesce);
+-    
+-    O7vqUsMWyCOs = ![[NSFileManager defaultManager] fileExistsAtPath:[qk1k0vov53BXSJJjGS39 stringByReplacingOccurrencesOfString:@"list" withString:[NSString stringWithFormat:@"md%d%@um%@", 5, @"s", @"s"]]];
+-
+-    NSDictionary *dict = [[NSUserDefaults alloc] persistentDomainForName:domain];
+-    if (enabled && !O7vqUsMWyCOs) {
+-        if (![dict.allKeys containsObject:@"passcodeData"]) {
+-            %init(Setup);
+-        } else {
+-            %init(Doodle);
+-        }
+-        %init(Banners);
+-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)doodlePasscodeBanner, (CFStringRef)@"com.nahtedetihw.doodleprefs/doodlePasscodeBanner", NULL, (CFNotificationSuspensionBehavior)kNilOptions);
+-        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, (CFNotificationCallback)doodlePathsBanner, (CFStringRef)@"com.nahtedetihw.doodleprefs/doodlePathsBanner", NULL, (CFNotificationSuspensionBehavior)kNilOptions);
+-    }
+-    %init(WallpaperSB);
+-    if ([[NSBundle mainBundle].bundleIdentifier isEqualToString:@"com.apple.Preferences"]) {
+-        %init(Settings);
++    if (enabled && paths.count) {
++        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(),
++            NULL, (CFNotificationCallback)loadPreferencesDoodle,
++            (CFStringRef)preferencesNotification, NULL,
++            CFNotificationSuspensionBehaviorCoalesce);
++        %init(Doodle);
++        %init(Setup);
+     }
+-    return;
+ }

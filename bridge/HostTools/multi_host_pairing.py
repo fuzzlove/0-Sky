@@ -164,12 +164,13 @@ def ssh_base(host: str, port: int, identity: Path, known_hosts: Path,
     if not 1 <= port <= 65535:
         raise RuntimeError("invalid SSH port")
     for value in (str(identity), str(known_hosts), host_alias):
-        if "\n" in value or '"' in value:
+        if any(character in value for character in ("\n", "\r", "\t", '"')):
             raise RuntimeError("SSH path or host alias contains unsupported characters")
+    known_hosts_value = str(known_hosts).replace("\\", "\\\\").replace(" ", "\\ ")
     return [
         "/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
         "-o", "StrictHostKeyChecking=yes",
-        "-o", f'UserKnownHostsFile="{known_hosts}"',
+        "-o", f"UserKnownHostsFile={known_hosts_value}",
         "-o", "GlobalKnownHostsFile=/dev/null", "-o", f"HostKeyAlias={host_alias}",
         "-o", "IdentitiesOnly=yes", "-o", "PasswordAuthentication=no",
         "-o", "KbdInteractiveAuthentication=no", "-i", str(identity),

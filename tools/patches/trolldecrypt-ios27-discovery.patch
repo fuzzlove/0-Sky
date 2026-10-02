@@ -1,0 +1,197 @@
+diff --git a/Extensions/LSApplicationProxy+AltList.h b/Extensions/LSApplicationProxy+AltList.h
+index 6b3aefc..f002928 100644
+--- a/Extensions/LSApplicationProxy+AltList.h
++++ b/Extensions/LSApplicationProxy+AltList.h
+@@ -25,6 +25,8 @@
+ @interface LSApplicationProxy (AltList)
+ - (BOOL)atl_isSystemApplication;
+ - (BOOL)atl_isUserApplication;
++- (BOOL)atl_isResearchCryptexApplication;
++- (BOOL)atl_hasValidLaunchableBundle;
+ - (BOOL)atl_isHidden;
+ - (NSString*)atl_fastDisplayName;
+ - (NSString*)atl_nameToDisplay;
+@@ -34,4 +36,4 @@
+ 
+ @interface LSApplicationWorkspace (AltList)
+ - (NSArray*)atl_allInstalledApplications;
+-@end
+\ No newline at end of file
++@end
+diff --git a/Extensions/LSApplicationProxy+AltList.m b/Extensions/LSApplicationProxy+AltList.m
+index 18df009..9e13d5e 100644
+--- a/Extensions/LSApplicationProxy+AltList.m
++++ b/Extensions/LSApplicationProxy+AltList.m
+@@ -11,6 +11,34 @@ - (BOOL)atl_isUserApplication {
+     return [self.applicationType isEqualToString:@"User"] && ![self atl_isHidden];
+ }
+ 
++- (BOOL)atl_isResearchCryptexApplication {
++    NSURL* bundleURL = self.bundleURL;
++    if (!bundleURL.isFileURL || [self atl_isHidden]) return NO;
++    NSString* path = [[bundleURL.path stringByStandardizingPath] stringByResolvingSymlinksInPath];
++    if (![path.pathExtension isEqualToString:@"app"]) return NO;
++    NSString* applications = [path stringByDeletingLastPathComponent];
++    if (![[applications lastPathComponent] isEqualToString:@"Applications"]) return NO;
++    NSString* mount = [applications stringByDeletingLastPathComponent];
++    NSString* mountRoot = @"/private/var/run/com.apple.security.cryptexd/mnt";
++    if (![[mount stringByDeletingLastPathComponent] isEqualToString:mountRoot]) return NO;
++    return [self atl_hasValidLaunchableBundle];
++}
++
++- (BOOL)atl_hasValidLaunchableBundle {
++    NSURL* bundleURL = self.bundleURL;
++    if (!bundleURL.isFileURL) return NO;
++    NSString* path = [[bundleURL.path stringByStandardizingPath] stringByResolvingSymlinksInPath];
++    NSDictionary* info = [NSDictionary dictionaryWithContentsOfFile:[path stringByAppendingPathComponent:@"Info.plist"]];
++    NSString* identifier = info[@"CFBundleIdentifier"];
++    NSString* executable = info[@"CFBundleExecutable"];
++    if (![identifier isKindOfClass:[NSString class]] ||
++        ![identifier isEqualToString:self.atl_bundleIdentifier] ||
++        ![executable isKindOfClass:[NSString class]] ||
++        [executable isEqualToString:@""] ||
++        ![[executable lastPathComponent] isEqualToString:executable]) return NO;
++    return [[NSFileManager defaultManager] isExecutableFileAtPath:[path stringByAppendingPathComponent:executable]];
++}
++
+ // the tag " hidden " is also valid, so we need to check if any strings contain "hidden" instead
+ BOOL tagArrayContainsTag(NSArray* tagArr, NSString* tag) {
+     if (!tagArr || !tag) return NO;
+@@ -138,20 +166,18 @@ - (NSString*)atl_shortVersionString {
+ @implementation LSApplicationWorkspace (AltList)
+ 
+ - (NSArray*)atl_allInstalledApplications {
+-    if (![self respondsToSelector:@selector(enumerateApplicationsOfType:block:)]) {
+-        return [self allInstalledApplications];
++    NSMutableDictionary<NSString*, LSApplicationProxy*>* installedApplications = [NSMutableDictionary new];
++    void (^addProxy)(LSApplicationProxy*) = ^(LSApplicationProxy* appProxy) {
++        NSString* identifier = appProxy.atl_bundleIdentifier;
++        if ([identifier isKindOfClass:[NSString class]] && identifier.length &&
++            !installedApplications[identifier]) installedApplications[identifier] = appProxy;
++    };
++    if ([self respondsToSelector:@selector(enumerateApplicationsOfType:block:)]) {
++        [self enumerateApplicationsOfType:0 block:addProxy];
++        [self enumerateApplicationsOfType:1 block:addProxy];
+     }
+-
+-    NSMutableArray* installedApplications = [NSMutableArray new];
+-    [self enumerateApplicationsOfType:0
+-                                block:^(LSApplicationProxy* appProxy) {
+-                                    [installedApplications addObject:appProxy];
+-                                }];
+-    [self enumerateApplicationsOfType:1
+-                                block:^(LSApplicationProxy* appProxy) {
+-                                    [installedApplications addObject:appProxy];
+-                                }];
+-    return installedApplications;
++    for (LSApplicationProxy* proxy in [self allInstalledApplications]) addProxy(proxy);
++    return installedApplications.allValues;
+ }
+ 
+-@end
+\ No newline at end of file
++@end
+diff --git a/Makefile b/Makefile
+index ad3742a..f32aaca 100644
+--- a/Makefile
++++ b/Makefile
+@@ -11,7 +11,9 @@ APPLICATION_NAME = TrollDecrypt
+ TrollDecrypt_FILES = $(shell find . -path "*/.theos/*" -prune -o -path "./deps/SSZipArchive/*" -prune -o \( -name "*.m" -o -name "*.c" \) -print)
+ 
+ TrollDecrypt_FRAMEWORKS = UIKit CoreGraphics MobileCoreServices Security
+-TrollDecrypt_PRIVATE_FRAMEWORKS = AppServerSupport RunningBoardServices
++# These frameworks are not referenced by TrollDecrypt's linked code.  The
++# iOS 27 SDK omits AppServerSupport, so do not add a dead private link.
++TrollDecrypt_PRIVATE_FRAMEWORKS =
+ TrollDecrypt_CFLAGS = -fobjc-arc -I./include -I./deps
+ 
+ TrollDecrypt_LDFLAGS += -F$(THEOS_OBJ_DIR)
+diff --git a/Resources/Info.plist b/Resources/Info.plist
+index 13610aa..36f64e0 100644
+--- a/Resources/Info.plist
++++ b/Resources/Info.plist
+@@ -157,7 +157,9 @@
+ 	</dict>
+     
+ 	<key>CFBundleIdentifier</key>
+-	<string>com.fiore.trolldecrypt</string>
++	<string>com.liquidsky.TrollDecryptResearch</string>
++	<key>CFBundleDisplayName</key>
++	<string>TrollDecrypt 0-Sky</string>
+ 	<key>CFBundleInfoDictionaryVersion</key>
+ 	<string>6.0</string>
+ 	<key>CFBundlePackageType</key>
+@@ -169,7 +171,11 @@
+ 		<string>iPhoneOS</string>
+ 	</array>
+ 	<key>CFBundleVersion</key>
++	<string>1.2.4.1</string>
++	<key>CFBundleShortVersionString</key>
+ 	<string>1.2.4</string>
++	<key>0SkyAdaptation</key>
++	<string>ios27-cryptex-discovery-1</string>
+ 	<key>LSRequiresIPhoneOS</key>
+ 	<true/>
+ 	<key>UIDeviceFamily</key>
+diff --git a/TDApplicationListViewController.m b/TDApplicationListViewController.m
+index 97e36c9..d1ec08b 100644
+--- a/TDApplicationListViewController.m
++++ b/TDApplicationListViewController.m
+@@ -126,13 +126,12 @@ - (void)loadAvailableApplications {
+     NSArray <LSApplicationProxy *> *allInstalledApps = [[LSApplicationWorkspace defaultWorkspace] atl_allInstalledApplications];
+     [allInstalledApps enumerateObjectsWithOptions:NSEnumerationReverse usingBlock:^(LSApplicationProxy *proxy, NSUInteger idx, BOOL *stop) {
+         _LSApplicationState *state = proxy.appState;
+-        
+-        bool shouldSkip = (![proxy atl_isUserApplication] ||
++        BOOL researchCryptex = [proxy atl_isResearchCryptexApplication];
++        bool shouldSkip = ((!researchCryptex && ![proxy atl_isUserApplication]) ||
+             ![proxy atl_bundleIdentifier] ||
+             ![proxy atl_nameToDisplay] ||
+             ![proxy atl_shortVersionString] ||
+-            ![proxy bundleURL] ||
+-            !state.isInstalled ||
++            ![proxy atl_hasValidLaunchableBundle] ||
+             state.isPlaceholder);
+ 
+         if (shouldSkip) return;
+diff --git a/TrollDecrypt.entitlements b/TrollDecrypt.entitlements
+index 393a54e..387f8db 100644
+--- a/TrollDecrypt.entitlements
++++ b/TrollDecrypt.entitlements
+@@ -20,15 +20,5 @@
+         <string>com.apple.runningboard</string>
+         <key>com.apple.runningboard.process-state</key>
+         <true/>
+-        <key>com.apple.security.iokit-user-client-class</key>
+-        <array>
+-            <string>AGXDeviceUserClient</string>
+-            <string>AGXGLContext</string>
+-            <string>IOAccelDevice</string>
+-            <string>IOAccelDevice2</string>
+-            <string>IOAccelSharedUserClient</string>
+-            <string>IOAccelSharedUserClient2</string>
+-            <string>IOSurfaceRootUserClient</string>
+-        </array>
+     </dict>
+-</plist>
+\ No newline at end of file
++</plist>
+diff --git a/control b/control
+index f481522..a9b049c 100644
+--- a/control
++++ b/control
+@@ -1,8 +1,9 @@
+-Package: com.fiore.trolldecrypt
+-Name: TrollDecrypt
+-Version: 1.2.4
++Package: com.liquidsky.trolldecryptresearch
++Name: TrollDecrypt 0-Sky
++Version: 1.2.4+0sky1
+ Architecture: iphoneos-arm
+-Description: Decrypt iOS apps with TrollStore
+-Maintainer: fiore
++Description: 0-Sky research Cryptex discovery adaptation of TrollDecrypt
++Maintainer: 0-Sky Research
+ Author: fiore
++XS-Upstream-Source: https://github.com/donato-fiore/TrollDecrypt
+ Section: Applications

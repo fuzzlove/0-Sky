@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Compatibility admission: retired legacy backend has no validated transaction.
+echo 'Compatibility UNKNOWN: legacy installer requires a transactional compatibility adapter.' >&2
+exit 193
 # Install caller-supplied, already signed 0-Sky IPAs on one explicitly selected SRD.
 # Signing keys and passwords are never stored in this script or passed on argv.
 set -euo pipefail

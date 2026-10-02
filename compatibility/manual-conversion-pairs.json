@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "pairs": [
+    {
+      "id": "trollrecorder-zip-normalization",
+      "relationship": "deterministic_packaging_repair",
+      "original": {"label": "TRApp 4.7 original TIPA", "search_filename": "TRApp_4.7-3658.tipa"},
+      "working": {"label": "TRApp 4.7 normalized TIPA", "path": "addons/PoC/installer-verification/tipa-compression/TRApp_4.7-3658.tipa"},
+      "evidence": ["addons/PoC/installer-verification/tipa-compression/report.json", "addons/PoC/installer-verification/latest-retry.json"]
+    },
+    {
+      "id": "srdzsh-2.0.4-final-signing",
+      "relationship": "iterative_working_build",
+      "original": {"label": "SRDZsh 2.0.4 first build", "path": "addons/PoC/srdzsh/build/dist-2.0.4-first/SRDZsh-2.0.4.ipa"},
+      "working": {"label": "SRDZsh 2.0.4 device-tested build", "path": "addons/PoC/srdzsh/dist-2.0.4/SRDZsh-2.0.4.ipa"},
+      "evidence": ["addons/PoC/srdzsh/ACCEPTANCE.md", "addons/PoC/srdzsh/dist-2.0.4/"]
+    },
+    {
+      "id": "doodle-binary-to-source-port",
+      "relationship": "cross_version_source_port",
+      "original": {"label": "Doodle 1.2 supplied binary package", "search_filename": "com.nahtedetihw.doodle_1.2_iphoneos-arm64.deb"},
+      "working": {"label": "Doodle 1.1+0sky27.2 source port", "path": "artifacts/compatibility/doodle/com.nahtedetihw.doodle_1%3a1.1+0sky27.2_iphoneos-arm64.deb"},
+      "evidence": ["artifacts/compatibility/doodle/uat-summary.json", "compat/ios27/doodle/0sky-compat.json"]
+    },
+    {
+      "id": "doodle-port-package-evolution",
+      "relationship": "iterative_adapted_package",
+      "original": {"label": "Doodle 1.1+0sky27.1 candidate", "path": "artifacts/compatibility/doodle/com.nahtedetihw.doodle_1%3a1.1+0sky27.1_iphoneos-arm64.deb"},
+      "working": {"label": "Doodle 1.1+0sky27.2 device-tested package", "path": "artifacts/compatibility/doodle/com.nahtedetihw.doodle_1%3a1.1+0sky27.2_iphoneos-arm64.deb"},
+      "evidence": ["artifacts/compatibility/doodle/uat-summary.json"]
+    },
+    {
+      "id": "sileo-havoc-auth-evolution",
+      "relationship": "iterative_source_rebuild",
+      "original": {"label": "Sileo iOS 27 browser adaptation", "path": "artifacts/compatibility/builds/Sileo-2.5.1-ios27-havoc-browser.ipa"},
+      "working": {"label": "Sileo iOS 27 Havoc authentication candidate 2", "path": "artifacts/compatibility/builds/Sileo-2.5.1-ios27-havoc-auth2.ipa"},
+      "evidence": ["artifacts/compatibility/builds/Sileo-2.5.1-ios27-havoc-auth2.ipa.json"]
+    }
+  ],
+  "known_evidence_gaps": [
+    {
+      "component": "TrollDecrypt 0-Sky",
+      "reason": "The tested adapted IPA exists, but an untouched upstream IPA from the pinned source revision is not retained as a comparison artifact. Source and patch provenance are retained instead.",
+      "working_search_filename": "com.liquidsky.TrollDecryptResearch_1.2.4_decrypted.ipa"
+    },
+    {
+      "component": "Filza",
+      "reason": "Device repair and runtime evidence exists, but no authoritative untouched/working artifact pair is retained locally."
+    }
+  ]
+}

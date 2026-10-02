@@ -1,0 +1,1676 @@
+From 082ee91b95e8cb1701472cbd9c73665faf7df3d0 Mon Sep 17 00:00:00 2001
+From: Joe M <joem@Joes-Mac-Studio.local>
+Date: Fri, 2 Oct 2026 08:22:47 -0500
+Subject: [PATCH] checkpoint: preserve SRD zsh build and validation source
+
+---
+ .gitignore                             |   3 +
+ ACCEPTANCE.md                          |  35 ++++
+ Makefile                               |  18 +-
+ README.md                              | 122 +++++++++++++-
+ app/NativeTerminal.swift               | 195 ++++++++++++++++++++++
+ app/icons/AppIcon60x60@2x.png          | Bin 0 -> 1315 bytes
+ app/icons/AppIcon76x76@2x~ipad.png     | Bin 0 -> 1578 bytes
+ app/neofetch-info.m                    |  44 +++++
+ app/neofetch-launcher.c                |  32 ++++
+ app/rootd.c                            | 136 +++++++++++++++
+ patches/0003-static-zftp.patch         |   8 +
+ patches/neofetch/0001-native-ios.patch |  94 +++++++++++
+ scripts/build_app.py                   | 145 ++++++++++++++++
+ scripts/build_extras.py                |  95 +++++++++++
+ scripts/capture_neofetch.py            |  25 +++
+ scripts/deploy.py                      | 105 ++++++++++++
+ scripts/native_backend.py              | 219 +++++++++++++++++++++++++
+ scripts/verify.py                      |  41 +++++
+ tests/device_session.py                |  86 ++++++++++
+ 19 files changed, 1397 insertions(+), 6 deletions(-)
+ create mode 100644 ACCEPTANCE.md
+ create mode 100644 app/NativeTerminal.swift
+ create mode 100644 app/icons/AppIcon60x60@2x.png
+ create mode 100644 app/icons/AppIcon76x76@2x~ipad.png
+ create mode 100644 app/neofetch-info.m
+ create mode 100644 app/neofetch-launcher.c
+ create mode 100644 app/rootd.c
+ create mode 100644 patches/0003-static-zftp.patch
+ create mode 100644 patches/neofetch/0001-native-ios.patch
+ create mode 100644 scripts/build_app.py
+ create mode 100644 scripts/build_extras.py
+ create mode 100644 scripts/capture_neofetch.py
+ create mode 100644 scripts/deploy.py
+ create mode 100755 scripts/native_backend.py
+ create mode 100644 scripts/verify.py
+ create mode 100644 tests/device_session.py
+
+diff --git a/.gitignore b/.gitignore
+index 64c88d2..45efa52 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -3,3 +3,6 @@
+ /zsh-cryptex.root/
+ *.cxbd
+ *.dmg
++dist/
++dist-*/
++__pycache__/
+diff --git a/ACCEPTANCE.md b/ACCEPTANCE.md
+new file mode 100644
+index 0000000..23aa428
+--- /dev/null
++++ b/ACCEPTANCE.md
+@@ -0,0 +1,35 @@
++# SRDZsh app cryptex acceptance criteria
++
++- arm64e iOS 26+ binaries, real root PTY broker launched in the system domain.
++- A Home Screen app icon, local terminal emulator, keyboard, control keys,
++  resizing, ZLE, job control, completion, persistent root history.
++- One shell per connection; no inactivity timer or command execution deadline.
++  State remains while the app retains its connection, including suspension.
++  Explicit exit, New session, app termination, or reboot ends a session.
++- Root privilege means real/effective UID and GID 0, confirmed by `id` and a
++  write/read/remove test in `/var/root`, not environment variable labels.
++- Complete upstream function tree and all standard Darwin-supported modules,
++  including zftp. Optional Linux capabilities, GDBM, and PCRE modules require
++  their platform/library dependencies and are not falsely advertised.
++- Existing `/var/jb` tools and every mounted cryptex are discoverable. A native
++  signed Toybox supplies standalone basic Unix commands on a newly enrolled SRD.
++- Stable cryptex ID `com.liquidsky.srdzsh`, app ID
++  `codes.liquidsky.research.srdzsh`, writable state in `/var/root`.
++- Raw SDK-prepared APFS DMG, manifest-bound trust-cache assets, and optional IPA.
++  Installation uses exact-device Native RemoteXPC and fresh Apple TSS research
++  authorization. Developer Mode alone on a production iPhone is insufficient.
++- Both attached iPhones must show the app icon and pass on-device root, module,
++  terminal resize, signal, command and session lifetime checks. Reboot persistence
++  is configured but only claimed tested if an authorized reboot is performed.
++
++## Neofetch update
++
++- Bundle upstream Neofetch 7.1.0 with MIT license, manual, a signed GNU Bash
++  scripting runtime and its GPL license/source provenance.
++- Preserve upstream flags and writable user configuration; adapt iOS version,
++  model, uptime and memory queries to native APIs so no jailbreak tools are
++  required. Report real iOS version and host model on each phone.
++- Keep all existing root terminal behavior and modules; install version 2.0.5
++  through Native RemoteXPC on both currently authorized devices.
++- Verify `neofetch --stdout`, ASCII output and option handling in the actual root
++  PTY on both phones, using only bundled tools in the test PATH.
+diff --git a/Makefile b/Makefile
+index 843621e..8aed1e6 100644
+--- a/Makefile
++++ b/Makefile
+@@ -37,13 +37,13 @@ BUILD_STAMP := $(BUILD_DIR)/.built
+ CRYPTEX_STAMP := $(CRYPTEX_ROOT)/.zsh-cryptex
+ 
+ PATCHES := $(sort $(wildcard $(CURDIR)/patches/*.patch))
+-NCURSES_HEADERS := curses.h ncurses.h ncurses_dll.h term.h unctrl.h
++NCURSES_HEADERS := curses.h ncurses.h ncurses_dll.h term.h unctrl.h arpa/telnet.h
+ TERMINFO_SOURCE_DIR ?= /usr/share/terminfo
+ TERMINFO_ENTRIES ?= ansi dumb linux screen screen-256color tmux tmux-256color vt100 xterm xterm-color xterm-256color
+ REQUIRED_STATIC_MODULES := \
+ 	zsh/zle zsh/complete zsh/complist zsh/computil \
+ 	zsh/termcap zsh/terminfo zsh/curses \
+-	zsh/regex zsh/zpty zsh/net/socket zsh/net/tcp zsh/system
++	zsh/regex zsh/zpty zsh/net/socket zsh/net/tcp zsh/system zsh/zftp
+ 
+ SDK_PATH = $(shell xcrun --sdk "$(SDK)" --show-sdk-path)
+ MACOS_SDK_PATH = $(shell xcrun --sdk macosx --show-sdk-path)
+@@ -101,6 +101,7 @@ $(COMPAT_STAMP):
+ 			echo "Missing macOS SDK header: $$header" >&2; \
+ 			exit 1; \
+ 		}; \
++		mkdir -p "$(COMPAT_INCLUDE_DIR)/$$(dirname "$$header")"; \
+ 		cp "$(MACOS_SDK_PATH)/usr/include/$$header" "$(COMPAT_INCLUDE_DIR)/$$header"; \
+ 	done
+ 	@touch "$@"
+@@ -135,7 +136,7 @@ $(BUILD_STAMP): $(CONFIGURE_STAMP)
+ 	@$(MAKE) -C "$(BUILD_DIR)" -j"$(JOBS)"
+ 	@touch "$@"
+ 
+-$(CRYPTEX_STAMP): $(BUILD_STAMP) config/zshenv config/zshrc $(PROJECT_LICENSE) $(ADDITIONAL_LICENSES)
++$(CRYPTEX_STAMP): $(BUILD_STAMP) config/zshenv config/zshrc $(PROJECT_LICENSE) $(ADDITIONAL_LICENSES) Makefile
+ 	@echo "Creating cryptex root at $(CRYPTEX_ROOT)"
+ 	@rm -rf "$(CRYPTEX_ROOT)"
+ 	@mkdir -p "$(CRYPTEX_ROOT)"
+@@ -165,6 +166,9 @@ $(CRYPTEX_STAMP): $(BUILD_STAMP) config/zshenv config/zshrc $(PROJECT_LICENSE) $
+ 		relative="$${entry#$(TERMINFO_SOURCE_DIR)/}"; \
+ 		mkdir -p "$(CRYPTEX_ROOT)/usr/share/terminfo/$$(dirname "$$relative")"; \
+ 		install -m 0644 "$$entry" "$(CRYPTEX_ROOT)/usr/share/terminfo/$$relative"; \
++		letter="$$(printf '%s' "$$term" | cut -c1)"; \
++		mkdir -p "$(CRYPTEX_ROOT)/usr/share/terminfo/$$letter"; \
++		install -m 0644 "$$entry" "$(CRYPTEX_ROOT)/usr/share/terminfo/$$letter/$$term"; \
+ 	done
+ 	@touch "$@"
+ 
+@@ -232,3 +236,11 @@ help:
+ 	@echo "  CRYPTEX_IDENTIFIER=$(CRYPTEX_IDENTIFIER)"
+ 	@echo "  SRDTOOL=$(SRDTOOL)"
+ 	@echo "  ECID=<device-ecid>"
++
++.PHONY: app dmg
++PYTHON ?= python3
++APP_OUTPUT ?= $(CURDIR)/dist
++app: check
++	@$(PYTHON) scripts/build_app.py --output "$(APP_OUTPUT)" --arch "$(ARCH)" --ios-min "$(IOS_MIN_VERSION)"
++dmg: app
++	@$(PYTHON) scripts/deploy.py --output "$(APP_OUTPUT)"
+diff --git a/README.md b/README.md
+index 9d1668d..f2f34df 100644
+--- a/README.md
++++ b/README.md
+@@ -1,5 +1,118 @@
+ # zsh for Apple Security Research Device
+ 
++## Home Screen terminal and Native RemoteXPC installation
++
++The app build adds a Home Screen icon named **srdzsh**, a native SwiftTerm UIKit
++terminal, and a native launch daemon that runs a real root zsh in a controlling
++PTY. The daemon checks real/effective UID and GID 0 before opening a shell.
++The UIKit app runs as mobile; commands execute in its separate root PTY.
++Connections authenticate locally on loopback and have no idle deadline.
++Working directory, variables, jobs, and shell state persist for that session;
++root history persists across sessions. Tab, Esc, arrows, Ctrl-C and Ctrl-D
++buttons complement the keyboard. Tap **Keyboard** to show the keyboard and
++**New session** after an explicit exit.
++
++Each foreground session remains open until exit, New session, app termination,
++or device reboot. Background suspension keeps the root shell alive while its
++connection remains open. iOS can terminate the client under memory pressure;
++this does not promise immunity to jetsam or survive a force-quit.
++
++The package includes zsh 5.9.2, all upstream completion/functions, 33 supported
++static modules (including zftp), common terminfo in both letter/hex directory
++layouts, and 154 enabled Toybox applets, plus Neofetch 7.1.0.
++GNU Bash 5.2.37 supplies Neofetch's scripting runtime (readline and NLS disabled).
++Run `neofetch` in the terminal for an ASCII logo and live phone information;
++`neofetch --stdout` prints plain text. Upstream flags and writable configuration
++under `/var/root/.config/neofetch/` remain available. Native iOS queries handle
++binary SystemVersion plists and use the actual VM page size for memory reporting.
++It also discovers existing `/var/jb`
++commands and tools from every mounted cryptex. `commands.json` inventories
++the bundled applets. Optional Linux capabilities, GDBM, and PCRE modules are
++not built; their platform/library dependencies are absent.
++
++Build using this workspace's pinned device interpreter:
++
++```sh
++export ZERO_SKY_ROOT=/path/to/0-Sky
++cd "$ZERO_SKY_ROOT/addons/PoC/srdzsh"
++make dmg PYTHON=../../../.venv/bin/python APP_OUTPUT="$PWD/dist-2.0.5"
++```
++
++Choose a new `APP_OUTPUT` for a fresh rebuild; existing outputs are preserved.
++The zsh, SwiftTerm 1.20.0, Neofetch 7.1.0 and Bash 5.2.37 source archives
++are pinned and checksum verified. `sources/` accompanies the artifacts with
++Neofetch/Bash source archives, port additions, build scripts and configuration;
++the cryptex also includes their licenses. Bash uses system libc allocation and
++upstream cross-compile defaults; `getentropy` is disabled because its declaration
++is absent from public iOS headers, using upstream `/dev/urandom`/`arc4random` instead.
++SwiftTerm is compiled statically with the iPhoneOS SDK and uses
++CoreGraphics rendering; it does not depend on WebKit.
++`scripts/build_app.py --toybox PATH` can select another validated
++arm64e SRD Toybox build. The default reuses the adjacent `srdsh-work` build
++and its matching config/applet inventory.
++
++Outputs are `SRDZsh-2.0.5.dmg`, `SRDZsh-2.0.5.ipa`, `root/`, and
++`cryptex/` containing the `.cxbd` bundle, manifest-bound trust cache and volume
++seal. The DMG is the exact SDK-prepared APFS image, not a compressed UDZO
++replacement. Keep its cryptex assets together: the DMG alone is insufficient
++for personalization. The IPA carries the UI and shell resources; the companion
++root-service cryptex is required to execute its root terminal.
++
++Install the already-built artifact on both currently paired SRDs:
++
++```sh
++export SRD_PRIMARY_UDID='<exact MobileDevice UDID>'
++export SRD_SECONDARY_UDID='<exact MobileDevice UDID>'
++../../../.venv/bin/python scripts/deploy.py --output dist-2.0.5 \
++  --install --register --verify \
++  --udid "$SRD_PRIMARY_UDID" \
++  --udid "$SRD_SECONDARY_UDID"
++```
++
++`--install` uses Native RemoteXPC, an exact UDID, a fresh domain-3 nonce,
++and live Apple TSS research authorization. It validates asset digests and
++authorization before replacing only `com.liquidsky.srdzsh`, installs it
++persistently, then checks its installed version. The native backend is a
++snapshot of this workspace's reviewed/restored SRD installer; it includes the
++process-local RemoteXPC flow-control fix and does not modify installed Python
++dependencies. `--register` reuses the paired worker's registrar/update logic,
++including MCM registration and exact payload/launch verification. `--verify`
++checks the root service and Home Screen icon. These latter options use the
++existing key-only, host-key-pinned SSH profile and require authorized access.
++
++To repeat on a **new SRD**, pair and unlock it, enable Developer Mode, prepare
++its matching appregistrard/runtime and paired SSH profile with the existing
++0-Sky enrollment workflow, and replace the UDID above. `--instance PATH`
++selects a profile explicitly. With only `--install`, SSH is not required for
++the cryptex installation itself. Developer Mode on a production iPhone alone
++does not provide Apple research authorization or root access.
++
++Run the on-device PTY acceptance test separately:
++
++```sh
++../../../.venv/bin/python scripts/verify.py --output dist-2.0.5 \
++  --udid "$SRD_PRIMARY_UDID"
++../../../.venv/bin/python scripts/verify.py --output dist-2.0.5 \
++  --udid "$SRD_SECONDARY_UDID"
++```
++
++The test checks actual UID/EUID and protected-file access, modules, completion,
++PTY creation/resize, command discovery, 65 seconds idle, retained shell state,
++Ctrl-C, history flushing, explicit exit, and rejected invalid authentication.
++Reports and installation logs remain beside the artifacts. Reboot persistence
++is configured; it has not been verified by rebooting these phones.
++
++Version 2.0.3 was installed and registered on both phones above. Both passed
++the complete PTY acceptance test, and screenshots show the native terminal,
++the root prompt, `uid=0(root) gid=0(wheel)`, and `/var/root`. The earlier WebKit
++frontend displayed a black screen on these SRDs; the final UIKit/CoreGraphics
++frontend fixes it. See `dist-2.0.3/verification-summary.json` and its two terminal
++screenshots for that device evidence. The 2.0.5 update adds Neofetch; its
++verification reports include actual plain text, ASCII, options and custom
++configuration tests using only bundled tools in PATH. Both updated native
++terminals display Neofetch with the actual device model, iOS version, CPU/GPU
++and memory. See `dist-2.0.5/verification-summary.json` and the Neofetch screenshots.
++
+ This project cross-compiles zsh 5.9.2 for arm64e iOS and assembles a root
+ directory suitable for `srdtool cryptex install`.
+ 
+@@ -76,9 +189,9 @@ in lexical mount-directory order.  This makes their tools discoverable without
+ letting an unrelated cryptex override system commands. Start a new shell after
+ installing or removing a cryptex to refresh the discovered paths.
+ 
+-The `zsh/zftp` module is not included because it depends on the obsolete
+-`<arpa/telnet.h>` header, which is absent from the iPhoneOS SDK.  Modern
+-`zsh/net/tcp` and `zsh/net/socket` support is included.
++The `zsh/zftp` module is linked statically. Its `arpa/telnet.h` protocol constants
++are grafted from the macOS SDK alongside the ncurses headers; no macOS
++libraries are linked. Modern `zsh/net/tcp` and `zsh/net/socket` are also included.
+ 
+ ## SRD-specific patches
+ 
+@@ -93,3 +206,6 @@ The `zsh/zftp` module is not included because it depends on the obsolete
+   user startup files under `HOME` or `ZDOTDIR` unchanged. Loading the packaged
+   `zshenv` also enables the cryptex `PATH`, completion, and terminfo setup
+   described above.
++- `0003-static-zftp.patch` adds the upstream FTP builtin to the static module
++  build. Its protocol header contains wire constants and does not add a
++  platform-specific runtime dependency.
+diff --git a/app/NativeTerminal.swift b/app/NativeTerminal.swift
+new file mode 100644
+index 0000000..2bf86a7
+--- /dev/null
++++ b/app/NativeTerminal.swift
+@@ -0,0 +1,195 @@
++import UIKit
++import SwiftTerm
++import Darwin
++
++final class RootConnection {
++    private let lock = NSLock()
++    private let writes = DispatchQueue(label: "srdzsh.native.input")
++    private var descriptor: Int32 = -1
++    private var generation: UInt64 = 0
++    var output: (([UInt8]) -> Void)?
++    var status: ((String, Bool) -> Void)?
++
++    func close() {
++        lock.lock(); generation &+= 1
++        let old = descriptor; descriptor = -1; lock.unlock()
++        if old >= 0 { _ = Darwin.shutdown(old, SHUT_RDWR) }
++    }
++    private func writeAll(_ bytes: [UInt8], to fd: Int32) -> Bool {
++        bytes.withUnsafeBytes { raw in
++            var offset = 0
++            while offset < raw.count {
++                let n = Darwin.send(fd, raw.baseAddress!.advanced(by: offset), raw.count-offset, 0)
++                if n < 0 && errno == EINTR { continue }
++                if n <= 0 { return false }; offset += n
++            }
++            return true
++        }
++    }
++    private func report(_ message: String, ready: Bool = false) {
++        DispatchQueue.main.async { self.status?(message, ready) }
++    }
++    func connect() {
++        close(); lock.lock(); let current = generation; lock.unlock()
++        report("Connecting to the root shell…")
++        DispatchQueue.global(qos: .userInitiated).async {
++            let fd = Darwin.socket(AF_INET, SOCK_STREAM, 0)
++            var yes: Int32 = 1
++            setsockopt(fd, SOL_SOCKET, SO_NOSIGPIPE, &yes, socklen_t(MemoryLayout.size(ofValue: yes)))
++            var address = sockaddr_in()
++            address.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
++            address.sin_family = sa_family_t(AF_INET); address.sin_port = UInt16(22340).bigEndian
++            address.sin_addr.s_addr = inet_addr("127.0.0.1")
++            let connected = withUnsafePointer(to: &address) { pointer in
++                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
++                    Darwin.connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
++                }
++            }
++            guard connected == 0 else { Darwin.close(fd); self.report("Root service unavailable. Tap New session."); return }
++            var timeout = timeval(tv_sec: 10, tv_usec: 0)
++            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
++            guard self.writeAll(Array(sessionCredential.utf8), to: fd) else {
++                Darwin.close(fd); self.report("Root service disconnected."); return
++            }
++            var ready = [UInt8]()
++            while ready.count < 64 {
++                var byte: UInt8 = 0
++                guard Darwin.recv(fd, &byte, 1, 0) == 1 else { break }
++                ready.append(byte); if byte == 10 { break }
++            }
++            guard String(bytes: ready, encoding: .utf8) == "READY uid=0 gid=0\n" else {
++                Darwin.close(fd); self.report("Root authentication failed. Tap New session."); return
++            }
++            timeout.tv_sec = 0
++            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, socklen_t(MemoryLayout<timeval>.size))
++            self.lock.lock()
++            guard self.generation == current else { self.lock.unlock(); Darwin.close(fd); return }
++            self.descriptor = fd; self.lock.unlock()
++            self.report("srdzsh · root UID 0 · interactive terminal", ready: true)
++            var buffer = [UInt8](repeating: 0, count: 32768)
++            while true {
++                let n = Darwin.recv(fd, &buffer, buffer.count, 0)
++                if n < 0 && errno == EINTR { continue }
++                if n <= 0 { break }
++                let bytes = Array(buffer.prefix(n))
++                DispatchQueue.main.async {
++                    self.lock.lock(); let valid = self.generation == current; self.lock.unlock()
++                    if valid { self.output?(bytes) }
++                }
++            }
++            self.lock.lock()
++            let active = self.generation == current
++            if active { self.descriptor = -1 }; self.lock.unlock()
++            Darwin.close(fd)
++            if active { self.report("Session closed. Tap New session.") }
++        }
++    }
++    func send(type: UInt8, bytes: [UInt8]) {
++        guard !bytes.isEmpty && bytes.count <= 65536 else { return }
++        let n = UInt32(bytes.count)
++        let framed = [type, UInt8((n >> 24) & 255), UInt8((n >> 16) & 255), UInt8((n >> 8) & 255), UInt8(n & 255)] + bytes
++        lock.lock(); let fd = descriptor; let current = generation; lock.unlock()
++        guard fd >= 0 else { return }
++        writes.async {
++            self.lock.lock(); let valid = self.generation == current && self.descriptor == fd; self.lock.unlock()
++            if valid { _ = self.writeAll(framed, to: fd) }
++        }
++    }
++    func resize(cols: Int, rows: Int) {
++        let c = UInt16(clamping: cols), r = UInt16(clamping: rows)
++        send(type: 2, bytes: [UInt8(c >> 8), UInt8(c & 255), UInt8(r >> 8), UInt8(r & 255)])
++    }
++}
++
++final class NativeTerminalController: UIViewController, TerminalViewDelegate {
++    private let terminal = TerminalView(frame: .zero)
++    private let statusLabel = UILabel()
++    private let toolbar = UIStackView()
++    private let connection = RootConnection()
++    private var keyboardHeight: CGFloat = 0
++    override func viewDidLoad() {
++        super.viewDidLoad()
++        view.backgroundColor = UIColor(red: 0.06, green: 0.08, blue: 0.11, alpha: 1)
++        statusLabel.font = .systemFont(ofSize: 13, weight: .medium)
++        statusLabel.textColor = .systemGreen; statusLabel.numberOfLines = 2
++        statusLabel.text = "srdzsh · starting root terminal"
++        terminal.terminalDelegate = self
++        terminal.font = .monospacedSystemFont(ofSize: 14, weight: .regular)
++        terminal.nativeBackgroundColor = view.backgroundColor!
++        terminal.nativeForegroundColor = UIColor(white: 0.91, alpha: 1)
++        try? terminal.setUseMetal(false)
++        toolbar.axis = .horizontal; toolbar.spacing = 6; toolbar.distribution = .fillEqually
++        for (title, action) in [("Keyboard", #selector(showKeyboard)), ("Ctrl C", #selector(interruptShell)), ("Tab", #selector(sendTab)), ("New session", #selector(newSession))] {
++            let button = UIButton(type: .system)
++            button.setTitle(title, for: .normal); button.addTarget(self, action: action, for: .touchUpInside)
++            button.titleLabel?.font = .systemFont(ofSize: 13, weight: .medium)
++            button.backgroundColor = UIColor(white: 0.14, alpha: 1); button.layer.cornerRadius = 7
++            toolbar.addArrangedSubview(button)
++        }
++        view.addSubview(statusLabel); view.addSubview(terminal); view.addSubview(toolbar)
++        terminal.feed(text: "srdzsh native terminal\r\nConnecting to the root shell…\r\n")
++        connection.output = { [weak self] bytes in self?.terminal.feed(byteArray: bytes[...]) }
++        connection.status = { [weak self] text, ready in
++            guard let self = self else { return }
++            self.statusLabel.text = text
++            if ready {
++                let model = self.terminal.getTerminal()
++                self.connection.resize(cols: model.cols, rows: model.rows)
++                if ProcessInfo.processInfo.arguments.contains("--ui-smoke") {
++                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
++                        self.connection.send(type: 1, bytes: Array("id; pwd; print -r -- Native_terminal_ready\n".utf8))
++                    }
++                }
++                if ProcessInfo.processInfo.arguments.contains("--neofetch-smoke") {
++                    DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
++                        self.connection.send(type: 1, bytes: Array("clear; neofetch --ascii_distro mac_small\n".utf8))
++                    }
++                }
++            }
++        }
++        NotificationCenter.default.addObserver(self, selector: #selector(keyboardChanged(_:)), name: UIResponder.keyboardWillChangeFrameNotification, object: nil)
++        UIApplication.shared.isIdleTimerDisabled = true
++        connection.connect()
++    }
++    override func viewDidLayoutSubviews() {
++        super.viewDidLayoutSubviews()
++        let safe = view.safeAreaInsets, width = view.bounds.width-safe.left-safe.right
++        let bottom = view.bounds.height-max(safe.bottom, keyboardHeight)
++        statusLabel.frame = CGRect(x: safe.left+10, y: safe.top, width: width-20, height: 38)
++        toolbar.frame = CGRect(x: safe.left+8, y: bottom-44, width: width-16, height: 38)
++        terminal.frame = CGRect(x: safe.left+4, y: safe.top+40, width: width-8, height: max(1,bottom-safe.top-88))
++    }
++    @objc private func keyboardChanged(_ notification: Notification) {
++        guard let end = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect else { return }
++        let rect = view.convert(end, from: nil)
++        keyboardHeight = max(0, view.bounds.height-rect.minY)
++        view.setNeedsLayout(); view.layoutIfNeeded()
++    }
++    @objc private func showKeyboard() { _ = terminal.becomeFirstResponder() }
++    @objc private func interruptShell() { connection.send(type: 1, bytes: [3]) }
++    @objc private func sendTab() { connection.send(type: 1, bytes: [9]) }
++    @objc private func newSession() { connection.connect() }
++    func sizeChanged(source: TerminalView, newCols: Int, newRows: Int) { connection.resize(cols: newCols, rows: newRows) }
++    func send(source: TerminalView, data: ArraySlice<UInt8>) { connection.send(type: 1, bytes: Array(data)) }
++    func setTerminalTitle(source: TerminalView, title: String) {}
++    func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
++    func scrolled(source: TerminalView, position: Double) {}
++    func requestOpenLink(source: TerminalView, link: String, params: [String:String]) {}
++    func bell(source: TerminalView) { UIImpactFeedbackGenerator(style: .light).impactOccurred() }
++    func clipboardCopy(source: TerminalView, content: Data) {}
++    func clipboardRead(source: TerminalView) -> Data? { nil }
++    func iTermContent(source: TerminalView, content: ArraySlice<UInt8>) {}
++    func rangeChanged(source: TerminalView, startY: Int, endY: Int) {}
++}
++
++@main final class NativeAppDelegate: UIResponder, UIApplicationDelegate {
++    func application(_ application: UIApplication, didFinishLaunchingWithOptions options: [UIApplication.LaunchOptionsKey: Any]?) -> Bool { true }
++}
++@objc(SceneDelegate) final class NativeSceneDelegate: UIResponder, UIWindowSceneDelegate {
++    var window: UIWindow?
++    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
++        guard let scene = scene as? UIWindowScene else { return }
++        let window = UIWindow(windowScene: scene)
++        window.rootViewController = NativeTerminalController(); window.makeKeyAndVisible(); self.window = window
++    }
++}
+diff --git a/app/icons/AppIcon60x60@2x.png b/app/icons/AppIcon60x60@2x.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..d353a094cbacaecbac46667124ab87b6c8dd449b
+GIT binary patch
+literal 1315
+zcmaKseK->c9LIO$rLF0%$;&FvLsYs%(~E_ah0(Y!OAj7zH`YeUbf}rT3^yK@B23v!
+z=4~v(aC>GQ;%JL?QX8W&ra~N+k#?@@>A$<@`Mo^P@A>}oeV)(vM+rcAfq_sU0002{
+zczd4R*vbF2q0YwS=`%9`fK6|FJUz}O-<_5F#_k9-%Tz@1qsCpz9j`bA0<FF?hDb9I
+z7;BG!pnAq0F^dJ0KHLj8nYkI>nF$8jly~S@DNd%hdLvHOkjW>2cc56#(egl~Pd)<L
+z(|v~4jhf${u{6HwM3{OuR(5EN|HLz)yfW?SPJb7R9^KI_v){DGHk0&qV4=lW7T}CA
+zgCdKVd*aIfXbY(dQmsV`3OZNRsDmSG<V%J!+pdcEw`87GgU2P;0brj{o%U$cKH@C6
+zv9{Uch_#8RDC{mhSU2$$MnMT|J64y%d|McYs1=E$#LJm_eSMJbM&|(fH0^xD?6;ge
+z-d`d3>mVbH9J+7d@R$Q0DMfCE=41{r(e+cIF7;Tmf{Vah#HldxNUJS$B6g(G5!NmB
+z1}_iVK_^7FYqotXKo~QE4MGK7;qq4xWHqFcZcm8bXA?TG?|-%h4tRb=+jHW-jvh>Y
+zmO-YQ`J&+9A3H_p5+a?6GwPKRuxb6w^-{`?-rEb4y<;G)vKWk$K9e}s<LB#C)~Y;r
+zjbxguvWQ@Lxk@zWxHq5r2;eQkL~oQf=#jh0%b*}BblyRgZNI~>tIEy=UPN<SSzy0F
+zg=rQ2$OfXSHHLoq9o#w})T3+JKC)ffNzS>(GLI^ZJVuy8PKmZB(OceO1Ii3j)Eb^}
+zGLe6cx@FnIyiXi+OHwlU!ZZi3b+W?6Zw0NVF<xiS<l7moY;{-2_6AxyTsD3-Cbql3
+zP^u~_em;k*Zez3cAfaQjrSXmG7<O0Z=_x4#=>}^pRJiLc;(i-T5Jq*@SCYIs?8{z0
+z-WVOXl*w)?^CvmN2`ht|e1B8_4`}Z(xjH31l`4E6sqA<w@6;91n!j1Pmyi}BT%GH0
+z=`R5lp2e)SKCy4ZI5bAj8m4lP?7I$yM{;V3NrXtbEHand+xWtcYOt24FXzKK)S`zO
+z9}@0dXgqx5r<C2=>7m|wlI1-?@u+MzHA-<iBKSm->tg+JizTXl$msQ!q|(PruQkfv
+zl2TP|g8=^n_Wc}6^PF+q;*Hr1SA(8Qur<%EY^On{z`h{Hu3H=xyGOa8+n(=LvRKAp
+zPZIYou1~W2$MG@R=tu-ut|{0_BVxRgyu=H+9BtS+nz5R-&ADlCq8iOL=5epv+&{z-
+z+PtireOTNan>*?^;!Sen6LCYfrXQ=B_AOq?la<0Q3x&z42dLfX%55T2^FnZZ!x!3Q
+zDAU5G!$dK;|A2itA%^budsW9LDEGG|`Yo5LC2K!Muqa>T{{!d0S^TW5OXs#zE+}5}
+ze$}3i_k)E7xybaP90UIvB&xAYnOCsfddFx>^A&o<fEg~;nK0pM9$5wMJF3xM36E1s
+zUhRYA>XF?KSw6~R4%JCsO}u==Npqo#=>#*bHG2KIiZ;D^zF`rY)oj0rYU=3xCC*u<
+zI6d(=1^OqTZr%*9XzM&fO4l3#$ryoj=z-$oRt>QFs(Xb2)E`T|C^RXD$ao`;f}-Iq
+z9>dx2=$Y(_%>z33dqn(@SSJ|H<Wo*Rd5(sy8$?p7z7~;oUEO$o03QU(lY27!#@~d8
+BjnM!A
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/icons/AppIcon76x76@2x~ipad.png b/app/icons/AppIcon76x76@2x~ipad.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..480217d42256aff773ce9f59ed5e8ef12b9be453
+GIT binary patch
+literal 1578
+zcmb7FcQhLa7*A<kQ7cB(-bGQPSJVg<6)VMAu}U~ftJErIo>9^gN$!kTY1Ks|My=AS
+zS<2NWW=k5UoE&1M5rWgZ>wDM#?%w;x?|t9zpWpZ1?|le6s09y~7#9El;IV{&9gchc
+z=RD1JT=O0^MF9Y(HZ8%Xj?qPHb0Ie3krKU|x2)a!L4l85x)(Ui4jbNPipyff^33bb
+zWi_Y4<C2t&-9DK}i{kb>&Kqmm<FKm;jSKFV>-z+=N}(wQ1AbVck(JcoYm+JV{L@^&
+zG;kC)<6FIG)oXLKHbx9cT_rDebAOJuZZ*76xf$BG3!~2i97_O}3MN2K6qro`{TC!y
+zrI7D>AK3CFaQ}ATy6<I9CObUlX6qOiZDgTjNNM%AQ5)kf4TcXTm8oqED@k<N<%Q*3
+zJ}aj1C2C>flTx#K1xTRzE`i@Em>^Y$l4Ds3IRy}a4vqq;9~T^b2>!L~J=#ipQ#Ekr
+z6H(xU+it3bZrfzZ@j&x(7&E*wS%9<0Di5T(m~H(6W#{)E*i@ULzzuwjJ}`wz03Y0c
+z=4jXm$5z-{F?5h<uqqo?r&LR#Q7s_EdbnB?4aOvQufZoV{Pvo1S~Wp9Ry>lB14%05
+zMbIm1CqEOu$o!Y${|=XA*l`lU@vUSEaU$02Os)v|QKhnrd&)BQQ~LZ5aAu*ttOO$7
+zs1S<ZnOA1-mhe-0IJj``CgV&)i2A(nkS#X_5*G!dWx=m3;U|k$=Yx(AZSjINbgyWH
+zG_RXyRBKblXnx8o`sT$=eRQV_nMR8{f*j@iCQ0KZt<zU(18sWWlddFgZLxmsr|-M(
+zQoP5xJ)P)7t1iKj$R+graTv5~a8U?p*8?yY#P@>L%!FAQS40lQ`>D@jkP*9AJMWj@
+zgH?c)vK`^EE8C#dadeLKov^?m1+xA5y;G3`S$(Sxh_!dVE+N^Tjj=?guMsQs8NRph
+zfZaKL&|rE^a&^9$nH?GxL>bsws`_^5XDuVSZ6aqhlOmJY(7RqG5~H8v)fR0ehU{+J
+z(`hwdF6-Hl*KRk^c^DpY<JI91V?CvXX*Uucoju{x!l;{AFeWV-lb$yU-O$sO<gr+o
+zf*0v)i~8Xsw1vfSSy{u*69$DGEpe|qU&gD?fV@K@jH2TbxBKRCQimuVi~Fgp_C>1y
+z4#{taR7M;eOlM=+b*$91GwRZGt`8JjRNUIXBlqGt*26l~e{foUj9RB_{EotXN~~nI
+z2e!>2GbadCMLAo){?R!>d1Tk4yz1Iw>D&-}nU%?3vS{;Drwq|RoN3n)TiMGrDemhh
+z>}=iBP2E@=%PWI|em9vdtZ2O$wf)#+?a6`*O!v^uQ_ny#6N>$m3>Zf_2jnboNF^wL
+zFm7%cQG7XlcB-^o{(_*cO(giz>9VwzcJgpKo9*zu8LC7ns4jdoE+U9xs8LYQwE`NQ
+zVo`k=jsC^F{*A4<uB_Fjn|gH#iWN+}mSi}pEl*m&$)k0rNmC3av2P?y9`kK+&DQTL
+z+OX&IHN!WJ_mdA96yn{u-M9Iu%@;Yv;Y^)zP9INNu$IGs>Cme%Q<|-&A6TP6{wv%6
+zZG!w389PKtQQrP)sJUY4A9+$o8NTwF5V;c=NRk3Z1&J0^mph_gRr@jm${<euv;E(Y
+ziqaoe=!=1$fKy=tqUeY&QjjrZpnCRvBF@@WqyUNbvdr)fQgjf2RC><bsPXU0P{6<;
+zYB3F#D+wCBSWu}CY-NiPI+|8qDZpv{M)+>#C9)PU1@n>e^ftH)12ZS2e}7hWS$5XO
+z$m(4)qFP$m6ZT!)p6uSbYcG}fG_020dQxb@rfMu)4G&`q7rY_O5$*U?e6XC~Ku62?
+z%qnPlIVWKxZ9%YpOn-*Mx_B;^3Qo{zXEG#aJ>i2$!+LCup}e+1Ce-tAub&UgStNGd
+xJ12R7_o>InY-2YQIi4;Hql~YvgS>Xcc5Y^C0-q#fd;9|cmgZ1!^;PfWKLJpi@k{^!
+
+literal 0
+HcmV?d00001
+
+diff --git a/app/neofetch-info.m b/app/neofetch-info.m
+new file mode 100644
+index 0000000..a30d67f
+--- /dev/null
++++ b/app/neofetch-info.m
+@@ -0,0 +1,44 @@
++#import <Foundation/Foundation.h>
++#include <mach/mach.h>
++#include <sys/sysctl.h>
++#include <sys/time.h>
++#include <stdio.h>
++#include <string.h>
++#include <time.h>
++
++int main(int argc, char **argv) {
++    @autoreleasepool {
++        if (argc != 2) return 2;
++        if (!strcmp(argv[1], "system-version")) {
++            NSDictionary *version = [NSDictionary dictionaryWithContentsOfFile:@"/System/Library/CoreServices/SystemVersion.plist"];
++            if (!version) return 1;
++            for (NSString *key in @[@"ProductName", @"ProductVersion", @"ProductBuildVersion"]) {
++                NSString *value = version[key];
++                if (![value isKindOfClass:NSString.class]) return 1;
++                printf("%s\n%s\n", key.UTF8String, value.UTF8String);
++            }
++        } else if (!strcmp(argv[1], "uptime")) {
++            struct timeval boot; size_t size = sizeof(boot);
++            if (sysctlbyname("kern.boottime", &boot, &size, NULL, 0)) return 1;
++            printf("%lld\n", (long long)(time(NULL) - boot.tv_sec));
++        } else if (!strcmp(argv[1], "memory")) {
++            uint64_t total; size_t size = sizeof(total);
++            if (sysctlbyname("hw.memsize", &total, &size, NULL, 0)) return 1;
++            vm_statistics64_data_t stats; mach_msg_type_number_t count = HOST_VM_INFO64_COUNT;
++            mach_port_t host = mach_host_self(); vm_size_t page_size;
++            kern_return_t result = host_page_size(host, &page_size);
++            if (result == KERN_SUCCESS) result = host_statistics64(host, HOST_VM_INFO64, (host_info64_t)&stats, &count);
++            mach_port_deallocate(mach_task_self(), host);
++            if (result != KERN_SUCCESS) return 1;
++            // Match Neofetch's active + wired + compressor definition, with the
++            // actual kernel page size (16 KiB on these SRDs, not macOS's 4 KiB).
++            uint64_t used = ((uint64_t)stats.active_count + stats.wire_count + stats.compressor_page_count) * page_size;
++            printf("%llu %llu\n", (unsigned long long)(used / 1048576), (unsigned long long)(total / 1048576));
++        } else if (!strcmp(argv[1], "cpu-count")) {
++            unsigned count; size_t size = sizeof(count);
++            if (sysctlbyname("hw.ncpu", &count, &size, NULL, 0)) return 1;
++            printf("%u\n", count);
++        } else return 2;
++    }
++    return 0;
++}
+diff --git a/app/neofetch-launcher.c b/app/neofetch-launcher.c
+new file mode 100644
+index 0000000..503282e
+--- /dev/null
++++ b/app/neofetch-launcher.c
+@@ -0,0 +1,32 @@
++#include <mach-o/dyld.h>
++#include <limits.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <unistd.h>
++
++// Resolve the signed resources alongside this executable, including IPA copies.
++int main(int argc, char **argv) {
++    char executable[PATH_MAX], root[PATH_MAX], bash[PATH_MAX], script[PATH_MAX], helper[PATH_MAX];
++    uint32_t length = sizeof(executable);
++    if (_NSGetExecutablePath(executable, &length) || !realpath(executable, root)) return 126;
++    for (int i = 0; i < 3; ++i) {
++        char *slash = strrchr(root, '/');
++        if (!slash) return 126;
++        *slash = 0;
++    }
++    snprintf(bash, sizeof(bash), "%s/usr/bin/bash", root);
++    snprintf(script, sizeof(script), "%s/usr/share/neofetch/neofetch", root);
++    snprintf(helper, sizeof(helper), "%s/usr/libexec/srd-neofetch-info", root);
++    setenv("SRD_NEOFETCH_HELPER", helper, 1);
++    // Non-interactive Bash must not source an inherited startup file.
++    unsetenv("BASH_ENV"); unsetenv("ENV");
++    char **arguments = calloc((size_t)argc + 4, sizeof(char *));
++    if (!arguments) return 126;
++    arguments[0] = bash; arguments[1] = "--noprofile"; arguments[2] = "--norc";
++    arguments[3] = script;
++    for (int i = 1; i < argc; ++i) arguments[i + 3] = argv[i];
++    execv(bash, arguments);
++    perror("neofetch: bundled Bash");
++    return 126;
++}
+diff --git a/app/rootd.c b/app/rootd.c
+new file mode 100644
+index 0000000..4c7c15b
+--- /dev/null
++++ b/app/rootd.c
+@@ -0,0 +1,136 @@
++// SRD-only local PTY broker. One authenticated connection owns one root shell.
++#include <arpa/inet.h>
++#include <errno.h>
++#include <fcntl.h>
++#include <grp.h>
++#include <limits.h>
++#include <poll.h>
++#include <signal.h>
++#include <stdint.h>
++#include <stdio.h>
++#include <stdlib.h>
++#include <string.h>
++#include <sys/ioctl.h>
++#include <sys/socket.h>
++#include <sys/wait.h>
++#include <unistd.h>
++#include <util.h>
++#include "session-key.h"
++
++static char root[PATH_MAX];
++static int transfer(int fd, void *buf, size_t count, int writing) {
++    unsigned char *p = buf;
++    while (count) {
++        ssize_t n = writing ? write(fd, p, count) : read(fd, p, count);
++        if (n < 0 && errno == EINTR) continue;
++        if (n <= 0) return -1;
++        p += n; count -= n;
++    }
++    return 0;
++}
++static void session(int sock) {
++    signal(SIGCHLD, SIG_DFL);
++    struct timeval auth_timeout = {10, 0};
++    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &auth_timeout, sizeof(auth_timeout));
++    char auth[65];
++    if (transfer(sock, auth, sizeof(auth), 0)) return;
++    unsigned mismatch = auth[64] ^ '\n';
++    for (int i = 0; i < 64; i++) mismatch |= auth[i] ^ SESSION_KEY[i];
++    if (mismatch) return;
++    auth_timeout.tv_sec = 0;
++    setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, &auth_timeout, sizeof(auth_timeout));
++    // Reject a mislabeled non-root daemon rather than pretending USER=root is sufficient.
++    if (getuid() || geteuid() || getgid() || getegid()) return;
++    char *ready = "READY uid=0 gid=0\n";
++    if (transfer(sock, ready, strlen(ready), 1)) return;
++    int master;
++    struct winsize size = {.ws_row = 24, .ws_col = 80};
++    pid_t child = forkpty(&master, NULL, NULL, &size);
++    if (child < 0) return;
++    if (child == 0) {
++        close(sock);
++        signal(SIGPIPE, SIG_DFL);
++        if (initgroups("root", 0) || setgid(0) || setuid(0)) _exit(126);
++        char shell[PATH_MAX];
++        snprintf(shell, sizeof(shell), "%s/usr/bin/zsh", root);
++        setenv("CRYPTEX_MOUNT_PATH", root, 1);
++        setenv("HOME", "/var/root", 1);
++        setenv("USER", "root", 1); setenv("LOGNAME", "root", 1);
++        setenv("SHELL", shell, 1); setenv("TERM", "xterm-256color", 1);
++        setenv("TERM_PROGRAM", "srdzsh", 1);
++        char terminfo[PATH_MAX];
++        snprintf(terminfo, sizeof(terminfo), "%s/usr/share/terminfo", root);
++        setenv("TERMINFO", terminfo, 1);
++        setenv("LANG", "en_US.UTF-8", 1);
++        setenv("PATH", "/var/jb/usr/local/bin:/var/jb/usr/bin:/var/jb/bin:/var/jb/usr/sbin:/usr/bin:/bin:/usr/sbin:/sbin", 1);
++        unsetenv("ZDOTDIR"); unsetenv("DYLD_INSERT_LIBRARIES");
++        if (chdir("/var/root")) _exit(126);
++        execl(shell, "zsh", "-il", (char *)NULL);
++        perror("zsh"); _exit(127);
++    }
++    fprintf(stderr, "session opened shell=%d uid=0\n", child);
++    struct pollfd fds[2] = {{sock, POLLIN, 0}, {master, POLLIN, 0}};
++    unsigned char buf[65536];
++    for (;;) {
++        int n = poll(fds, 2, -1); // No idle/session timeout.
++        if (n < 0 && errno == EINTR) continue;
++        if (n <= 0) break;
++        if (fds[1].revents & POLLIN) {
++            ssize_t length = read(master, buf, sizeof(buf));
++            if (length <= 0 || transfer(sock, buf, length, 1)) break;
++        }
++        if (fds[0].revents & POLLIN) {
++            unsigned char header[5];
++            if (transfer(sock, header, 5, 0)) break;
++            uint32_t length; memcpy(&length, header + 1, 4); length = ntohl(length);
++            if (!length || length > sizeof(buf) || transfer(sock, buf, length, 0)) break;
++            if (header[0] == 1) {
++                if (transfer(master, buf, length, 1)) break;
++            } else if (header[0] == 2 && length == 4) {
++                uint16_t dims[2]; memcpy(dims, buf, 4);
++                size.ws_col = ntohs(dims[0]); size.ws_row = ntohs(dims[1]);
++                if (size.ws_col && size.ws_row) ioctl(master, TIOCSWINSZ, &size);
++            } else break;
++        }
++        if ((fds[0].revents | fds[1].revents) & (POLLHUP | POLLERR | POLLNVAL)) break;
++    }
++    close(master);
++    kill(-child, SIGHUP);
++    // Reap promptly even when a command ignores SIGHUP.
++    for (int i = 0; i < 20; i++) {
++        if (waitpid(child, NULL, WNOHANG) == child) goto done;
++        usleep(100000);
++    }
++    kill(-child, SIGKILL); waitpid(child, NULL, 0);
++done:
++    fprintf(stderr, "session closed shell=%d\n", child);
++}
++int main(int argc, char **argv) {
++    (void)argc;
++    if (getuid() || geteuid() || getgid() || getegid()) {
++        fprintf(stderr, "srdzsh-rootd requires actual uid/gid 0\n"); return 1;
++    }
++    // Derive resources from the executable; launchd need not preserve environment.
++    if (!realpath(argv[0], root)) { perror("realpath"); return 1; }
++    for (int i = 0; i < 3; i++) {
++        char *slash = strrchr(root, '/'); if (!slash) return 1; *slash = 0;
++    }
++    signal(SIGPIPE, SIG_IGN); signal(SIGCHLD, SIG_IGN);
++    int server = socket(AF_INET, SOCK_STREAM, 0), yes = 1;
++    setsockopt(server, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(yes));
++    fcntl(server, F_SETFD, FD_CLOEXEC);
++    struct sockaddr_in address = {.sin_len = sizeof(address), .sin_family = AF_INET,
++        .sin_port = htons(22340), .sin_addr.s_addr = htonl(INADDR_LOOPBACK)};
++    if (bind(server, (struct sockaddr *)&address, sizeof(address)) || listen(server, 8)) {
++        perror("rootd listen"); return 1;
++    }
++    fprintf(stderr, "SRDZsh root PTY service ready\n");
++    for (;;) {
++        int sock = accept(server, NULL, NULL);
++        if (sock < 0) { if (errno == EINTR) continue; perror("accept"); return 1; }
++        fcntl(sock, F_SETFD, FD_CLOEXEC);
++        pid_t pid = fork();
++        if (pid == 0) { close(server); session(sock); close(sock); _exit(0); }
++        close(sock);
++    }
++}
+diff --git a/patches/0003-static-zftp.patch b/patches/0003-static-zftp.patch
+new file mode 100644
+index 0000000..65447d8
+--- /dev/null
++++ b/patches/0003-static-zftp.patch
+@@ -0,0 +1,8 @@
++diff --git a/Src/Modules/zftp.mdd b/Src/Modules/zftp.mdd
++--- a/Src/Modules/zftp.mdd
+++++ b/Src/Modules/zftp.mdd
++@@ -1,3 +1,3 @@
++ name=zsh/zftp
++-link=dynamic
+++link=static
++ load=no
+diff --git a/patches/neofetch/0001-native-ios.patch b/patches/neofetch/0001-native-ios.patch
+new file mode 100644
+index 0000000..0affd93
+--- /dev/null
++++ b/patches/neofetch/0001-native-ios.patch
+@@ -0,0 +1,94 @@
++--- a/neofetch
+++++ b/neofetch
++@@ -1285,6 +1285,10 @@
++                 iPhone12,3):    "iPhone 11 Pro" ;;
++                 iPhone12,5):    "iPhone 11 Pro Max" ;;
++                 iPhone12,8):    "iPhone SE 2020" ;;
+++                iPhone13,1):    "iPhone 12 mini" ;;
+++                iPhone13,2):    "iPhone 12" ;;
+++                iPhone13,3):    "iPhone 12 Pro" ;;
+++                iPhone13,4):    "iPhone 12 Pro Max" ;;
++ 
++                 iPod1,1): "iPod touch" ;;
++                 ipod2,1): "iPod touch 2G" ;;
++@@ -1292,6 +1296,7 @@
++                 ipod4,1): "iPod touch 4G" ;;
++                 ipod5,1): "iPod touch 5G" ;;
++                 ipod7,1): "iPod touch 6G" ;;
+++                *): "$kernel_machine" ;;
++             esac
++ 
++             model=$_
++@@ -1398,7 +1403,11 @@
++             fi
++         ;;
++ 
++-        "Mac OS X"|"macOS"|"iPhone OS"|BSD|FreeMiNT)
+++        "iPhone OS")
+++            s=$("$SRD_NEOFETCH_HELPER" uptime)
+++        ;;
+++
+++        "Mac OS X"|"macOS"|BSD|FreeMiNT)
++             boot=$(sysctl -n kern.boottime)
++             boot=${boot/\{ sec = }
++             boot=${boot/,*}
++@@ -2154,6 +2163,7 @@
++                 "iPhone10,"[1-6]): "Apple A11 Bionic (6) @ 2.39GHz" ;;
++                 "iPhone11,"[2468] | "iPad11,"[1-4]): "Apple A12 Bionic (6) @ 2.49GHz" ;;
++                 "iPhone12,"[1358]): "Apple A13 Bionic (6) @ 2.65GHz" ;;
+++                "iPhone13,"[1-4]): "Apple A14 Bionic (6)" ;;
++ 
++                 "iPod2,1"): "Samsung S5L8720 (1) @ 533MHz" ;;
++                 "iPod3,1"): "Samsung S5L8922 (1) @ 600MHz" ;;
++@@ -2171,6 +2181,7 @@
++                 "iPad7,"[1-4]): "Apple A10X Fusion (6) @ 2.39GHz" ;;
++                 "iPad8,"[1-8]): "Apple A12X Bionic (8) @ 2.49GHz" ;;
++                 "iPad8,9" | "iPad8,1"[0-2]): "Apple A12Z Bionic (8) @ 2.49GHz" ;;
+++                *): "Apple SoC ($("$SRD_NEOFETCH_HELPER" cpu-count))" ;;
++             esac
++             cpu="$_"
++         ;;
++@@ -2485,6 +2496,7 @@
++                 "iPhone10,"[1-6]):                            "Apple Designed GPU (A11)" ;;
++                 "iPhone11,"[2468]):                           "Apple Designed GPU (A12)" ;;
++                 "iPhone12,"[1358]):                           "Apple Designed GPU (A13)" ;;
+++                "iPhone13,"[1-4]):                            "Apple Designed GPU (A14)" ;;
++ 
++                 "iPad3,"[1-3]):     "PowerVR SGX534MP4" ;;
++                 "iPad3,"[4-6]):     "PowerVR SGX554MP4" ;;
++@@ -2494,6 +2506,7 @@
++                 "iPod1,1" | "iPod2,1")
++                     : "PowerVR MBX Lite"
++                 ;;
+++                *): "" ;;
++             esac
++             gpu="$_"
++         ;;
++@@ -2553,7 +2566,11 @@
++             mem_total="$((mem_total / 1024))"
++         ;;
++ 
++-        "Mac OS X" | "macOS" | "iPhone OS")
+++        "iPhone OS")
+++            read -r mem_used mem_total <<< "$("$SRD_NEOFETCH_HELPER" memory)"
+++        ;;
+++
+++        "Mac OS X" | "macOS")
++             mem_total="$(($(sysctl -n hw.memsize) / 1024 / 1024))"
++             mem_wired="$(vm_stat | awk '/ wired/ { print $4 }')"
++             mem_active="$(vm_stat | awk '/ active/ { printf $3 }')"
++@@ -4678,8 +4695,12 @@
++     kernel_machine="${uname[2]}"
++ 
++     if [[ "$kernel_name" == "Darwin" ]]; then
++-        IFS=$'\n' read -d "" -ra sw_vers <<< "$(awk -F'<|>' '/key|string/ {print $3}' \
++-                            "/System/Library/CoreServices/SystemVersion.plist")"
+++        if [[ -x "$SRD_NEOFETCH_HELPER" ]]; then
+++            IFS=$'\n' read -d "" -ra sw_vers <<< "$("$SRD_NEOFETCH_HELPER" system-version)"
+++        else
+++            IFS=$'\n' read -d "" -ra sw_vers <<< "$(awk -F'<|>' '/key|string/ {print $3}' \
+++                                "/System/Library/CoreServices/SystemVersion.plist")"
+++        fi
++         for ((i=0;i<${#sw_vers[@]};i+=2)) {
++             case ${sw_vers[i]} in
++                 ProductName)          darwin_name=${sw_vers[i+1]} ;;
+diff --git a/scripts/build_app.py b/scripts/build_app.py
+new file mode 100644
+index 0000000..3cc65a5
+--- /dev/null
++++ b/scripts/build_app.py
+@@ -0,0 +1,145 @@
++#!/usr/bin/env python3
++"""Build the UIKit terminal, native root broker, standalone root, and IPA."""
++import argparse
++import hashlib
++import json
++import pathlib
++import plistlib
++import re
++import secrets
++import shutil
++import subprocess
++import tarfile
++import urllib.request
++from build_extras import bundle as bundle_extras
++
++PROJECT = pathlib.Path(__file__).resolve().parents[1]
++POC = PROJECT.parent
++SWIFTTERM_COMMIT = '5d14406844143538cd8f8851d2d8a67c1fe443e5' # v1.20.0
++SWIFTTERM_SHA256 = 'a25cfd051a9eb65a63dc6869bb1843bf100645160f72050f812407bd1c587d4c'
++
++def native_terminal(app,output,sdk,args,key,licenses):
++    cache=PROJECT/'downloads';cache.mkdir(exist_ok=True)
++    archive=cache/('SwiftTerm-'+SWIFTTERM_COMMIT+'.tar.gz')
++    if not archive.exists():
++        with urllib.request.urlopen('https://codeload.github.com/migueldeicaza/SwiftTerm/tar.gz/'+SWIFTTERM_COMMIT,timeout=60) as response:raw=response.read(20*1024*1024)
++        if hashlib.sha256(raw).hexdigest()!=SWIFTTERM_SHA256:raise ValueError('SwiftTerm checksum failed')
++        archive.write_bytes(raw)
++    if hashlib.sha256(archive.read_bytes()).hexdigest()!=SWIFTTERM_SHA256:raise ValueError('SwiftTerm checksum failed')
++    source=PROJECT/'build'/('SwiftTerm-'+SWIFTTERM_COMMIT)
++    if not source.exists():
++        source.mkdir(parents=True)
++        with tarfile.open(archive) as tar:
++            for member in tar.getmembers():
++                parts=pathlib.PurePosixPath(member.name).parts[1:]
++                if not parts:continue
++                target=source.joinpath(*parts)
++                if not target.resolve().is_relative_to(source.resolve()) or member.issym() or member.islnk():raise ValueError('Unsafe SwiftTerm archive member')
++                if member.isdir():target.mkdir(parents=True,exist_ok=True)
++                elif member.isfile():target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(tar.extractfile(member).read())
++    compiled=PROJECT/'build'/('SwiftTerm-ios-'+args.arch+'-'+args.ios_min);compiled.mkdir(exist_ok=True)
++    shim=compiled/'BuildInfo.swift'
++    shim.write_text('import Foundation\nextension Bundle { static var module: Bundle { Bundle.main } }\npublic enum SwiftTermBuildInfo { public static let tag: String? = "v1.20.0"; public static let branch: String? = nil; public static let commit: String? = "'+SWIFTTERM_COMMIT+'"; public static let version = "v1.20.0" }\n')
++    compiler=subprocess.check_output(['xcrun','--sdk','iphoneos','--find','swiftc'],text=True).strip()
++    flags=['-sdk',sdk,'-target',args.arch+'-apple-ios'+args.ios_min,'-swift-version','5','-O','-whole-module-optimization']
++    library=compiled/'libSwiftTerm.a'
++    if not library.exists():
++        sources=sorted((source/'Sources/SwiftTerm').rglob('*.swift'))
++        run(compiler,*flags,'-parse-as-library','-emit-library','-static','-emit-module','-module-name','SwiftTerm','-emit-module-path',compiled/'SwiftTerm.swiftmodule',*sources,shim,'-o',library)
++    session=output/'SessionKey.swift';session.write_text('let sessionCredential = '+json.dumps(key+'\n')+'\n')
++    run(compiler,*flags,'-parse-as-library','-I',compiled,'-L',compiled,'-lSwiftTerm',PROJECT/'app/NativeTerminal.swift',session,'-o',app/'SRDZsh','-Xlinker','-rpath','-Xlinker','/usr/lib/swift')
++    session.unlink()
++    shutil.copy2(source/'LICENSE',licenses/'SwiftTerm-MIT.txt')
++
++def run(*args):
++    subprocess.run([str(a) for a in args], check=True, timeout=180)
++
++def main():
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--output', required=True, type=pathlib.Path)
++    parser.add_argument('--arch', default='arm64e')
++    parser.add_argument('--ios-min', default='26.0')
++    parser.add_argument('--toybox', type=pathlib.Path, default=POC/'srdsh-work/srdsh/build/com.liquidsky.srdssh.root/usr/bin/toybox')
++    parser.add_argument('--icon-source', type=pathlib.Path, default=PROJECT/'app/icons')
++    args = parser.parse_args()
++    output = args.output.resolve()
++    if output.exists():
++        raise SystemExit(f'Output already exists: {output}; choose a new --output')
++    sdk = subprocess.check_output(['xcrun','--sdk','iphoneos','--show-sdk-path'], text=True).strip()
++    clang = subprocess.check_output(['xcrun','--sdk','iphoneos','--find','clang'], text=True).strip()
++    output.mkdir(parents=True)
++    root = output/'root'
++    shutil.copytree(PROJECT/'zsh-cryptex.root', root)
++    app = root/'System/Applications/SRDZsh.app'
++    app.mkdir(parents=True)
++    (root/'usr/libexec').mkdir(parents=True)
++    key = secrets.token_hex(32)
++    (output/'session-key.h').write_text('#define SESSION_KEY "'+key+'"\n')
++    flags = ['-isysroot',sdk,'-arch',args.arch,'-miphoneos-version-min='+args.ios_min,'-O2','-I'+str(output)]
++    run(clang, *flags, '-Wall','-Wextra', PROJECT/'app/rootd.c','-o',root/'usr/libexec/srdzsh-rootd')
++    licenses=root/'usr/share/licenses/srdzsh'
++    native_terminal(app,output,sdk,args,key,licenses)
++    info = {
++        'CFBundleDisplayName':'srdzsh', 'CFBundleName':'srdzsh',
++        'CFBundleIdentifier':'codes.liquidsky.research.srdzsh',
++        'CFBundleExecutable':'SRDZsh','CFBundlePackageType':'APPL',
++        'CFBundleInfoDictionaryVersion':'6.0','CFBundleVersion':'7',
++        'CFBundleShortVersionString':'2.0.5','MinimumOSVersion':args.ios_min,
++        'LSRequiresIPhoneOS':True,'UIDeviceFamily':[1,2], 'UILaunchScreen':{},
++        'UISupportedInterfaceOrientations':['UIInterfaceOrientationPortrait','UIInterfaceOrientationLandscapeLeft','UIInterfaceOrientationLandscapeRight'],
++        'CFBundleIcons':{'CFBundlePrimaryIcon':{'CFBundleIconFiles':['AppIcon60x60']}},
++        'CFBundleIcons~ipad':{'CFBundlePrimaryIcon':{'CFBundleIconFiles':['AppIcon76x76']}},
++        'UIApplicationSceneManifest':{'UIApplicationSupportsMultipleScenes':False,
++          'UISceneConfigurations':{'UIWindowSceneSessionRoleApplication':[
++            {'UISceneConfigurationName':'Default','UISceneDelegateClassName':'SceneDelegate'}]}},
++    }
++    (app/'Info.plist').write_bytes(plistlib.dumps(info))
++    for name in ['AppIcon60x60@2x.png','AppIcon76x76@2x~ipad.png']:
++        shutil.copy2(args.icon_source/name, app/name)
++    # Bundle a native multicall binary and all enabled applets. Never overwrite zsh.
++    if not args.toybox.is_file():raise FileNotFoundError('Build SRD Toybox or pass --toybox')
++    archs=subprocess.check_output(['lipo','-archs',args.toybox],text=True).strip().split()
++    if args.arch not in archs:raise ValueError('Toybox lacks target architecture')
++    shutil.copy2(args.toybox,root/'usr/bin/toybox')
++    install_list=POC/'srdsh-work/srdsh/vendor/toybox/generated/newtoys.h'
++    config=POC/'srdsh-work/srdsh/vendor/toybox/.config'
++    enabled=set(re.findall(r'^CONFIG_(\w+)=y$',config.read_text(),re.M))
++    applets=[]
++    for symbol,command in re.findall(r'^USE_(\w+)\((?:NEWTOY|OLDTOY)\(([^,]+),',install_list.read_text(),re.M):
++        command=command.strip()
++        if symbol not in enabled or command in ['toybox','zsh'] or '/' in command:continue
++        target=root/'usr/bin'/command
++        if not target.exists():target.symlink_to('toybox')
++        applets.append(command)
++    # Replace Toybox's Bash alias with GNU Bash required by upstream Neofetch.
++    bash_alias=root/'usr/bin/bash'
++    if bash_alias.is_symlink():bash_alias.unlink()
++    bundle_extras(root,output,sdk,clang,args,licenses,run)
++    # Keep the IPA self-contained for the registrar's normal IPA intake, too.
++    shutil.copytree(root/'usr',app/'usr',symlinks=True)
++    daemon={
++        'Label':'com.liquidsky.srdzsh.rootd',
++        'ProgramArguments':['/usr/libexec/srdzsh-rootd'],
++        'UserName':'root','GroupName':'wheel','RunAtLoad':True,'KeepAlive':True,
++        'EnablePressuredExit':False,'EnableTransactions':False,
++        'ThrottleInterval':5,'ProcessType':'Interactive',
++        'StandardErrorPath':'/var/tmp/srdzsh-rootd.log',
++    }
++    launch=root/'Library/LaunchDaemons';launch.mkdir(parents=True)
++    (launch/'com.liquidsky.srdzsh.rootd.plist').write_bytes(plistlib.dumps(daemon))
++    entitlements={'platform-application':True,'com.apple.private.security.no-sandbox':True,'get-task-allow':True}
++    ent=output/'entitlements.plist';ent.write_bytes(plistlib.dumps(entitlements))
++    for binary in [base/path for base in [root,app] for path in ['usr/bin/zsh','usr/bin/toybox','usr/libexec/srdzsh-rootd','usr/bin/bash','usr/bin/neofetch','usr/libexec/srd-neofetch-info']]:
++        run('codesign','--force','--sign','-','--entitlements',ent,binary)
++        run('codesign','--verify','--strict',binary)
++    run('codesign','--force','--sign','-','--entitlements',ent,app)
++    run('codesign','--verify','--strict',app)
++    payload=output/'ipa/Payload';payload.mkdir(parents=True)
++    shutil.copytree(app,payload/'SRDZsh.app',symlinks=True)
++    run('ditto','-c','-k','--keepParent',payload,output/'SRDZsh-2.0.5.ipa')
++    shutil.rmtree(output/'ipa')
++    (output/'commands.json').write_text(json.dumps({'toybox_applets':sorted(set(applets)), 'additional_commands':['neofetch'], 'bash_version':'5.2.37', 'neofetch_version':'7.1.0', 'zsh_version':'5.9.2','app_version':'2.0.5','architecture':args.arch,'terminal_renderer':'SwiftTerm 1.20.0 UIKit/CoreGraphics'},indent=2)+'\n')
++    (output/'session-key.h').unlink() # Credential is only in signed binaries.
++    print('Built SRDZsh app/root and IPA:',output, 'Toybox applets:',len(set(applets)))
++
++if __name__=='__main__':main()
+diff --git a/scripts/build_extras.py b/scripts/build_extras.py
+new file mode 100644
+index 0000000..859b2e1
+--- /dev/null
++++ b/scripts/build_extras.py
+@@ -0,0 +1,95 @@
++"""Pinned Neofetch and a standalone iOS Bash scripting runtime."""
++import hashlib
++import os
++import pathlib
++import shutil
++import subprocess
++import tarfile
++import urllib.request
++
++PROJECT = pathlib.Path(__file__).resolve().parents[1]
++SOURCES = {
++    'bash-5.2.37': ('https://ftp.gnu.org/gnu/bash/bash-5.2.37.tar.gz',
++                    '9599b22ecd1d5787ad7d3b7bf0c59f312b3396d1e281175dd1f8a4014da621ff'),
++    'neofetch-7.1.0': ('https://codeload.github.com/dylanaraps/neofetch/tar.gz/refs/tags/7.1.0',
++                      '58a95e6b714e41efc804eca389a223309169b2def35e57fa934482a6b47c27e7'),
++}
++
++def source(name):
++    url, digest = SOURCES[name]
++    cache = PROJECT/'downloads'; cache.mkdir(exist_ok=True)
++    archive = cache/(name+'.tar.gz')
++    if not archive.exists():
++        with urllib.request.urlopen(url, timeout=60) as response:
++            raw = response.read(32*1024*1024)
++        if hashlib.sha256(raw).hexdigest() != digest:
++            raise ValueError(name+' download checksum mismatch')
++        temporary = archive.with_suffix('.tmp'); temporary.write_bytes(raw)
++        temporary.replace(archive)
++    if hashlib.sha256(archive.read_bytes()).hexdigest() != digest:
++        raise ValueError(name+' cached source checksum mismatch')
++    directory = PROJECT/'build'/(name+'-srd-source')
++    if not directory.exists():
++        directory.mkdir(parents=True)
++        with tarfile.open(archive) as tar:
++            for member in tar.getmembers():
++                parts = pathlib.PurePosixPath(member.name).parts[1:]
++                if not parts: continue
++                target = directory.joinpath(*parts)
++                if not target.resolve().is_relative_to(directory.resolve()) or member.issym() or member.islnk():
++                    raise ValueError('Unsafe source archive member')
++                if member.isdir(): target.mkdir(parents=True, exist_ok=True)
++                elif member.isfile():
++                    target.parent.mkdir(parents=True, exist_ok=True)
++                    target.write_bytes(tar.extractfile(member).read()); target.chmod(member.mode & 0o777)
++    return directory, archive
++
++def bundle(root, output, sdk, clang, args, licenses, run):
++    bash_source, bash_archive = source('bash-5.2.37')
++    neofetch_source, neofetch_archive = source('neofetch-7.1.0')
++    compiled = PROJECT/'build'/('bash-5.2.37-'+args.arch+'-'+args.ios_min+'-scripting')
++    compiled.mkdir(exist_ok=True)
++    binary = compiled/'bash'
++    flags = ['-isysroot',sdk,'-arch',args.arch,'-miphoneos-version-min='+args.ios_min,'-O2']
++    if not binary.exists():
++        env = os.environ.copy()
++        env.update(CC=clang, CPP=clang+' -E '+' '.join(flags), CFLAGS=' '.join(flags),
++                   CPPFLAGS='-isysroot '+sdk, LDFLAGS=' '.join(flags),
++                   # Public iPhoneOS headers omit getentropy's declaration.
++                   # Bash instead uses /dev/urandom and arc4random, both native.
++                   ac_cv_func_getentropy='no')
++        native = subprocess.check_output(['sh',str(bash_source/'support/config.guess')],text=True).strip()
++        with (compiled/'configure-output.log').open('w') as log:
++            subprocess.run(['sh',str(bash_source/'configure'),'--host=aarch64-apple-darwin',
++                            '--build='+native,'--prefix=/usr','--disable-nls','--disable-readline',
++                            '--without-bash-malloc','--disable-profiling'],
++                           cwd=compiled,env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=180)
++        with (compiled/'build-output.log').open('w') as log:
++            subprocess.run(['make','-j8','bash'],cwd=compiled,env=env,stdout=log,
++                           stderr=subprocess.STDOUT,check=True,timeout=180)
++    shutil.copy2(binary,root/'usr/bin/bash')
++    resource = root/'usr/share/neofetch'; resource.mkdir(parents=True)
++    shutil.copy2(neofetch_source/'neofetch',resource/'neofetch')
++    subprocess.run(['patch','--batch','--forward','-p1','-i',str(PROJECT/'patches/neofetch/0001-native-ios.patch')],
++                   cwd=resource,check=True,timeout=30)
++    run(clang,*flags,'-Wall','-Wextra',PROJECT/'app/neofetch-launcher.c','-o',root/'usr/bin/neofetch')
++    run(clang,*flags,'-Wall','-Wextra','-fobjc-arc','-framework','Foundation',PROJECT/'app/neofetch-info.m',
++        '-o',root/'usr/libexec/srd-neofetch-info')
++    manual = root/'usr/share/man/man1'; manual.mkdir(parents=True,exist_ok=True)
++    shutil.copy2(neofetch_source/'neofetch.1',manual/'neofetch.1')
++    shutil.copy2(neofetch_source/'LICENSE.md',licenses/'Neofetch-MIT.txt')
++    shutil.copy2(bash_source/'COPYING',licenses/'Bash-GPL-3.0.txt')
++    (licenses/'Neofetch-Bash-SOURCES.txt').write_text(
++        '\n'.join(name+'\n'+url+'\nSHA256 '+digest for name,(url,digest) in SOURCES.items())+
++        '\nBash: unmodified upstream source; no readline/NLS/custom allocator.\n'
++        'getentropy disabled because public iOS headers omit its declaration.\n'
++        'Neofetch: native iOS queries in neofetch/0001-native-ios.patch.\n'
++        'Corresponding source archives/build scripts accompany the DMG in sources/.\n')
++    # Distribute corresponding source, configuration and port additions with
++    # the binary artifacts. These are host resources, not cryptex runtime files.
++    sources = output/'sources'; sources.mkdir()
++    for archive in [bash_archive,neofetch_archive]: shutil.copy2(archive,sources/archive.name)
++    for path in [pathlib.Path(__file__),PROJECT/'scripts/build_app.py',PROJECT/'patches/neofetch/0001-native-ios.patch',
++                 PROJECT/'app/neofetch-info.m',PROJECT/'app/neofetch-launcher.c',compiled/'config.h',
++                 compiled/'configure-output.log']:
++        shutil.copy2(path,sources/path.name)
+diff --git a/scripts/capture_neofetch.py b/scripts/capture_neofetch.py
+new file mode 100644
+index 0000000..19ecb8d
+--- /dev/null
++++ b/scripts/capture_neofetch.py
+@@ -0,0 +1,25 @@
++#!/usr/bin/env python3
++"""Launch the installed native terminal's Neofetch smoke view and capture it."""
++import argparse
++import asyncio
++import pathlib
++from pymobiledevice3.remote.native_tunnel import NativeRemotedTunnel
++from pymobiledevice3.services.dvt.instruments.dvt_provider import DvtProvider
++from pymobiledevice3.services.dvt.instruments.process_control import ProcessControl
++from pymobiledevice3.services.dvt.instruments.screenshot import Screenshot
++
++async def capture(udid, output):
++    async with NativeRemotedTunnel(serial=udid) as rsd:
++        async with DvtProvider(rsd) as dvt, ProcessControl(dvt) as process:
++            pid = await process.launch('codes.liquidsky.research.srdzsh',arguments=['--neofetch-smoke'])
++            await asyncio.sleep(5)
++            async with Screenshot(dvt) as screen:
++                output.write_bytes(await screen.get_screenshot())
++            print(udid, 'native terminal launched', pid, 'screenshot', output)
++
++if __name__ == '__main__':
++    parser = argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--udid',required=True)
++    parser.add_argument('--output',required=True,type=pathlib.Path)
++    args = parser.parse_args()
++    asyncio.run(capture(args.udid,args.output))
+diff --git a/scripts/deploy.py b/scripts/deploy.py
+new file mode 100644
+index 0000000..f304cc1
+--- /dev/null
++++ b/scripts/deploy.py
+@@ -0,0 +1,105 @@
++#!/usr/bin/env python3
++"""Build/install SRDZsh through exact-device Native RemoteXPC research service."""
++import argparse
++import asyncio
++import hashlib
++import importlib.util
++import json
++import os
++import pathlib
++import plistlib
++import runpy
++import shutil
++import shlex
++import subprocess
++import time
++
++from native_backend import assets_from_manifest, build, install
++
++PROJECT = pathlib.Path(__file__).resolve().parents[1]
++IDENTIFIER = 'com.liquidsky.srdzsh'
++BUNDLE_ID = 'codes.liquidsky.research.srdzsh'
++
++def paired_worker(udid, instance=None):
++    candidates=[]
++    for path in (pathlib.Path.home()/'Library/LaunchAgents').glob('com.liquidskysecurity.crypstore-worker.*.plist'):
++        definition=plistlib.loads(path.read_bytes());environment=definition.get('EnvironmentVariables',{})
++        directory=pathlib.Path(environment.get('CRYPSTORE_INSTANCE_DIR','/nonexistent'))
++        if environment.get('CRYPSTORE_DEVICE_UDID')!=udid or not (directory/'config.json').is_file():continue
++        if instance and directory.resolve()!=instance.resolve():continue
++        worker=next((pathlib.Path(arg) for arg in definition.get('ProgramArguments',[]) if arg.endswith('/crypstore_worker.py')),None)
++        if worker and worker.is_file():candidates.append((directory,environment,worker))
++    if len(candidates)!=1:
++        raise RuntimeError(f'Expected one active paired SSH instance for {udid}; found {len(candidates)}. Use --instance to select it.')
++    directory,environment,worker=candidates[0]
++    os.environ.update(environment)
++    return runpy.run_path(str(worker),run_name='srdzsh_deployment'),directory
++
++def main():
++    parser=argparse.ArgumentParser(description=__doc__)
++    parser.add_argument('--output',type=pathlib.Path,default=PROJECT/'dist')
++    parser.add_argument('--udid',action='append',default=[],help='Exact paired SRD UDID; repeat for multiple devices')
++    parser.add_argument('--install',action='store_true',help='Personalize using live Apple TSS and persistently install')
++    parser.add_argument('--instance',type=pathlib.Path,help='Existing 0-Sky paired instance for SSH verification')
++    parser.add_argument('--verify',action='store_true',help='Use explicitly authorized existing root SSH profile to verify runtime')
++    parser.add_argument('--register',action='store_true',help='Register the app with the existing exact-build SRD registrar over authorized paired SSH')
++    args=parser.parse_args()
++    if (args.install or args.verify or args.register) and not args.udid:parser.error('--udid is required for device operations')
++    if args.instance and len(args.udid)!=1:parser.error('--instance requires one --udid')
++    output=args.output.resolve()
++    version=json.loads((output/'commands.json').read_text())['app_version']
++    assets_record=output/'cryptex/sdk-assets.json'
++    if not assets_record.exists():
++        work=assets_record.parent;work.mkdir(parents=True,exist_ok=True)
++        manifest=build(output/'root',IDENTIFIER,version,work)
++    else:
++        # Locate inside this distribution rather than retaining build-host
++        # absolute paths when the artifacts are copied to another directory.
++        manifests=list(assets_record.parent.glob('sdk-cryptex-*/bundles/*.cxbd/Restore/BuildManifest.plist'))
++        if len(manifests)!=1:raise RuntimeError('Expected one cryptex bundle in this output')
++        manifest=manifests[0].resolve()
++    _,assets=assets_from_manifest(manifest)
++    info=plistlib.loads(assets['Cryptex1,CryptexInfoPlist'].read_bytes())
++    if info.get('CFBundleIdentifier')!=IDENTIFIER or info.get('CFBundleVersion')!=version:
++        raise ValueError('Built cryptex identifier/version does not match the app artifacts')
++    dmg=output/('SRDZsh-'+version+'.dmg')
++    if not dmg.exists():shutil.copy2(assets['Cryptex1,GenericDmg'],dmg)
++    if hashlib.sha384(dmg.read_bytes()).digest()!=hashlib.sha384(assets['Cryptex1,GenericDmg'].read_bytes()).digest():
++        raise ValueError('Distribution DMG differs from the manifest-bound image')
++    for udid in dict.fromkeys(args.udid):
++        if args.install:
++            asyncio.run(install(manifest,IDENTIFIER,udid))
++            from pymobiledevice3.remote.native_tunnel import NativeRemotedTunnel
++            from pymobiledevice3.services.cryptexd import CryptexdService
++            async def confirm():
++                async with NativeRemotedTunnel(serial=udid) as rsd:
++                    matches=[v for v in await CryptexdService(rsd).copy_installed() if v.identifier==IDENTIFIER]
++                    if len(matches)!=1 or matches[0].version!=version:raise RuntimeError('Installed generation/version not confirmed')
++                    print('CONFIRMED installed',udid,IDENTIFIER,matches[0].version,flush=True)
++            asyncio.run(confirm())
++        if args.register:
++            worker,instance=paired_worker(udid,args.instance)
++            ssh=worker['ssh']
++            def mounted(identifier):
++                mounts='/private/var/run/com.apple.security.cryptexd/mnt/'
++                result=ssh('for d in '+mounts+shlex.quote(identifier)+'.*; do if [ -d "$d" ] && mount | grep -Fq " on $d ("; then echo "$d"; fi; done',timeout=30)
++                values=[v for v in result.stdout.decode().splitlines() if v]
++                if len(values)!=1:raise RuntimeError('Expected one active mount for '+identifier)
++                return values[0]
++            root=mounted(IDENTIFIER)
++            # Reuse the deployed updater's stale-record retirement, MCM-copy
++            # fallback, payload-identity verification, and launch validation.
++            payload=sum(p.stat().st_size for p in (output/'root/System/Applications/SRDZsh.app').rglob('*') if p.is_file() and not p.is_symlink())
++            app=worker['register_and_link'](BUNDLE_ID,'SRDZsh','SRDZsh.app',root+'/System',payload)
++            (output/(udid+'-registration.json')).write_text(json.dumps({'bundle_id':BUNDLE_ID,'app_path':app},indent=2)+'\n')
++            print('REGISTERED',udid,BUNDLE_ID,app,flush=True)
++        if args.verify:
++            worker,instance=paired_worker(udid,args.instance)
++            ssh=worker['ssh']
++            check=ssh('id; ps -A -o pid,uid,gid,comm | grep srdzsh-rootd; cat /var/tmp/srdzsh-rootd.log',timeout=30,check=False)
++            (output/(udid+'-service.log')).write_bytes(check.stdout+check.stderr)
++            print(check.stdout.decode('utf-8','replace'),flush=True)
++            subprocess.run([os.sys.executable,str(PROJECT.parent/'check_app_icon.py'),'--udid',udid,'--bundle-id',BUNDLE_ID],check=True,timeout=60)
++    print('DMG:',dmg,flush=True)
++
++if __name__=='__main__':main()
+diff --git a/scripts/native_backend.py b/scripts/native_backend.py
+new file mode 100755
+index 0000000..f7600f7
+--- /dev/null
++++ b/scripts/native_backend.py
+@@ -0,0 +1,219 @@
++"""Build SDK-prepared APFS assets and install one exact SRD Cryptex."""
++import argparse,asyncio,copy,hashlib,json,os,pathlib,plistlib,shutil,subprocess,sys,uuid
++
++CTL='/System/Library/SecurityResearch/usr/bin/cryptexctl'
++
++def run(argv,timeout=180):
++    print('+',pathlib.Path(str(argv[0])).name,' '.join(str(a) for a in argv[1:3]),flush=True)
++    subprocess.run([str(a) for a in argv],check=True,timeout=timeout)
++
++def assets_from_manifest(path):
++    path=pathlib.Path(path).resolve();manifest=plistlib.loads(path.read_bytes())
++    identities=[v for v in manifest['BuildIdentities'] if v.get('Info',{}).get('Variant')=='research']
++    if len(identities)!=1:raise ValueError('Expected one research identity')
++    assets={}
++    for key in ('Cryptex1,CryptexInfoPlist','Cryptex1,GenericDmg','Cryptex1,GenericTrustCache','Cryptex1,GenericVolume'):
++        entry=identities[0]['Manifest'][key];source=(path.parent/entry['Info']['Path']).resolve()
++        if not source.is_relative_to(path.parent) or not source.is_file():raise ValueError('Unsafe or missing Cryptex asset')
++        h=hashlib.sha384()
++        with source.open('rb') as f:
++            for chunk in iter(lambda:f.read(1024*1024),b''):h.update(chunk)
++        if h.digest()!=entry['Digest']:raise ValueError('Cryptex asset digest mismatch: '+key)
++        assets[key]=source
++    return identities[0],assets
++
++def der(tag,data):
++    n=len(data);length=bytes([n]) if n<128 else bytes([0x80+(n.bit_length()+7)//8])+n.to_bytes((n.bit_length()+7)//8,'big')
++    return bytes([tag])+length+data
++
++def trust_payload(data):
++    def length(offset):
++        first=data[offset];offset+=1
++        if first<128:return first,offset
++        count=first&127;return int.from_bytes(data[offset:offset+count],'big'),offset+count
++    if data[0]!=0x30:raise ValueError('Trust cache is not DER')
++    size,offset=length(1);end=offset+size;found=None
++    while offset<end:
++        tag=data[offset];size,offset=length(offset+1);value=data[offset:offset+size];offset+=size
++        if tag==4:found=value
++    if found is None or offset!=end:raise ValueError('Invalid trust-cache envelope')
++    return found
++
++def build(root,identifier,version,work):
++    root=pathlib.Path(root).resolve();work=pathlib.Path(work).resolve()
++    if not root.is_dir():raise ValueError('Missing payload root')
++    output=work/('sdk-cryptex-'+uuid.uuid4().hex);output.mkdir()
++    size=sum(p.stat().st_size for p in root.rglob('*') if p.is_file() and not p.is_symlink())
++    mib=max(64,((size//(1024*1024)+64+63)//64)*64)
++    image=output/'source.dmg'
++    run(['hdiutil','create','-size',str(mib)+'m','-fs','APFS','-layout','NONE','-srcfolder',root,'-format','UDRW',image],timeout=180)
++    bundles=output/'bundles';bundles.mkdir()
++    run([CTL,'create','--use-cryptex1-format','--identifier',identifier,'--version',version,'--variant','research','--output-directory',bundles,image],timeout=240)
++    bundle=next(bundles.glob('*.cxbd'));manifest=bundle/'Restore/BuildManifest.plist'
++    identity,assets=assets_from_manifest(manifest)
++    generator=work/'generate_trust_cache.py'
++    if generator.is_file():
++        trust=output/'trust.der'
++        command=[sys.executable,generator]
++        if os.environ.get('SRDSH_TRUST_CACHE_MODE')=='apple-signed':command.append('--empty')
++        run(command+[root,trust],timeout=120)
++        raw=trust_payload(trust.read_bytes())
++        wrapped=der(0x30,der(0x16,b'IM4P')+der(0x16,b'gtcd')+der(0x16,b'1')+der(4,raw))
++        assets['Cryptex1,GenericTrustCache'].write_bytes(wrapped)
++        value=plistlib.loads(manifest.read_bytes())
++        for item in value['BuildIdentities']:
++            if item.get('Info',{}).get('Variant')=='research':item['Manifest']['Cryptex1,GenericTrustCache']['Digest']=hashlib.sha384(wrapped).digest()
++        manifest.write_bytes(plistlib.dumps(value))
++        assets_from_manifest(manifest)
++    # Preserve familiar filenames for diagnostics and bounded worker cleanup.
++    record={'identifier':identifier,'version':version,'build_manifest':str(manifest),'assets':{k:str(v) for k,v in assets.items()}}
++    (work/'sdk-assets.json').write_text(json.dumps(record,indent=2)+'\n')
++    return manifest
++
++async def install(manifest,identifier,udid):
++    enable_flow_control_accounting()
++    from pymobiledevice3.remote.native_tunnel import NativeRemotedTunnel
++    from pymobiledevice3.remote.xpc_message import XpcUInt64Type
++    from pymobiledevice3.restore.tss import TSSRequest
++    from pymobiledevice3.services.cryptexd import CryptexdService
++    identity,paths=assets_from_manifest(manifest)
++    data={k:p.read_bytes() for k,p in paths.items()}
++    info=plistlib.loads(data['Cryptex1,CryptexInfoPlist'])
++    if info.get('CFBundleIdentifier')!=identifier:raise ValueError('Cryptex identifier mismatch')
++    identity=copy.deepcopy(identity)
++    identity.update({'Cryptex1,UseProductClass':True,'Cryptex1,ChipID':'0xff10','Cryptex1,ProductClass':'0xf2','Cryptex1,Type':3,'Cryptex1,SubType':255,'Cryptex1,NonceDomain':3,'Cryptex1,Version':'999.999.999.999.999,999','Cryptex1,PreauthorizationVersion':'999.999.999.999.999,999'})
++    for k,v in data.items():
++        identity['Manifest'][k]['Digest']=hashlib.sha384(v).digest();identity['Manifest'][k].setdefault('Info',{})['Personalize']=True
++    async with NativeRemotedTunnel(serial=udid) as rsd:
++        if str(rsd.udid)!=udid:raise RuntimeError('Exact-device identity mismatch')
++        service=CryptexdService(rsd)
++        identifiers=await service.read_personalization_identifiers();nonce=await service.cryptex_nonce(3)
++        if not nonce:raise RuntimeError('Research nonce unavailable')
++        request=TSSRequest();request.add_cryptex1_tags(identity,identifiers,nonce)
++        response=await asyncio.wait_for(request.send_receive(),timeout=90)
++        ticket=response.get('Cryptex1,Ticket')
++        if not isinstance(ticket,bytes) or not ticket:raise RuntimeError('Apple did not authorize the Cryptex')
++        print('Live Apple research authorization accepted for',udid,identifier,flush=True)
++        existing=await asyncio.wait_for(service.copy_installed(),timeout=30)
++        matches=[item for item in existing if item.identifier==identifier]
++        if len(matches)>1:raise RuntimeError('Multiple generations claim this identifier')
++        if matches:await asyncio.wait_for(service.uninstall(identifier),timeout=30)
++        properties={'Cryptex1,UseProductClass':True,'MountedCryptex':False,'Cryptex1,SubType':XpcUInt64Type(255),'Cryptex1,NonceDomain':XpcUInt64Type(3),'Cryptex1,Version':identity['Cryptex1,Version'],'Cryptex1,PreauthVersion':identity['Cryptex1,PreauthorizationVersion']}
++        await asyncio.wait_for(service.install(data['Cryptex1,GenericDmg'],data['Cryptex1,GenericTrustCache'],ticket,data['Cryptex1,CryptexInfoPlist'],data['Cryptex1,GenericVolume'],properties,image_type_index=10,persistence=2,nonce_persistence=1,auth=0),timeout=900)
++        print('INSTALL SUCCESS',identifier,flush=True)
++
++def main():
++    if sys.argv[1:]==['--build-and-install']:
++        udid=os.environ['CRYPTEXCTL_UDID'];identifier=os.environ['SRDSH_IDENTIFIER'];version=os.environ.get('SRDSH_VERSION','1.0.0')
++        manifest=build(os.environ['SRDSH_ROOT'],identifier,version,pathlib.Path(__file__).parent)
++        if os.environ.get('SRDSH_BUILD_ONLY')=='1':return
++    else:
++        if len(sys.argv)!=8:raise SystemExit('Expected --build-and-install or seven legacy asset arguments')
++        identifier,_,_,_,version,udid,manifest=sys.argv[1:]
++    asyncio.run(install(manifest,identifier,udid))
++
++
++# Process-local flow-control correction for pinned pymobiledevice3.
++"""Account for every outbound HTTP/2 DATA byte in the pinned device runtime."""
++
++
++def verify_flow_control_accounting() -> str:
++    """Verify the active implementations, returning their source file."""
++    import pathlib
++
++    from pymobiledevice3.remote.remotexpc import RemoteXPCConnection
++
++    expected = pathlib.Path(__file__).resolve()
++    for name in ("_send_flow_controlled", "_send_frame", "send_request", "_pump_one_frame"):
++        method = getattr(RemoteXPCConnection, name)
++        code = getattr(method, "__code__", None)
++        if code is None or pathlib.Path(code.co_filename).resolve() != expected:
++            raise RuntimeError(f"RemoteXPC correction is inactive for {name}")
++    return str(expected)
++
++
++def enable_flow_control_accounting() -> None:
++    """Apply a process-local correction; leave the installed dependency untouched."""
++    import asyncio
++
++    from hyperframe.frame import DataFrame, SettingsFrame
++    from pymobiledevice3.exceptions import ProtocolError
++    from pymobiledevice3.remote import remotexpc
++    from pymobiledevice3.remote.xpc_message import create_xpc_wrapper
++
++    connection = remotexpc.RemoteXPCConnection
++    if getattr(connection, "_poc_accounts_all_data", False):
++        verify_flow_control_accounting()
++        return
++    required = ("_send_flow_controlled", "_outbound_budget", "_consume_outbound",
++                "_pump_one_frame")
++    if not all(hasattr(connection, name) for name in required):
++        raise RuntimeError("Device runtime lacks the expected RemoteXPC flow-control API")
++    raw_send_frame = connection._send_frame
++    original_pump = connection._pump_one_frame
++
++    async def pump_one_frame(self):
++        frame = await original_pump(self)
++        if isinstance(frame, DataFrame):
++            # A reply read while waiting for credit must reach receive_response.
++            self._buffered_data_frames.append(frame)
++        elif isinstance(frame, SettingsFrame) and "ACK" not in frame.flags:
++            await raw_send_frame(self, SettingsFrame(flags=["ACK"]))
++        return frame
++
++    async def send_flow_controlled(self, stream_id, data, offset, total):
++        # Track the stream even before any DATA is sent so later SETTINGS deltas
++        # apply to its actual window, including a partially consumed root stream.
++        self._outbound_stream_windows.setdefault(stream_id, self._peer_initial_window_size)
++        start = offset
++        # The file-transfer caller submits its preamble only once. Complete it
++        # even when the remaining window is smaller than that preamble.
++        while offset < len(data):
++            budget = self._outbound_budget(stream_id)
++            while budget == 0:
++                try:
++                    await asyncio.wait_for(self._pump_one_frame(),
++                                           remotexpc.FILE_TRANSFER_WINDOW_TIMEOUT)
++                except asyncio.TimeoutError as error:
++                    raise ProtocolError(
++                        f"Timed out waiting for flow-control credit on stream {stream_id} "
++                        f"after {offset}/{total} bytes"
++                    ) from error
++                budget = self._outbound_budget(stream_id)
++            chunk = data[offset:offset + budget]
++            await raw_send_frame(self, DataFrame(stream_id=stream_id, data=chunk))
++            self._consume_outbound(stream_id, len(chunk))
++            offset += len(chunk)
++        return offset - start
++
++    async def send_frame(self, frame):
++        if not isinstance(frame, DataFrame) or not frame.data:
++            await raw_send_frame(self, frame)
++            return
++        if "PADDED" in frame.flags:
++            raise ProtocolError("The local RemoteXPC correction does not support padded DATA")
++        offset = 0
++        while offset < len(frame.data):
++            offset += await self._send_flow_controlled(
++                frame.stream_id, frame.data, offset, len(frame.data)
++            )
++        if "END_STREAM" in frame.flags:
++            await raw_send_frame(self, DataFrame(stream_id=frame.stream_id,
++                                                data=b"", flags=["END_STREAM"]))
++
++    async def send_request(self, data, wanting_reply=False):
++        wrapper = create_xpc_wrapper(
++            data, message_id=self.next_message_id[remotexpc.ROOT_CHANNEL],
++            wanting_reply=wanting_reply,
++        )
++        await self._send_frame(DataFrame(stream_id=remotexpc.ROOT_CHANNEL, data=wrapper))
++        self.next_message_id[remotexpc.ROOT_CHANNEL] += 1
++
++    connection._send_flow_controlled = send_flow_controlled
++    connection._send_frame = send_frame
++    connection.send_request = send_request
++    connection._pump_one_frame = pump_one_frame
++    connection._poc_accounts_all_data = True
++    verify_flow_control_accounting()
++
++if __name__=='__main__':main()
+diff --git a/scripts/verify.py b/scripts/verify.py
+new file mode 100644
+index 0000000..260deb9
+--- /dev/null
++++ b/scripts/verify.py
+@@ -0,0 +1,41 @@
++#!/usr/bin/env python3
++"""Verify real root PTY behavior using an explicitly authorized paired SSH route."""
++import argparse
++import json
++import pathlib
++import re
++import shlex
++import sys
++from deploy import paired_worker,PROJECT
++
++def main():
++    p=argparse.ArgumentParser(description=__doc__)
++    p.add_argument('--udid',required=True)
++    p.add_argument('--instance',type=pathlib.Path)
++    p.add_argument('--output',type=pathlib.Path,default=PROJECT/'dist')
++    p.add_argument('--idle-seconds',type=int,default=65)
++    args=p.parse_args()
++    output=args.output.resolve()
++    raw=(output/'root/System/Applications/SRDZsh.app/SRDZsh').read_bytes()
++    keys=set(re.findall(rb'(?<![a-f0-9])[a-f0-9]{64}\n\x00',raw))
++    if len(keys)!=1:raise RuntimeError('Expected exactly one embedded session credential')
++    key=next(iter(keys))[:-2].decode()
++    modules=re.findall(r'^name=(\S+).* link=static ',(PROJECT/'build/zsh-5.9.2-arm64e/config.modules').read_text(),re.M)
++    modules=[m for m in modules if m!='zsh/main']
++    inventory=json.loads((output/'commands.json').read_text())
++    commands=inventory['toybox_applets']+inventory.get('additional_commands',[])
++    options={'key':key,'modules':modules,'commands':commands,'idle_seconds':args.idle_seconds}
++    source=(PROJECT/'tests/device_session.py').read_text()
++    # Program text is separate from the sensitive stdin credential.
++    script='import json,sys; '+ 'exec('+repr(source)+')'
++    worker,_=paired_worker(args.udid,args.instance)
++    result=worker['ssh']('/var/jb/usr/bin/python3 -c '+shlex.quote(script),input_data=json.dumps(options).encode(),timeout=max(90,args.idle_seconds+60),check=False)
++    (output/(args.udid+'-session.log')).write_bytes(result.stdout+result.stderr)
++    if result.returncode:
++        print(result.stderr.decode('utf-8','replace'),file=sys.stderr)
++        raise SystemExit(result.returncode)
++    report=json.loads(result.stdout)
++    (output/(args.udid+'-verification.json')).write_text(json.dumps(report,indent=2)+'\n')
++    print(args.udid,'PASS: real root, PTY,',len(modules),'modules,',len(commands),'commands, resize, signals,',args.idle_seconds,'seconds idle, session state and exit')
++
++if __name__=='__main__':main()
+diff --git a/tests/device_session.py b/tests/device_session.py
+new file mode 100644
+index 0000000..13ec47e
+--- /dev/null
++++ b/tests/device_session.py
+@@ -0,0 +1,86 @@
++"""Executed on an SRD via an authorized SSH profile; credential supplied on stdin."""
++import json
++import os
++import re
++import select
++import shlex
++import socket
++import struct
++import sys
++import time
++
++options=json.loads(sys.stdin.read())
++sock=socket.create_connection(('127.0.0.1',22340),10)
++sock.sendall(options['key'].encode()+b'\n')
++ready=b''
++while not ready.endswith(b'\n'):
++    data=sock.recv(1)
++    if not data:raise RuntimeError('Root service rejected authentication')
++    ready+=data
++assert ready==b'READY uid=0 gid=0\n',ready
++sock.settimeout(15)
++
++def frame(kind,payload):
++    sock.sendall(bytes([kind])+struct.pack('!I',len(payload))+payload)
++
++def command(value):
++    time.sleep(.1) # Let ZLE finish restoring raw terminal input after the previous command.
++    marker=os.urandom(12).hex()
++    end=b'\x1e'+marker.encode()+b'\x1f'
++    frame(1,(value+"; printf '\\036"+marker+"\\037'\n").encode())
++    result=bytearray()
++    while end not in result:
++        data=sock.recv(65536)
++        if not data:raise RuntimeError('Shell exited during check')
++        result.extend(data)
++    return result[:result.index(end)].decode('utf-8','replace')
++
++root=command("print -r -- ROOT_IDS=$UID,$EUID; id; p=/var/root/.srdzsh-check-$$; print verified >$p; cat $p; rm $p; print -r -- SHELL=$ZSH_VERSION; tty")
++assert 'ROOT_IDS=0,0' in root and 'uid=0(root)' in root and 'verified' in root and 'SHELL=5.9.2' in root,root
++assert re.search(r'/dev/(ttys|pts/|pty)',root),root
++modules=options['modules']
++module_check=command('for m in '+' '.join(modules)+'; do zmodload $m || print -r -- FAIL_MODULE=$m; done; print -r -- MODULES_OK')
++assert 'FAIL_MODULE=' not in module_check.replace('FAIL_MODULE=$m',''),module_check
++completion=command('print -r -- COMPLETION=${+functions[compdef]}; print -r -- HISTORY=$HISTFILE; whence compinit; zmodload zsh/zpty; zpty srdcheck "print pty_module_ok; sleep 1"; zpty -r srdcheck; zpty -d srdcheck')
++assert 'COMPLETION=1' in completion and 'pty_module_ok' in completion,completion
++frame(2,struct.pack('!HH',92,31))
++resize=command('stty size')
++assert re.search(r'31\s+92',resize),resize
++paths=command('print -r -- CRYPTEX=$CRYPTEX_MOUNT_PATH; print -r -- BIN=$commands[zsh]; print -r -- TOYBOX=$commands[toybox]')
++for offset in range(0,len(options['commands']),20):
++    batch=options['commands'][offset:offset+20]
++    found=command('for c in '+' '.join(shlex.quote(c) for c in batch)+'; do whence -- "$c" >/dev/null || print -r -- MISSING=$c; done; print -r -- COMMANDS_OK')
++    assert 'MISSING=' not in found.replace('MISSING=$c',''),found
++neofetch=command('PATH=$CRYPTEX_MOUNT_PATH/usr/bin neofetch --stdout --no_config; print -r -- NEOFETCH_STATUS=$?')
++assert 'NEOFETCH_STATUS=0' in neofetch and re.search(r'OS: iOS (?:2[6-9]|[3-9][0-9])\.',neofetch),neofetch
++assert 'Host: iPhone' in neofetch and 'Shell: zsh 5.9.2' in neofetch,neofetch
++assert re.search(r'Memory: [1-9][0-9]*MiB / [1-9][0-9]*MiB',neofetch),neofetch
++assert 'GPU: prin' not in neofetch,neofetch
++neofetch_ascii=command('PATH=$CRYPTEX_MOUNT_PATH/usr/bin neofetch --no_config --ascii_distro mac_small; print -r -- NEOFETCH_ASCII_STATUS=$?')
++assert 'NEOFETCH_ASCII_STATUS=0' in neofetch_ascii and '\x1b[' in neofetch_ascii and 'iOS ' in neofetch_ascii,neofetch_ascii
++neofetch_flags=command('neofetch --version; print -r -- NEOFETCH_VERSION_STATUS=$?; neofetch --help; print -r -- NEOFETCH_HELP_STATUS=$?')
++assert 'Neofetch 7.1.0' in neofetch_flags and '--ascii_distro' in neofetch_flags,neofetch_flags
++# Upstream 7.1.0 intentionally exits 1 for both --help and --version.
++assert 'NEOFETCH_HELP_STATUS=1' in neofetch_flags and 'NEOFETCH_VERSION_STATUS=1' in neofetch_flags,neofetch_flags
++neofetch_config=command("p=/var/root/.srdzsh-neofetch-config-$$; print -r -- 'print_info() { prin Config srd-user-config; info OS distro; }' >$p; PATH=$CRYPTEX_MOUNT_PATH/usr/bin neofetch --stdout --config $p; s=$?; rm $p; print -r -- NEOFETCH_CONFIG_STATUS=$s")
++assert 'Config: srd-user-config' in neofetch_config and 'NEOFETCH_CONFIG_STATUS=0' in neofetch_config,neofetch_config
++command('cd /var/root; SRD_SESSION=remembered; print -r -- PID=$$')
++idle=options.get('idle_seconds',65)
++time.sleep(idle)
++persistence=command('print -r -- STATE=$SRD_SESSION:$PWD; print -r -- PID=$$')
++assert 'STATE=remembered:/var/root' in persistence,persistence
++frame(1,b'sleep 30\n');time.sleep(.5);frame(1,b'\x03');time.sleep(.2)
++signals=command('print -r -- SIGNAL_OK')
++assert 'SIGNAL_OK' in signals,signals
++command('print -r -- saved_history_marker; fc -AI')
++frame(1,b'exit\n')
++while sock.recv(65536):pass
++sock.close()
++with socket.create_connection(('127.0.0.1',22340),5) as rejected:
++    rejected.sendall(b'0'*64+b'\n')
++    assert rejected.recv(64)==b''
++print(json.dumps({'root':root,'completion':completion,'resize':resize,
++ 'neofetch':neofetch,'neofetch_ascii':neofetch_ascii,'neofetch_options':neofetch_flags,'neofetch_custom_config':neofetch_config,
++ 'module_count':len(modules),'command_count':len(options['commands']),
++ 'idle_seconds':idle,'persistent_state':persistence,'signals':signals,
++ 'authentication':'invalid credential rejected','exit':'connection closed cleanly'},indent=2))
+-- 
+2.50.1 (Apple Git-155)
+

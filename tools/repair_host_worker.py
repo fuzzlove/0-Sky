@@ -231,7 +231,7 @@ def main() -> int:
                       "CRYPSTORE_BLUETOOTH_PORT": str(bluetooth_port),
                       "CRYPSTORE_BLUETOOTH_STATE": str(bluetooth_state)}
         bluetooth_helper = directory / "host-mac/zero-sky-bluetooth-tunnel"
-        bridge_helper = directory / "automation/CrypStoreAutomation/device_bridge_supervisor"
+        bridge_helper = directory / "automation/CrypStoreAutomation/device_bridge_supervisor.sh"
         for helper in (bluetooth_helper, bridge_helper):
             if not helper.is_file() or helper.is_symlink():
                 raise RepairError("ERR_BRIDGE_CONNECTION", f"unsafe bridge helper: {helper.name}")

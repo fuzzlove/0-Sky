@@ -3,6 +3,9 @@
 #import <unistd.h>
 #import <sys/utsname.h>
 #import "Branding.h"
+#import "BootSplash/ZSSplashController.h"
+#import "Start/ZSStartController.h"
+#import "Theme/ZSLinkTheme.h"
 
 static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
 
@@ -17,6 +20,7 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
 @property(nonatomic,strong) UIButton *pairButton;
 @property(nonatomic,strong) UIButton *crypstoreButton;
 @property(nonatomic,strong) UIButton *diagnosticsButton;
+@property(nonatomic,strong) UIButton *themeButton;
 @property(nonatomic,strong) UITextView *console;
 @property(nonatomic,strong) NSTimer *timer;
 @property(nonatomic,strong) NSTimer *stageTimer;
@@ -35,6 +39,10 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
 @property(nonatomic,assign) BOOL pairingResultPollActive;
 @property(nonatomic,strong) UIAlertController *pairingProgressAlert;
 @property(nonatomic,copy) NSString *lastRuntimeDigest;
+@property(nonatomic,assign) BOOL runtimeReady;
+@property(nonatomic,assign) BOOL pairVisualVerified;
+@property(nonatomic,assign) BOOL pairVisualChecking;
+@property(nonatomic,strong) NSDate *lastControlStatusCheck;
 @end
 
 @implementation MatrixStatusController
@@ -106,7 +114,7 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
     }
 
     _crypstoreButton = [UIButton buttonWithType:UIButtonTypeSystem];
-    [_crypstoreButton setTitle:@"REPAIR / INSTALL 0-SKY CONTROL" forState:UIControlStateNormal];
+    [_crypstoreButton setTitle:@"Install 0-Sky Control" forState:UIControlStateNormal];
     [_crypstoreButton setTitleColor:[UIColor colorWithRed:.35 green:1 blue:.52 alpha:1]
                            forState:UIControlStateNormal];
     _crypstoreButton.titleLabel.font = [UIFont monospacedSystemFontOfSize:12 weight:UIFontWeightBold];
@@ -124,6 +132,14 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
     _diagnosticsButton.translatesAutoresizingMaskIntoConstraints = NO;
     [_diagnosticsButton addTarget:self action:@selector(showPairingDiagnostics) forControlEvents:UIControlEventTouchUpInside];
     [self.view addSubview:_diagnosticsButton];
+
+    _themeButton = [UIButton buttonWithType:UIButtonTypeSystem];
+    [_themeButton setTitle:@"COLOR THEMES" forState:UIControlStateNormal];
+    _themeButton.titleLabel.font = [UIFont monospacedSystemFontOfSize:10 weight:UIFontWeightMedium];
+    _themeButton.translatesAutoresizingMaskIntoConstraints = NO;
+    _themeButton.accessibilityIdentifier = @"chooseTheme";
+    [_themeButton addTarget:self action:@selector(chooseTheme) forControlEvents:UIControlEventTouchUpInside];
+    [self.view addSubview:_themeButton];
 
     _console = [UITextView new]; _console.editable = NO; _console.selectable = YES;
     _console.backgroundColor = UIColor.blackColor;
@@ -174,8 +190,13 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
       [_crypstoreButton.topAnchor constraintEqualToAnchor:_pairButton.bottomAnchor constant:7],
       [_crypstoreButton.heightAnchor constraintEqualToConstant:36],
       [_diagnosticsButton.topAnchor constraintEqualToAnchor:_crypstoreButton.bottomAnchor constant:3],
-      [_diagnosticsButton.centerXAnchor constraintEqualToAnchor:self.view.centerXAnchor],
+      [_diagnosticsButton.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:12],
+      [_diagnosticsButton.trailingAnchor constraintEqualToAnchor:self.view.centerXAnchor constant:-2],
       [_diagnosticsButton.heightAnchor constraintEqualToConstant:26],
+      [_themeButton.topAnchor constraintEqualToAnchor:_diagnosticsButton.topAnchor],
+      [_themeButton.leadingAnchor constraintEqualToAnchor:self.view.centerXAnchor constant:2],
+      [_themeButton.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-12],
+      [_themeButton.heightAnchor constraintEqualToAnchor:_diagnosticsButton.heightAnchor],
       [_console.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor constant:8],
       [_console.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor constant:-8],
       [_console.topAnchor constraintEqualToAnchor:_progress.bottomAnchor constant:8],
@@ -183,9 +204,40 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
       [_diagnosticsButton.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor constant:-6]
     ]];
 
+    self.pairVisualVerified = self.relationshipVerified;
+    self.pairVisualChecking = !self.relationshipVerified;
+    [self applyTheme];
+
     [self checkRuntime];
     _timer = [NSTimer scheduledTimerWithTimeInterval:2.0 target:self selector:@selector(checkRuntime)
                                             userInfo:nil repeats:YES];
+}
+- (void)chooseTheme {
+    __weak typeof(self) weakSelf = self;
+    [ZSLinkTheme presentPickerFrom:self anchor:self.themeButton onChange:^{ [weakSelf applyTheme]; }];
+}
+- (void)applyTheme {
+    ZSLinkTheme *theme = [ZSLinkTheme currentTheme];
+    self.view.backgroundColor = theme.backgroundColor;
+    self.console.backgroundColor = theme.panelColor;
+    self.console.textColor = theme.accentColor;
+    self.console.layer.borderColor = theme.borderColor.CGColor;
+    self.progress.progressTintColor = theme.accentColor;
+    self.progress.trackTintColor = theme.trackColor;
+    self.progressText.textColor = theme.accentColor;
+    self.refresh.backgroundColor = theme.accentColor;
+    self.crypstoreButton.backgroundColor = theme.panelColor;
+    self.crypstoreButton.layer.borderColor = theme.borderColor.CGColor;
+    [self.crypstoreButton setTitleColor:theme.accentColor forState:UIControlStateNormal];
+    [self.themeButton setTitleColor:theme.accentColor forState:UIControlStateNormal];
+    [self.diagnosticsButton setTitleColor:[UIColor colorWithWhite:.72 alpha:1] forState:UIControlStateNormal];
+    if (self.runtimeReady) {
+        self.headline.textColor = theme.accentColor;
+        self.pulse.textColor = theme.accentColor;
+    }
+    if (self.pairVisualVerified) self.pairButton.backgroundColor = theme.accentColor;
+    else if (self.pairVisualChecking) self.pairButton.backgroundColor = [UIColor colorWithWhite:.55 alpha:1];
+    else self.pairButton.backgroundColor = [UIColor colorWithRed:1 green:.72 blue:.18 alpha:1];
 }
 - (void)showPairingDiagnostics {
     NSURL *url = [NSURL URLWithString:@"http://127.0.0.1:48654/v1/pairing/status"];
@@ -639,44 +691,25 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
 - (void)finishCrypStoreOperation:(NSDictionary *)json error:(NSError *)error {
     dispatch_async(dispatch_get_main_queue(), ^{
         [self.stageTimer invalidate]; self.stageTimer = nil;
-        if (error) [self appendConsole:[NSString stringWithFormat:@"[0-Sky Control:error] %@", error.localizedDescription]];
-        if ([json[@"stdout"] length]) [self appendConsole:json[@"stdout"]];
-        if ([json[@"stderr"] length]) [self appendConsole:[@"[0-Sky Control:stderr] " stringByAppendingString:json[@"stderr"]]];
-        BOOL success = !error && [json[@"status"] integerValue] == 0;
+        NSString *result = [json[@"result"] isKindOfClass:NSString.class] ? json[@"result"] : @"FAILED";
+        NSDictionary *decision = [json[@"decision"] isKindOfClass:NSDictionary.class] ? json[@"decision"] : @{};
+        NSString *explanation = [json[@"explanation"] isKindOfClass:NSString.class] ? json[@"explanation"] :
+          ([decision[@"explanation"] isKindOfClass:NSString.class] ? decision[@"explanation"] : @"Review Bridge diagnostics");
+        BOOL success = !error && ([result isEqualToString:@"INSTALLED_AND_VERIFIED"] ||
+                                  [result isEqualToString:@"ALREADY_INSTALLED_AND_VERIFIED"]);
+        if (error) explanation = error.localizedDescription;
+        [self appendConsole:[NSString stringWithFormat:@"[0-Sky Control] %@: %@ (rollback: %@)",
+                             result, explanation, json[@"rollback"] ?: @"NOT_NEEDED"]];
+        if ([json[@"error"] isKindOfClass:NSString.class])
+            [self appendConsole:[@"[0-Sky Control:error] " stringByAppendingString:json[@"error"]]];
         [self.progress setProgress:(success ? 1.0f : self.progress.progress) animated:YES];
-        self.progressText.text = success ? @"100% // 0-SKY CONTROL REGISTERED + READY" : @"FAILED // 0-SKY CONTROL RECOVERY LOGGED";
-        [self.crypstoreButton setTitle:(success ? @"0-SKY CONTROL READY / REPAIR AGAIN" : @"RETRY 0-SKY CONTROL INSTALL")
-                                forState:UIControlStateNormal];
+        self.progressText.text = success ? @"100% // 0-SKY CONTROL INSTALLED AND VERIFIED" :
+                                      [@"FAILED // " stringByAppendingString:explanation];
         self.refreshing = NO; self.refresh.enabled = YES; self.crypstoreButton.enabled = YES;
+        self.lastControlStatusCheck = nil;
         [self checkRuntime];
+        [self checkControlInstallStatus];
     });
-}
-- (void)installBundledCrypStoreWithToken:(NSString *)token {
-    NSString *source = [NSBundle.mainBundle pathForResource:@"CrypStore-Universal" ofType:@"deb"
-                                                 inDirectory:@"SRDKit/packages"];
-    NSURL *documents = [NSFileManager.defaultManager URLsForDirectory:NSDocumentDirectory
-                                                             inDomains:NSUserDomainMask].firstObject;
-    NSURL *destination = [documents URLByAppendingPathComponent:@"CrypStore-Universal.deb"];
-    NSError *copyError = nil;
-    [NSFileManager.defaultManager removeItemAtURL:destination error:nil];
-    if (!source.length || ![NSFileManager.defaultManager copyItemAtPath:source toPath:destination.path error:&copyError]) {
-        [self finishCrypStoreOperation:nil error:copyError ?: [NSError errorWithDomain:@"0-Sky" code:2
-            userInfo:@{NSLocalizedDescriptionKey:@"Bundled 0-Sky Control package is unavailable"}]];
-        return;
-    }
-    [self appendConsole:@"[0-Sky Control] mounted recovery unavailable; installing bundled universal package"];
-    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:
-        [NSURL URLWithString:@"http://127.0.0.1:48654/v1/trollstore"]];
-    request.HTTPMethod = @"POST"; request.timeoutInterval = 1800;
-    [request setValue:token forHTTPHeaderField:@"X-TrollStore-Bridge-Token"];
-    [request setValue:@"application/json" forHTTPHeaderField:@"Content-Type"];
-    request.HTTPBody = [NSJSONSerialization dataWithJSONObject:
-        @{ @"arguments": @[@"install-deb", destination.path] } options:0 error:nil];
-    [[NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:
-      ^(NSData *data, NSURLResponse *response, NSError *error) {
-        NSDictionary *json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-        [self finishCrypStoreOperation:json error:error];
-      }] resume];
 }
 - (void)repairCrypStore {
     if (_refreshing) return;
@@ -688,24 +721,51 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
     }
     _refreshing = YES; _refresh.enabled = NO; _crypstoreButton.enabled = NO;
     _refreshSeconds = 0; [_progress setProgress:.08 animated:YES];
-    _progressText.text = @"8% // CHECKING 0-SKY CONTROL CRYPTEX + REGISTRATION";
-    _headline.text = @"0-SKY LINK // 0-SKY CONTROL: REPAIRING";
-    [self appendConsole:@"[0-Sky Control] authenticated repair/install requested"];
+    _progressText.text = @"8% // VERIFYING BUNDLED 0-SKY CONTROL";
+    _headline.text = @"0-SKY LINK // INSTALLING 0-SKY CONTROL";
+    [_crypstoreButton setTitle:@"Installing…" forState:UIControlStateNormal];
+    [self appendConsole:@"[0-Sky Control] authenticated install transaction requested"];
     [_stageTimer invalidate];
     _stageTimer = [NSTimer scheduledTimerWithTimeInterval:1 target:self selector:@selector(advanceRefreshStage)
                                                 userInfo:nil repeats:YES];
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:
-        [NSURL URLWithString:@"http://127.0.0.1:48654/v1/crypstore/repair"]];
-    request.HTTPMethod = @"POST"; request.timeoutInterval = 240;
+        [NSURL URLWithString:@"http://127.0.0.1:48654/v1/control/install"]];
+    request.HTTPMethod = @"POST"; request.timeoutInterval = 1800;
     [request setValue:token forHTTPHeaderField:@"X-TrollStore-Bridge-Token"];
     request.HTTPBody = [NSData data];
     [[NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:
       ^(NSData *data, NSURLResponse *response, NSError *error) {
         NSDictionary *json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
-        if (!error && [json[@"status"] integerValue] == 0) [self finishCrypStoreOperation:json error:nil];
-        else dispatch_async(dispatch_get_main_queue(), ^{
-            [self appendConsole:@"[0-Sky Control] exact mounted recovery not usable; falling back to bundled installer"];
-            [self installBundledCrypStoreWithToken:token];
+        [self finishCrypStoreOperation:json error:error];
+      }] resume];
+}
+- (void)checkControlInstallStatus {
+    if (self.refreshing || !self.paired) return;
+    NSDate *now = [NSDate date];
+    if (self.lastControlStatusCheck && [now timeIntervalSinceDate:self.lastControlStatusCheck] < 10) return;
+    self.lastControlStatusCheck = now;
+    NSString *token = [self bridgeToken];
+    if (!token.length) return;
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:
+      [NSURL URLWithString:@"http://127.0.0.1:48654/v1/control/install/status"]];
+    request.timeoutInterval = 30;
+    [request setValue:token forHTTPHeaderField:@"X-TrollStore-Bridge-Token"];
+    [[NSURLSession.sharedSession dataTaskWithRequest:request completionHandler:
+      ^(NSData *data, NSURLResponse *response, NSError *error) {
+        NSDictionary *json = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (self.refreshing) return;
+            NSDictionary *decision = [json[@"decision"] isKindOfClass:NSDictionary.class] ? json[@"decision"] : @{};
+            NSString *action = [decision[@"action"] isKindOfClass:NSString.class] ? decision[@"action"] : @"BLOCK";
+            NSString *title = @"Install 0-Sky Control";
+            if ([action isEqualToString:@"NO_ACTION"]) title = @"Verify Installation";
+            else if ([action isEqualToString:@"UPDATE"]) title = @"Update 0-Sky Control";
+            else if ([action isEqualToString:@"REPAIR"]) title = @"Repair 0-Sky Control";
+            else if ([action isEqualToString:@"BLOCK"]) title = @"Install 0-Sky Control — Unavailable";
+            [self.crypstoreButton setTitle:title forState:UIControlStateNormal];
+            self.crypstoreButton.enabled = self.paired && !error && json != nil;
+            if ([action isEqualToString:@"BLOCK"] && [decision[@"explanation"] isKindOfClass:NSString.class])
+                [self appendConsole:[@"[0-Sky Control:preflight] " stringByAppendingString:decision[@"explanation"]]];
         });
       }] resume];
 }
@@ -775,7 +835,9 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
     else if (!_paired && [pairError isEqualToString:@"TRUST_DENIED"]) pairTitle = @"PAIRING DENIED — TRY AGAIN";
     [_pairButton setTitle:pairTitle
                     forState:UIControlStateNormal];
-    _pairButton.backgroundColor = displayVerified ? [UIColor colorWithRed:.25 green:1 blue:.48 alpha:1] :
+    self.pairVisualVerified = displayVerified;
+    self.pairVisualChecking = NO;
+    _pairButton.backgroundColor = displayVerified ? [ZSLinkTheme currentTheme].accentColor :
                                                    [UIColor colorWithRed:1 green:.72 blue:.18 alpha:1];
     if (_paired && !_refreshing) {
         _progressText.text = [NSString stringWithFormat:
@@ -792,6 +854,7 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
         [self appendConsole:@"[pairing] Apple trusted session + device identity + 0-Sky Mac identity verified"];
     }
     BOOL ready = [status[@"ok"] boolValue] && _paired;
+    self.runtimeReady = ready;
     if ([status[@"bridge_euid"] integerValue] == 0 && !_didLogRoot) {
         _didLogRoot = YES;
         [self appendConsole:@"[root] ROOT OBTAINED // privileged bridge verified uid=0"];
@@ -821,11 +884,9 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
         NSInteger loaded = [status[@"loaded_dylibs"] integerValue];
         NSInteger targets = [status[@"loaded_targets"] integerValue];
         NSString *crypVersion = status[@"crypstore_version"] ?: @"unknown";
-        [_crypstoreButton setTitle:[NSString stringWithFormat:@"0-SKY CONTROL %@: ONLINE / REPAIR", crypVersion]
-                           forState:UIControlStateNormal];
         _headline.text = @"0-SKY LINK // AUTHORIZED RUNTIME: FULL";
-        _headline.textColor = [UIColor colorWithRed:.25 green:1 blue:.48 alpha:1];
-        _pulse.textColor = [UIColor colorWithRed:.25 green:1 blue:.48 alpha:1];
+        _headline.textColor = [ZSLinkTheme currentTheme].accentColor;
+        _pulse.textColor = [ZSLinkTheme currentTheme].accentColor;
         _detail.text = [NSString stringWithFormat:@"ELLEKIT ONLINE  •  %ld TWEAKS LOADED  •  %ld TARGETS\n0-SKY CONTROL %@ ONLINE%@  •  ROOTLESS RECOVERY KIT BUNDLED", (long)loaded, (long)targets,
                         crypVersion, [status[@"crypstore_running"] boolValue] ? @" + RUNNING" : @""];
     } else {
@@ -847,9 +908,48 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
            (long)[status[@"configured_dylibs"] integerValue],
            (long)[status[@"loaded_dylibs"] integerValue],
            [status[@"crypstore_ok"] boolValue] ? @"online" : @"repair required"];
-        [_crypstoreButton setTitle:([status[@"crypstore_ok"] boolValue] ?
-          @"0-SKY CONTROL ONLINE / REPAIR" : @"REPAIR / INSTALL 0-SKY CONTROL") forState:UIControlStateNormal];
     }
+    [self checkControlInstallStatus];
+}
+- (void)presentRecoveryChoicesForSnapshot:(NSDictionary *)snapshot {
+    if (self.presentedViewController || !self.view.window) return;
+    NSString *bootstrap = [snapshot[@"bootstrap_status"] isKindOfClass:NSString.class]
+        ? snapshot[@"bootstrap_status"] : @"UNKNOWN";
+    NSString *trust = [snapshot[@"trusted_host_status"] isKindOfClass:NSString.class]
+        ? snapshot[@"trusted_host_status"] : @"UNKNOWN";
+    NSString *ssh = [snapshot[@"ssh_status"] isKindOfClass:NSString.class]
+        ? snapshot[@"ssh_status"] : @"UNKNOWN";
+    NSString *runtime = [snapshot[@"runtime_status"] isKindOfClass:NSString.class]
+        ? snapshot[@"runtime_status"] : @"UNKNOWN";
+    NSString *control = [snapshot[@"control_status"] isKindOfClass:NSString.class]
+        ? snapshot[@"control_status"] : @"UNKNOWN";
+    NSString *message = [NSString stringWithFormat:
+        @"Bootstrap: %@\nTrusted Mac: %@\nSSH: %@\nRuntime: %@\nControl: %@\n\nChoose how to continue. Full component repair runs from 0-Sky Bridge on the Mac.",
+        bootstrap, trust, ssh, runtime, control];
+    UIAlertController *choices = [UIAlertController alertControllerWithTitle:@"Research Environment Needs Attention"
+        message:message preferredStyle:UIAlertControllerStyleAlert];
+    __weak typeof(self) weakSelf = self;
+    [choices addAction:[UIAlertAction actionWithTitle:@"Retry Connection"
+        style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            [weakSelf checkRuntime];
+            if (![trust isEqualToString:@"VERIFIED"]) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 350 * NSEC_PER_MSEC),
+                               dispatch_get_main_queue(), ^{ [weakSelf showPairingAssistant]; });
+            }
+        }]];
+    [choices addAction:[UIAlertAction actionWithTitle:@"Show Mac Repair Steps"
+        style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+            UIAlertController *instructions = [UIAlertController alertControllerWithTitle:@"Use 0-Sky Bridge on the Mac"
+                message:@"Select this exact SRD in 0-Sky Bridge and run Complete iOS Component Setup / Repair. The Mac installer verifies the device and may restart the research UI."
+                preferredStyle:UIAlertControllerStyleAlert];
+            [instructions addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 350 * NSEC_PER_MSEC),
+                           dispatch_get_main_queue(), ^{
+                [weakSelf presentViewController:instructions animated:YES completion:nil];
+            });
+        }]];
+    [choices addAction:[UIAlertAction actionWithTitle:@"Later" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:choices animated:YES completion:nil];
 }
 - (BOOL)prefersStatusBarHidden { return NO; }
 - (UIStatusBarStyle)preferredStatusBarStyle { return UIStatusBarStyleLightContent; }
@@ -877,7 +977,35 @@ static NSString *const RuntimeURL = @"http://127.0.0.1:48654/v1/runtime";
       options:(UISceneConnectionOptions *)connectionOptions API_AVAILABLE(ios(13.0)) {
     if (![scene isKindOfClass:UIWindowScene.class]) return;
     self.window = [[UIWindow alloc] initWithWindowScene:(UIWindowScene *)scene];
-    self.window.rootViewController = [MatrixStatusController new];
+    ZSStartController *start = [ZSStartController new];
+    __weak typeof(self) weakSelf = self;
+    __weak ZSStartController *weakStart = start;
+    start.onStart = ^{
+        SceneDelegate *strongSelf = weakSelf;
+        if (!strongSelf || strongSelf.window.rootViewController != weakStart) return;
+        MatrixStatusController *environment = [MatrixStatusController new];
+        if (![ZSSplashController isEnabled]) {
+            strongSelf.window.rootViewController = environment;
+            return;
+        }
+        ZSSplashController *splash = [ZSSplashController new];
+        __weak ZSSplashController *weakSplash = splash;
+        splash.onDismiss = ^{
+            SceneDelegate *delegate = weakSelf;
+            if (delegate.window.rootViewController != weakSplash) return;
+            BOOL needsRecovery = [weakSplash needsRecoveryChoice];
+            NSDictionary *snapshot = weakSplash.lastSnapshot ?: @{};
+            delegate.window.rootViewController = environment;
+            if (needsRecovery) {
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 400 * NSEC_PER_MSEC),
+                               dispatch_get_main_queue(), ^{
+                    [environment presentRecoveryChoicesForSnapshot:snapshot];
+                });
+            }
+        };
+        strongSelf.window.rootViewController = splash;
+    };
+    self.window.rootViewController = start;
     [self.window makeKeyAndVisible];
 }
 @end

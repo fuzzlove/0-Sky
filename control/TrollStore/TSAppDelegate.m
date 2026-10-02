@@ -1,5 +1,6 @@
 #import "TSAppDelegate.h"
 #import "TSRootViewController.h"
+#import "TSSceneDelegate.h"
 #import "TSBluetoothFallback.h"
 
 @implementation TSAppDelegate
@@ -10,9 +11,13 @@
 }
 
 - (UISceneConfiguration *)application:(UIApplication *)application configurationForConnectingSceneSession:(UISceneSession *)connectingSceneSession options:(UISceneConnectionOptions *)options {
-    // Called when a new scene session is being created.
-    // Use this method to select a configuration to create the new scene with.
-    return [[UISceneConfiguration alloc] initWithName:@"Default Configuration" sessionRole:connectingSceneSession.role];
+	// A newly allocated configuration has no delegate even when Info.plist
+	// names one. On SRD builds that leaves UIKit displaying the legacy launch
+	// storyboard and none of Control's live inventory controllers are attached.
+	UISceneConfiguration* configuration = [[UISceneConfiguration alloc]
+		initWithName:@"Default Configuration" sessionRole:connectingSceneSession.role];
+	configuration.delegateClass = TSSceneDelegate.class;
+	return configuration;
 }
 
 

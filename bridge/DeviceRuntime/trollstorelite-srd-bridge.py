@@ -1,6 +1,6 @@
 #!/var/jb/usr/bin/python3
 """Loopback-only, authenticated broker for fixed TrollStore Lite operations."""
-import base64, crypt, hashlib, hmac, json, os, pathlib, plistlib, re, shutil, stat, subprocess, sys, threading, time, uuid, zipfile
+import base64, crypt, glob, hashlib, hmac, json, os, pathlib, plistlib, re, shutil, stat, subprocess, sys, threading, time, traceback, uuid, zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 
@@ -12,9 +12,18 @@ for _candidate in (_HERE, _HERE.parent / "tools/srd-runtime-manager"):
         sys.path.insert(0, str(_candidate))
 
 from zero_sky_core import CoreRuntime
+from zero_sky_core.bootsplash import snapshot as bootsplash_snapshot
+from zero_sky_core import control_install_service
+from zero_sky_core import sileo_package_service
+from zero_sky_core.ipc import response as core_response, validate_request
+from zero_sky_core.package_integration import PackageIntegrationError, resolve_owner
 
 HOST, PORT = "127.0.0.1", 48654
 TOKEN_FILE = "/var/jb/etc/trollstorelite-srd-bridge.token"
+CONTROL_BUNDLE_ID = "com.liquidsky.CrypStore"
+CONTROL_DATA_ROOT = "/var/mobile/Containers/Data/Application"
+CONTROL_TOKEN_FILE = ("/var/mobile/Library/Application Support/Containers/"
+                      "com.liquidsky.CrypStore/Documents/.0sky/bridge.token")
 HELPER = "/var/jb/usr/local/libexec/trollstorehelper-srd"
 APPREGISTRARD = "/var/jb/usr/local/libexec/appregistrard-srd"
 LOG = "/var/jb/var/log/trollstorelite-srd-bridge.log"
@@ -62,6 +71,15 @@ ENV = {
     "APT_LISTCHANGES_FRONTEND": "none",
 }
 
+def sanitized_error_detail(error):
+    """Bound exception text for the root-only log without credentials or host PII."""
+    value = str(error)[:1024]
+    value = re.sub(r"(?i)(token|password|secret)(\s*[:=]\s*)\S+",
+                   r"\1\2<redacted>", value)
+    value = re.sub(r"https?://[^/@\s]+:[^/@\s]+@", "https://<redacted>@", value)
+    value = re.sub(r"/Users/[^/\s]+", "/Users/<redacted>", value)
+    return value
+
 PAIRING_USER_MESSAGES = {
     "MAC_NOT_FOUND": "Open 0-Sky on the Mac; discovery will continue automatically",
     "NO_MAC": "Open 0-Sky on the Mac; discovery will continue automatically",
@@ -94,13 +112,119 @@ PAIRING_USER_MESSAGES = {
 class RequestError(Exception): pass
 
 
+def control_token_destinations(legacy_destination=CONTROL_TOKEN_FILE):
+    """Return verified MCM and legacy token destinations for 0-Sky Control."""
+    matching = []
+    try:
+        entries = list(os.scandir(CONTROL_DATA_ROOT))
+    except OSError:
+        entries = []
+    for entry in entries:
+        if not entry.is_dir(follow_symlinks=False):
+            continue
+        metadata = os.path.join(
+            entry.path, ".com.apple.mobile_container_manager.metadata.plist")
+        try:
+            metadata_info = os.lstat(metadata)
+            if (not stat.S_ISREG(metadata_info.st_mode) or
+                    metadata_info.st_uid != 0):
+                continue
+            with open(metadata, "rb") as stream:
+                values = plistlib.load(stream)
+            if values.get("MCMMetadataIdentifier") != CONTROL_BUNDLE_ID:
+                continue
+            container = os.path.realpath(entry.path)
+            root = os.path.realpath(CONTROL_DATA_ROOT) + os.sep
+            if not container.startswith(root):
+                continue
+            documents = os.path.join(container, "Documents")
+            documents_info = os.lstat(documents)
+            if (not stat.S_ISDIR(documents_info.st_mode) or
+                    documents_info.st_uid != 501):
+                continue
+            matching.append((metadata_info.st_mtime_ns, documents))
+        except (OSError, ValueError, plistlib.InvalidFileException):
+            continue
+    destinations = []
+    if matching:
+        # Prefer the newest exact bundle match if an interrupted reinstall
+        # left an older MCM container behind.
+        matching.sort(reverse=True)
+        destinations.append(os.path.join(
+            matching[0][1], ".0sky", "bridge.token"))
+    destinations.append(legacy_destination)
+    return destinations
+
+
+def _publish_control_bridge_token(value, destination, allowed_documents,
+                                  uid=501, gid=501):
+    parent = os.path.dirname(destination)
+    documents = os.path.dirname(parent)
+    if (os.path.realpath(documents) not in allowed_documents or
+            os.path.lexists(parent) and os.path.islink(parent)):
+        raise RuntimeError("Control token destination is unsafe")
+    os.makedirs(parent, mode=0o700, exist_ok=True)
+    os.chown(parent, uid, gid)
+    os.chmod(parent, 0o700)
+    temporary = destination + ".tmp." + str(os.getpid())
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                         getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=True) as stream:
+            stream.write(value)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.chown(temporary, uid, gid)
+        os.chmod(temporary, 0o600)
+        os.replace(temporary, destination)
+        directory = os.open(parent, os.O_RDONLY)
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+    return {"path": destination, "mode": "0600", "owner": uid}
+
+
+def publish_control_bridge_token(source=TOKEN_FILE, destination=None,
+                                 uid=501, gid=501):
+    """Publish the device-local bridge token inside Control's private tree.
+
+    iOS 27 applies the registered application's sandbox before legacy
+    no-sandbox entitlements, so the app cannot read the rootless source file.
+    The derivative contains no credential: this mode-0600 copy is generated on
+    the device and refreshed by the root broker whenever it starts.
+    """
+    source_info = os.lstat(source)
+    if (not stat.S_ISREG(source_info.st_mode) or source_info.st_uid != 0 or
+            source_info.st_mode & 0o007 or source_info.st_size > 256):
+        raise RuntimeError("bridge token source failed security checks")
+    with open(source, "rb") as stream:
+        value = stream.read(257)
+    if (len(value) > 256 or len(value.strip()) < 64 or
+            b"\0" in value or b"\r" in value):
+        raise RuntimeError("bridge token source is invalid")
+    destinations = ([destination] if destination else control_token_destinations())
+    allowed_documents = {os.path.realpath(os.path.dirname(os.path.dirname(path)))
+                         for path in destinations}
+    results = [_publish_control_bridge_token(
+        value, path, allowed_documents, uid=uid, gid=gid)
+        for path in destinations]
+    return results[0] if destination else results
+
+
 def core_runtime():
     global _CORE_RUNTIME
     with CORE_LOCK:
         if _CORE_RUNTIME is None:
             # The runtime manager owns collection.  The bridge shares the same
             # database for bounded reads and must not duplicate sensor work.
-            _CORE_RUNTIME = CoreRuntime(telemetry_owner=False)
+            _CORE_RUNTIME = CoreRuntime(
+                telemetry_owner=False, crane_handoff=queue_crane_target_handoffs)
             _CORE_RUNTIME.start()
         return _CORE_RUNTIME
 
@@ -432,6 +556,7 @@ def worker_status():
             "bridge_version": heartbeat.get("bridge_version"),
             "protocol_version": heartbeat.get("protocol_version"),
             "device_backend": heartbeat.get("device_backend", "PymobiledeviceBackend"),
+            "control_installer_backend": heartbeat.get("control_installer_backend"),
             "mac_identity_fingerprint": heartbeat.get("mac_identity_fingerprint"),
             "apple_pairing_verified": bool(heartbeat.get("apple_pairing_verified")),
             "lockdown_session_validated": bool(heartbeat.get("lockdown_session_validated")),
@@ -648,7 +773,11 @@ def pairing_status():
         message = "0-Sky Mac identity does not match enrollment"
     else:
         message = "The bridge is not running as root"
+    remote_ports = sorted({int(host["ssh_remote_port"]) for host in enrolled_hosts.values()
+                           if str(host.get("ssh_remote_port", "")).isdigit()
+                           and 1 <= int(host["ssh_remote_port"]) <= 65535})
     result.update({
+        "ssh_remote_ports": remote_ports,
         "paired": paired, "live_verified": paired, "trusted_mac_verified": paired,
         "relationship_verified": relationship_verified,
         "verification_recommended": bool(relationship_verified and not paired),
@@ -1110,7 +1239,48 @@ def export_package(args):
         try: os.unlink(temporary)
         except OSError: pass
 
-def queue_install(args):
+def queue_control_install(source, manifest):
+    """Submit only the verified Link-bundled Control IPA to the paired worker."""
+    status = worker_status()
+    if not status["connected"] or status.get("control_installer_backend") != "paired-srd-worker-v1":
+        return {"status": 190, "stderr": "Verified Mac Control installer is unavailable",
+                "rollback": "NOT_NEEDED"}
+    job_id = str(uuid.uuid4())
+    root = os.path.join(SPOOL, job_id)
+    os.makedirs(root, mode=0o700, exist_ok=False)
+    destination = os.path.join(root, "input.ipa")
+    expected = manifest["ipa_sha256"]
+    try:
+        shutil.copyfile(source, destination)
+        os.chmod(destination, 0o600)
+        observed = _file_sha256(destination)
+        if observed != expected:
+            raise RuntimeError("staged Control IPA hash mismatch")
+        atomic_json(os.path.join(root, "request.json"), {
+            "job_id": job_id, "operation": "control-install",
+            "original_name": "0-Sky Control",
+            "source_sha256": expected,
+            "required_entitlements": manifest["permissions"]["required_entitlements"],
+            "created_at": int(time.time()),
+        })
+        result_path = os.path.join(root, "result.json")
+        deadline = time.monotonic() + 1800
+        while time.monotonic() < deadline:
+            if os.path.isfile(result_path):
+                with open(result_path, "r", encoding="utf-8") as stream:
+                    result = json.load(stream)
+                if not isinstance(result, dict) or not isinstance(result.get("status"), int):
+                    raise RuntimeError("Mac Control installer returned an invalid result")
+                return result
+            time.sleep(1)
+        return {"status": 124, "stderr": "Mac Control installer timed out",
+                "rollback": "UNKNOWN"}
+    finally:
+        try: os.unlink(destination)
+        except OSError: pass
+
+
+def queue_install(args, launch_validation=None):
     status = worker_status()
     if not status["connected"]:
         return {"status": 190, "stdout": "", "stderr": (
@@ -1129,13 +1299,26 @@ def queue_install(args):
         else:
             shutil.copyfile(source, destination)
         os.chmod(destination, 0o600)
-        atomic_json(os.path.join(root, "request.json"), {
+        digest = hashlib.sha256()
+        with open(destination, "rb") as staged:
+            for block in iter(lambda: staged.read(1024 * 1024), b""):
+                digest.update(block)
+        if args[0] == "install-app-bundle":
+            existing = verified_existing_app_integration(source, digest.hexdigest())
+            if existing is not None:
+                shutil.rmtree(root, ignore_errors=True)
+                return existing
+        request = {
             "job_id": job_id,
             "operation": "install",
             "original_name": os.path.basename(source),
             "arguments": args,
             "created_at": int(time.time()),
-        })
+            "source_sha256": digest.hexdigest(),
+        }
+        if launch_validation is not None:
+            request["launch_validation"] = launch_validation
+        atomic_json(os.path.join(root, "request.json"), request)
         deadline = time.monotonic() + 1800
         result_path = os.path.join(root, "result.json")
         while time.monotonic() < deadline:
@@ -1159,7 +1342,18 @@ def queue_install(args):
 
 def queue_runtime_sync(package_name):
     """Ask the connected Mac to authorize the new package-owned code."""
+    # A preceding app-integration job can hold the worker's serialized SSH
+    # channel longer than the 15-second heartbeat freshness window. The worker
+    # writes its result before its heartbeat thread can reacquire that channel,
+    # so an immediate runtime-sync used to report status 190 even though the
+    # same worker had just completed successfully. Give the post-job heartbeat
+    # one bounded interval to arrive; a genuinely disconnected worker still
+    # fails closed below.
+    deadline = time.monotonic() + 20
     status = worker_status()
+    while not status["connected"] and time.monotonic() < deadline:
+        time.sleep(0.25)
+        status = worker_status()
     if not status["connected"]:
         return {"status": 190, "stdout": "", "stderr":
                 "Tweak files were installed, but the Mac companion is required to refresh the SRD trust cache."}
@@ -1186,12 +1380,14 @@ def package_payload(package_name):
         cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
     if listed.returncode != 0:
-        return {"apps": [], "tweaks": [], "preferences": [], "daemons": []}
+        return {"apps": [], "tweaks": [], "preferences": [], "daemons": [],
+                "adapters": []}
 
     apps = set()
     tweaks = set()
     preferences = set()
     daemons = set()
+    adapters = set()
     approved_app_roots = ("/var/jb/Applications/", "/Applications/")
     for raw_path in listed.stdout.decode("utf-8", "replace").splitlines():
         path = raw_path.strip()
@@ -1214,11 +1410,15 @@ def package_payload(package_name):
         if (path.startswith("/var/jb/Library/LaunchDaemons/") and
                 lower.endswith(".plist")):
             daemons.add(path)
+        if (path.startswith("/var/jb/usr/share/0-sky/package-adapters/") and
+                lower.endswith(".json")):
+            adapters.add(path)
     return {
         "apps": sorted(apps),
         "tweaks": sorted(tweaks),
         "preferences": sorted(preferences),
         "daemons": sorted(daemons),
+        "adapters": sorted(adapters),
     }
 
 def archive_contains_app(deb_path):
@@ -1331,14 +1531,439 @@ def normalize_legacy_app_export(destination, metadata):
         try: os.unlink(rebuilt)
         except OSError: pass
 
-def integration_report(package_name):
+TRUSTED_LAUNCHCTL_SHA256 = "a2d095b681cd4bf1ac819a7052b5b376516ed663bd989edc60d25297fa1e9bbc"
+
+
+def _file_sha256(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def trusted_launchctl():
+    patterns = (
+        "/private/var/run/com.apple.security.cryptexd/mnt/"
+        "com.emp0ry.localfence.srd-repair2.*/usr/bin/launchctl-srd",
+        "/private/var/run/com.apple.security.cryptexd/mnt/"
+        "com.liquidsky.launch-helper.recovery-*/usr/bin/launchctl-srd",
+    )
+    candidates = []
+    for pattern in patterns:
+        candidates.extend(glob.glob(pattern))
+    trusted = []
+    for path in sorted(set(candidates)):
+        try:
+            if (os.path.isfile(path) and not os.path.islink(path) and
+                    _file_sha256(path) == TRUSTED_LAUNCHCTL_SHA256):
+                trusted.append(path)
+        except OSError:
+            pass
+    if len(trusted) != 1:
+        raise RuntimeError("exactly one verified SRD launch helper is required")
+    probe = subprocess.run([trusted[0], "version"], cwd="/var/jb/var/tmp", env=ENV,
+                           stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                           stderr=subprocess.PIPE, timeout=10, check=False)
+    if probe.returncode:
+        raise RuntimeError("verified SRD launch helper cannot execute")
+    return trusted[0]
+
+
+def validate_crane_binary_transformations(package, value):
+    """Require the exact reviewed iOS 27 binary adaptation evidence."""
+    expected = []
+    if package == "com.opa334.crane":
+        expected = [{
+            "adapter": "ios27-shared-cache-hook-v1",
+            "path": ("/var/jb/Library/MobileSubstrate/DynamicLibraries/"
+                     "CraneSupport.dylib"),
+            "original_sha256": ("91f1d8969ad16051645e8dd34c4e67b7"
+                                "49e2b80e23a9eb83b15e79323d5ca5f1"),
+            "adapted_sha256": ("1cbd343957156e4668510dc2bff814d3"
+                               "7896d028fa9d4a6c0b5b8d1d84f19159"),
+            "change": "defer __CFPrefsGetPathForTriplet direct hook",
+            "reason": ("iOS 27 rejects executable restoration of modified signed "
+                       "shared-cache pages"),
+        }, {
+            "adapter": "ios27-rootless-support-signing-v1",
+            "path": "/var/jb/usr/lib/libcrane.dylib",
+            "original_sha256": ("c367a60abdd759bc8682521ccc5bdec6"
+                                "bfee1869673b822b85fe31f298d2f058"),
+            "adapted_sha256": ("a5a10059a4d9af20d03676d525e8d2c"
+                               "ffbe37185227ae0090a9c54ffa7ccd595"),
+            "change": "deterministic ad-hoc signature for the rootless support library",
+            "reason": ("sandboxed iOS 27 daemon injection requires the dependency bytes "
+                       "to match the active SRD trust-cache generation"),
+        }]
+    if value != expected:
+        raise RuntimeError(package + ": binary transformations differ from the reviewed contract")
+
+
+def validate_crane_applications(package, value):
+    """Require an exact lifecycle contract for Crane's hidden companion app."""
+    expected = []
+    if package == "com.opa334.crane":
+        expected = [{
+            "path": "/var/jb/Applications/CraneApplication.app",
+            "bundle_identifier": "com.opa334.CraneApplication",
+            "role": "hidden-companion",
+            "launch_validation": "controlled-exit-v1",
+            "original_executable_sha256": (
+                "485210d727140983493be0b7fc9cbcc724b8c696dc5becd86af9d6b2bb5289e6"
+            ),
+        }]
+    if value != expected:
+        raise RuntimeError(package + ": application lifecycle contract differs")
+
+
+def package_adapter_manifest(package, payload):
+    expected = "/var/jb/usr/share/0-sky/package-adapters/" + package + ".json"
+    if payload.get("adapters") != [expected]:
+        return None
+    info = os.lstat(expected)
+    if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or
+            info.st_mode & 0o022 or info.st_size > 64 * 1024):
+        raise RuntimeError(package + ": package adapter manifest is not protected")
+    with open(expected, "rb") as stream:
+        value = json.load(stream)
+    if (not isinstance(value, dict) or value.get("schema") != 1 or
+            value.get("adapter") != "crane-family-v2" or
+            value.get("package") != package or
+            package not in ("com.opa334.crane", "com.opa334.cranelite")):
+        raise RuntimeError(package + ": package adapter manifest is not supported")
+    if set(value) != {"schema", "adapter", "package", "original_sha256",
+                      "suppressed_scripts", "compatibility_components",
+                      "permissions", "services", "runtime",
+                      "binary_transformations", "applications"}:
+        raise RuntimeError(package + ": package adapter manifest has unexpected fields")
+    validate_crane_binary_transformations(package, value.get("binary_transformations"))
+    validate_crane_applications(package, value.get("applications"))
+    components = value.get("compatibility_components")
+    expected_starter = (b"#!/bin/sh\n# 0-Sky crane-family-v2: cranehelperd is "
+                        b"managed by the SRD service backend.\nexit 0\n")
+    if (not isinstance(components, list) or len(components) != 1 or
+            not isinstance(components[0], dict) or
+            set(components[0]) != {"path", "original_sha256", "adapted_sha256",
+                                   "adapter", "behavior"} or
+            components[0].get("path") != "/var/jb/usr/local/bin/cranehelperd_start" or
+            components[0].get("adapter") != "srd-service-starter-v1" or
+            components[0].get("behavior") != "defer-to-transactional-service-backend" or
+            not re.fullmatch(r"[0-9a-f]{64}",
+                             str(components[0].get("original_sha256") or "")) or
+            components[0].get("adapted_sha256") !=
+                    hashlib.sha256(expected_starter).hexdigest()):
+        raise RuntimeError(package + ": helper launcher adapter differs from the reviewed contract")
+    starter = components[0]["path"]
+    try:
+        starter_info = os.lstat(starter)
+        with open(starter, "rb") as stream:
+            starter_payload = stream.read(len(expected_starter) + 1)
+    except OSError as error:
+        raise RuntimeError(package + ": helper launcher adapter is unavailable") from error
+    if (not stat.S_ISREG(starter_info.st_mode) or starter_info.st_uid != 0 or
+            starter_info.st_gid != 0 or starter_info.st_mode & 0o022 or
+            not starter_info.st_mode & stat.S_IXUSR or starter_payload != expected_starter):
+        raise RuntimeError(package + ": helper launcher adapter is not protected")
+    runtime = value.get("runtime")
+    root = "/var/jb/Library/MobileSubstrate/DynamicLibraries"
+    expected_source = ({
+        "kind": "plist-string",
+        "path": "/var/mobile/Library/Preferences/com.opa334.craneliteprefs.plist",
+        "key": "selectedApplication",
+    } if package == "com.opa334.cranelite" else {
+        "kind": "control-app-allowlist",
+        "path": "/var/jb/var/lib/srd-runtime/tweak-targets/com.opa334.crane.json",
+    })
+    expected_runtime = {
+        "required_dylibs": [root + "/CraneSB.dylib", root + "/CraneSupport.dylib"],
+        "configuration_dependent": [{
+            "dylib": root + "/ Crane.dylib",
+            "legacy_filter": "com.apple.Foundation",
+            "target_source": expected_source,
+            "sandbox_dependencies": [
+                "/var/jb/usr/lib/libcrane.dylib",
+                "/var/jb/usr/lib/libsandy.dylib",
+                "/var/jb/usr/lib/libellekit.dylib",
+            ],
+        }],
+        "process_selectors": [{
+            "dylib": root + "/CraneSB.dylib",
+            "executable": "/System/Library/CoreServices/SpringBoard.app/SpringBoard",
+            "sandbox_dependencies": [
+                "/var/jb/usr/lib/libcrane.dylib",
+                "/var/jb/usr/lib/libsandy.dylib",
+                "/var/jb/usr/lib/libellekit.dylib",
+            ],
+        }, {
+            "dylib": root + "/CraneSupport.dylib",
+            "executable": "/usr/sbin/cfprefsd",
+            "environment": {
+                "XPC_SERVICE_NAME": "com.apple.cfprefsd.xpc.daemon",
+            },
+            "sandbox_dependencies": [
+                "/var/jb/usr/lib/libcrane.dylib",
+                "/var/jb/usr/lib/libsandy.dylib",
+                "/var/jb/usr/lib/libellekit.dylib",
+            ],
+        }],
+    }
+    if runtime != expected_runtime:
+        raise RuntimeError(package + ": runtime adapter differs from the reviewed contract")
+    return value
+
+
+def record_validated_runtime_adapter(package, manifest):
+    """Publish Bridge-validated policy for already sealed runtime bytes."""
+    source = pathlib.Path(
+        "/var/jb/usr/share/0-sky/package-adapters/" + package + ".json")
+    directory = pathlib.Path("/var/jb/var/lib/0-sky/validated-package-adapters")
+    directory.mkdir(parents=True, exist_ok=True)
+    os.chown(directory, 0, 0)
+    os.chmod(directory, 0o700)
+    record = {
+        "schema": 1,
+        "package": package,
+        "adapter": manifest["adapter"],
+        "manifest_sha256": _file_sha256(source),
+        "runtime": manifest["runtime"],
+        "validated_at": int(time.time()),
+    }
+    target = directory / (package + ".json")
+    temporary = directory / ("." + package + "." + uuid.uuid4().hex + ".tmp")
+    descriptor = os.open(temporary,
+                         os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                         getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        data = (json.dumps(record, sort_keys=True, separators=(",", ":")) +
+                "\n").encode("utf-8")
+        os.write(descriptor, data)
+        os.fsync(descriptor)
+        os.fchown(descriptor, 0, 0)
+        os.fchmod(descriptor, 0o600)
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, target)
+    return str(target)
+
+
+def _launch_job(launchctl, label):
+    completed = subprocess.run(
+        [launchctl, "print", "system/" + label], cwd="/var/jb/var/tmp", env=ENV,
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=10, check=False)
+    text = completed.stdout.decode("utf-8", "replace")
+    program = re.search(r"^\s*program = (.+)$", text, re.MULTILINE)
+    pid = re.search(r"^\s*pid = ([0-9]+)$", text, re.MULTILINE)
+    return {"loaded": completed.returncode == 0,
+            "program": program.group(1).strip() if program else None,
+            "pid": int(pid.group(1)) if pid else None,
+            "output": text[-4000:]}
+
+
+def _sealed_companion_path(package, logical_path):
+    """Preflight one exact package-owned companion in the active Cryptex."""
+    if (package not in ("com.opa334.crane", "com.opa334.cranelite") or
+            logical_path != "/var/jb/usr/local/libexec/cranehelperd"):
+        return None
+    candidates = []
+    pattern = (SRDSH_MOUNT_ROOT +
+               "/codes.openai.research.ellekitloader.*/usr/share/0-sky/"
+               "dynamic-tweak-manifest.json")
+    for manifest_path in glob.glob(pattern):
+        try:
+            if os.path.islink(manifest_path) or os.path.getsize(manifest_path) > 4 * 1024 * 1024:
+                continue
+            with open(manifest_path, "r", encoding="utf-8") as stream:
+                manifest = json.load(stream)
+            records = [item for item in manifest.get("companion_executables", [])
+                       if isinstance(item, dict) and item.get("kind") == "daemon"
+                       and item.get("package") == package
+                       and item.get("path") == logical_path
+                       and re.fullmatch(r"[0-9a-f]{64}", str(item.get("sha256") or ""))]
+            if manifest.get("schema") != 1 or len(records) != 1:
+                continue
+            digest = records[0]["sha256"]
+            mount = pathlib.Path(manifest_path).parents[3]
+            executable = (mount / "usr/libexec/ellekit/trust-payloads/companions" /
+                          digest / "cranehelperd")
+            if (executable.is_symlink() or not executable.is_file()
+                    or not os.access(executable, os.X_OK)
+                    or _file_sha256(executable) != digest):
+                continue
+            executable.resolve(strict=True).relative_to(
+                pathlib.Path(SRDSH_MOUNT_ROOT).resolve(strict=True))
+            candidates.append(executable)
+        except (OSError, ValueError, TypeError, json.JSONDecodeError):
+            continue
+    return str(max(candidates, key=lambda item: item.parents[6].stat().st_mtime_ns)) \
+        if candidates else None
+
+
+def _write_service_adapter(package, service):
+    """Write a fixed launchd contract that resolves the current sealed helper."""
+    sealed = _sealed_companion_path(package, service["program"])
+    if sealed is None:
+        raise RuntimeError(package + ": reviewed sealed helper is unavailable")
+    directory = pathlib.Path("/var/jb/var/lib/0-sky/service-adapters")
+    directory.mkdir(parents=True, exist_ok=True)
+    os.chown(directory, 0, 0)
+    os.chmod(directory, 0o700)
+    target = directory / (service["label"] + ".plist")
+    payload = {
+        "Label": service["label"],
+        "Program": "/var/jb/usr/bin/python3",
+        "ProgramArguments": [
+            "/var/jb/usr/bin/python3", RUNTIME_MANAGER, "launch-companion",
+            package, service["program"],
+        ],
+        "EnvironmentVariables": {"_MSSafeMode": "1", "_SafeMode": "1"},
+        "KeepAlive": True,
+        "MachServices": {name: True for name in service["mach_services"]},
+        "ProcessType": "Interactive",
+        "RunAtLoad": True,
+        "UserName": "root",
+    }
+    temporary = target.with_name(target.name + "." + uuid.uuid4().hex + ".tmp")
+    descriptor = os.open(temporary,
+                         os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                         getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        data = plistlib.dumps(payload, fmt=plistlib.FMT_BINARY, sort_keys=True)
+        os.write(descriptor, data)
+        os.fsync(descriptor)
+        os.fchown(descriptor, 0, 0)
+        os.fchmod(descriptor, 0o600)
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, target)
+    return str(target), "/var/jb/usr/bin/python3", sealed
+
+
+def activate_package_adapter(package, payload):
+    manifest = package_adapter_manifest(package, payload)
+    if manifest is None:
+        return {"result": "NOT_APPLICABLE", "services": []}
+    allowed_permissions = {
+        "/var/jb/usr/local/libexec/cranehelperd": (0, 0, 0o755),
+        "/var/jb/usr/local/bin/cranehelperd_start": (0, 0, 0o755),
+    }
+    if not isinstance(manifest.get("permissions"), list):
+        raise RuntimeError(package + ": invalid adapter permissions")
+    for record in manifest["permissions"]:
+        if (not isinstance(record, dict) or
+                set(record) != {"path", "uid", "gid", "mode"}):
+            raise RuntimeError(package + ": invalid adapter permission record")
+        expected = allowed_permissions.get(record.get("path"))
+        try:
+            actual = (int(record.get("uid")), int(record.get("gid")),
+                      int(str(record.get("mode")), 8))
+        except (TypeError, ValueError):
+            actual = None
+        path = record.get("path")
+        if expected != actual or not isinstance(path, str) or os.path.islink(path):
+            raise RuntimeError(package + ": unsupported adapter permission")
+        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+        try:
+            os.fchown(descriptor, expected[0], expected[1])
+            os.fchmod(descriptor, expected[2])
+        finally:
+            os.close(descriptor)
+    services = manifest.get("services")
+    if not isinstance(services, list) or len(services) != 1:
+        raise RuntimeError(package + ": invalid adapter service set")
+    service = services[0]
+    expected_service = {
+        "label": "com.opa334.cranehelperd",
+        "program": "/var/jb/usr/local/libexec/cranehelperd",
+        "plist": "/var/jb/Library/LaunchDaemons/com.opa334.cranehelperd.plist",
+        "mach_services": ["com.opa334.cranehelperd.preferences.xpc",
+                          "com.opa334.cranehelperd.xpc"],
+    }
+    if service != expected_service or service["plist"] not in payload.get("daemons", []):
+        raise RuntimeError(package + ": service adapter differs from installed payload")
+    service_plist, effective_program, sealed_program = _write_service_adapter(
+        package, service)
+    launchctl = trusted_launchctl()
+    before = _launch_job(launchctl, service["label"])
+    if before["loaded"]:
+        stopped = subprocess.run(
+            [launchctl, "bootout", "system/" + service["label"]],
+            cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, check=False)
+        if stopped.returncode:
+            raise RuntimeError(package + ": existing helper service could not be retired")
+    started = subprocess.run(
+        [launchctl, "bootstrap", "system", service_plist],
+        cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, check=False)
+    if started.returncode:
+        raise RuntimeError(package + ": helper service bootstrap failed: " +
+                           started.stderr.decode("utf-8", "replace")[-600:])
+    current = {}
+    for _ in range(20):
+        time.sleep(0.25)
+        current = _launch_job(launchctl, service["label"])
+        if current.get("program") == effective_program and current.get("pid"):
+            break
+    if current.get("program") != effective_program or not current.get("pid"):
+        evidence = str(current.get("output") or "")[-1200:]
+        subprocess.run([launchctl, "bootout", "system/" + service["label"]],
+                       cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
+                       stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                       timeout=15, check=False)
+        raise RuntimeError(package + ": helper service did not remain healthy: " + evidence)
+    if any(name not in current.get("output", "") for name in service["mach_services"]):
+        raise RuntimeError(package + ": helper service did not publish its required endpoints")
+    policy = record_validated_runtime_adapter(package, manifest)
+    return {"result": "PASS", "validated_runtime_policy": policy,
+             "services": [{"label": service["label"],
+             "program": service["program"], "sealed_program": sealed_program,
+             "launcher": current["program"], "pid": current["pid"]}]}
+
+
+def deactivate_package_adapter(package, payload):
+    manifest = package_adapter_manifest(package, payload)
+    if manifest is None:
+        return {"result": "NOT_APPLICABLE", "services": []}
+    launchctl = trusted_launchctl()
+    stopped = []
+    for service in manifest["services"]:
+        state = _launch_job(launchctl, service["label"])
+        if state["loaded"]:
+            completed = subprocess.run(
+                [launchctl, "bootout", "system/" + service["label"]],
+                cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, check=False)
+            if completed.returncode:
+                raise RuntimeError(package + ": helper service could not be stopped")
+            stopped.append(service["label"])
+    policy = pathlib.Path(
+        "/var/jb/var/lib/0-sky/validated-package-adapters/" + package + ".json")
+    policy.unlink(missing_ok=True)
+    return {"result": "PASS", "services": stopped}
+
+
+def integration_report(package_name, app_filter=None):
     """Register package-owned apps and report tweak/plugin activation state."""
     payload = package_payload(package_name)
     messages = []
     failures = []
+    adapter = package_adapter_manifest(package_name, payload)
     for app_path in payload["apps"]:
+        if app_filter is not None and app_path != app_filter:
+            continue
         try:
-            result = queue_install(["install-app-bundle", app_path])
+            launch_validation = None
+            if adapter is not None:
+                with open(os.path.join(app_path, "Info.plist"), "rb") as stream:
+                    app_bundle_id = plistlib.load(stream).get("CFBundleIdentifier")
+                matches = [item for item in adapter["applications"]
+                           if item["bundle_identifier"] == app_bundle_id]
+                if len(matches) > 1:
+                    raise RuntimeError("multiple application lifecycle contracts matched")
+                launch_validation = matches[0] if matches else None
+            result = queue_install(["install-app-bundle", app_path], launch_validation)
         except Exception as error:
             failures.append(f"{os.path.basename(app_path)}: {error}")
             continue
@@ -1358,21 +1983,32 @@ def integration_report(package_name):
             f"Installed {len(payload['preferences'])} PreferenceLoader bundle(s).")
     if payload["daemons"]:
         messages.append(
-            f"Installed {len(payload['daemons'])} launch-daemon definition(s); package maintainer scripts control activation.")
+            f"Installed {len(payload['daemons'])} launch-daemon definition(s); activation requires the verified 0-Sky service backend.")
     if payload["tweaks"] or payload["preferences"]:
         ps_path = "/var/jb/usr/bin/ps" if os.access("/var/jb/usr/bin/ps", os.X_OK) else "/bin/ps"
         process_list = subprocess.run(
             [ps_path, "aux"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             timeout=10, check=False).stdout.decode("utf-8", "replace")
-        loader_active = bool(re.search(
-            r"/(?:ellekit/(?:loader|libinjector)|TweakLoader|srd-runtime-manager\.py)(?:\s|$)",
-            process_list))
-        if loader_active:
-            messages.append(f"Installed {len(payload['tweaks'])} tweak dylib(s); ElleKit loader detected.")
-        else:
+        # The SRD runtime manager invokes the Cryptex loader for each target.
+        # A loader process exits after injection, so its absence from ps is not
+        # evidence that tweak injection is unavailable.
+        manager_active = bool(re.search(
+            r"/srd-runtime-manager\.py daemon(?:\s|$)", process_list))
+        if manager_active:
             messages.append(
-                f"Installed {len(payload['tweaks'])} tweak dylib(s), but the ElleKit loader is not active; "
-                "the files are installed but cannot be injected on this boot.")
+                f"Installed {len(payload['tweaks'])} tweak dylib(s); runtime manager active. "
+                "Injection still requires a controlled runtime probe before READY.")
+        else:
+            # This report runs before queue_runtime_sync().  A stopped manager
+            # is therefore a pre-sync observation, not evidence that the
+            # package is incompatible.  The authenticated Mac sync below is
+            # responsible for installing the new runtime generation and
+            # starting the manager; tweak_runtime_validation() then requires
+            # registry and live-loader evidence before the transaction can
+            # commit.
+            messages.append(
+                f"Installed {len(payload['tweaks'])} tweak dylib(s); runtime manager "
+                "activation is pending the verified Mac runtime sync.")
         if os.path.isfile(RUNTIME_MANAGER):
             requested = subprocess.run(
                 ["/var/jb/usr/bin/python3", RUNTIME_MANAGER, "sync"],
@@ -1481,6 +2117,133 @@ def attach_preference_repair(result, package=None, reason="0-Sky Control operati
     return result
 
 
+def queue_crane_container_cleanup(parameters):
+    """Remove one user-deleted Crane container through the paired Mac.
+
+    Crane can update its preference inventory inside the mobile bootstrap, but
+    iOS 27 MAC denies that process traversal of another application's data
+    container.  The Mac worker has the existing authorized SRD transport.  It
+    independently revalidates the MCM owner and Crane metadata before deleting
+    the exact orphan directory supplied here.
+    """
+    package = parameters.get("package")
+    bundle_id = parameters.get("bundleID")
+    container_id = parameters.get("containerID")
+    requested_root = parameters.get("dataRoot")
+    if package != "com.opa334.crane":
+        raise RequestError("unsupported Crane package")
+    if not isinstance(bundle_id, str) or not BUNDLE_ID.fullmatch(bundle_id):
+        raise RequestError("invalid Crane application identifier")
+    if bundle_id in {CONTROL_BUNDLE_ID, "codes.liquidsky.research.zerosky",
+                     "com.amywhile.sileo", "com.opa334.CraneApplication"}:
+        raise RequestError("protected application cannot be a Crane cleanup target")
+    if (not isinstance(container_id, str) or not re.fullmatch(
+            r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}",
+            container_id)):
+        raise RequestError("invalid Crane container identifier")
+
+    runtime = core_runtime()
+    eligible = {app.get("bundleID"): app.get("compatibility") for app in
+                runtime._tweak_target_apps(package)["applications"]}
+    if eligible.get(bundle_id) != "COMPATIBLE_WITH_ADAPTER":
+        raise RequestError("Crane cleanup target has not passed the 0-Sky adapter")
+    if (not isinstance(requested_root, str) or not re.fullmatch(
+            r"/(?:private/)?var/mobile/Containers/Data/Application/"
+            r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}",
+            requested_root)):
+        raise RequestError("Crane cleanup target is outside the MCM data root")
+    data_root = ("/private" + requested_root
+                 if requested_root.startswith("/var/mobile/") else requested_root)
+
+    status = worker_status()
+    if not status.get("connected"):
+        return {"status": 190, "result": "BLOCKED", "stage": "BRIDGE",
+                "stderr": "Connect the trusted Mac to finish deleting the Crane container."}
+    job_id = str(uuid.uuid4())
+    root = os.path.join(SPOOL, job_id)
+    os.makedirs(root, mode=0o700, exist_ok=False)
+    atomic_json(os.path.join(root, "request.json"), {
+        "job_id": job_id,
+        "operation": "crane-container-cleanup",
+        "package": package,
+        "bundle_id": bundle_id,
+        "container_id": container_id.upper(),
+        "data_root": data_root,
+        "created_at": int(time.time()),
+    })
+    result_path = os.path.join(root, "result.json")
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        if os.path.isfile(result_path):
+            with open(result_path, "r", encoding="utf-8") as stream:
+                result = json.load(stream)
+            if not isinstance(result, dict) or not isinstance(result.get("status"), int):
+                raise RuntimeError("Mac Crane cleanup returned an invalid result")
+            return result
+        time.sleep(0.25)
+    return {"status": 124, "result": "FAILED", "stage": "CLEANUP",
+            "stderr": "Timed out while the trusted Mac removed the Crane container."}
+
+
+def queue_crane_target_handoffs(handoffs):
+    """Commit Crane's per-app pre-main handoffs through paired root SSH."""
+    if (not isinstance(handoffs, list) or len(handoffs) > 64 or
+            not all(isinstance(item, dict) and
+                    set(item) == {"bundle_id", "data_root", "active"}
+                    for item in handoffs)):
+        raise RequestError("invalid Crane target handoff plan")
+    normalized = []
+    seen = set()
+    for item in handoffs:
+        bundle_id = item["bundle_id"]
+        data_root = item["data_root"]
+        active = item["active"]
+        if (not isinstance(bundle_id, str) or not BUNDLE_ID.fullmatch(bundle_id) or
+                bundle_id in seen):
+            raise RequestError("invalid or duplicate Crane handoff application")
+        if (not isinstance(data_root, str) or not re.fullmatch(
+                r"/private/var/mobile/Containers/Data/Application/"
+                r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}",
+                data_root)):
+            raise RequestError("Crane handoff target is outside the MCM data root")
+        if (active != "DEFAULT" and (not isinstance(active, str) or not re.fullmatch(
+                r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}", active))):
+            raise RequestError("invalid Crane active container")
+        seen.add(bundle_id)
+        normalized.append({"bundle_id": bundle_id, "data_root": data_root,
+                           "active": active})
+    if not normalized:
+        return {"status": 0, "result": "PASS", "stage": "HANDOFF",
+                "evidence": [], "rollback": "NOT_NEEDED"}
+    status = worker_status()
+    if not status.get("connected"):
+        raise RequestError("Connect the trusted Mac to update Crane targets")
+    job_id = str(uuid.uuid4())
+    root = os.path.join(SPOOL, job_id)
+    os.makedirs(root, mode=0o700, exist_ok=False)
+    atomic_json(os.path.join(root, "request.json"), {
+        "job_id": job_id,
+        "operation": "crane-target-handoff",
+        "package": "com.opa334.crane",
+        "handoffs": normalized,
+        "created_at": int(time.time()),
+    })
+    result_path = os.path.join(root, "result.json")
+    deadline = time.monotonic() + 120
+    while time.monotonic() < deadline:
+        if os.path.isfile(result_path):
+            with open(result_path, "r", encoding="utf-8") as stream:
+                result = json.load(stream)
+            if not isinstance(result, dict) or not isinstance(result.get("status"), int):
+                raise RuntimeError("Mac Crane handoff returned an invalid result")
+            if result.get("status") != 0:
+                raise RuntimeError(str(result.get("stderr") or
+                                       "Mac Crane handoff transaction failed"))
+            return result
+        time.sleep(0.25)
+    raise RuntimeError("Timed out while the trusted Mac updated Crane targets")
+
+
 def registered_bundle_path(bundle_id):
     """Return LaunchServices' current path for *bundle_id*.
 
@@ -1525,6 +2288,82 @@ def registered_bundle_path(bundle_id):
     except Exception:
         return True, ""
     return True, candidate
+
+
+def _bundle_tree_sha256(root):
+    """Match the host worker's content identity for an enrolled app bundle."""
+    root = pathlib.Path(root)
+    digest = hashlib.sha256()
+    for path in sorted(root.rglob("*"), key=lambda item: str(item.relative_to(root))):
+        relative = str(path.relative_to(root)).encode()
+        if path.is_symlink():
+            kind, value = b"L", os.readlink(path).encode()
+        elif path.is_file():
+            value = bytes.fromhex(_file_sha256(path))
+            kind = b"F"
+        elif path.is_dir():
+            kind, value = b"D", b""
+        else:
+            kind, value = b"O", b""
+        digest.update(kind + b"\0" + relative + b"\0" + value + b"\n")
+    return digest.hexdigest()
+
+
+def verified_existing_app_integration(source, source_sha256,
+                                      state_root="/var/jb/var/lib/crypstore",
+                                      mount_root="/private/var/run/com.apple.security.cryptexd/mnt/"):
+    """Accept an exact, still healthy Cryptex integration idempotently.
+
+    A transient RemoteXPC reset can occur while reinstalling an app that the
+    same transaction already integrated successfully. Rebuilding that exact
+    generation adds risk and caused the package transaction to roll back. The
+    shortcut below requires the original IPA hash, current LaunchServices URL,
+    mounted Cryptex, Info.plist, and complete MCM bundle hash to match the
+    worker's prior strict enrollment evidence.
+    """
+    if not isinstance(source_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", source_sha256):
+        return None
+    try:
+        with open(os.path.join(source, "Info.plist"), "rb") as handle:
+            info = plistlib.load(handle)
+        bundle_id = info.get("CFBundleIdentifier")
+        if not isinstance(bundle_id, str) or not BUNDLE_ID.fullmatch(bundle_id):
+            return None
+        state_path = pathlib.Path(state_root) / (bundle_id + ".json")
+        metadata = state_path.lstat()
+        if (state_path.is_symlink() or not stat.S_ISREG(metadata.st_mode) or
+                metadata.st_uid != 0 or metadata.st_mode & 0o022 or
+                metadata.st_size > 64 * 1024):
+            return None
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+        if (state.get("bundle_id") != bundle_id or
+                state.get("source_sha256") != source_sha256):
+            return None
+        queried, registered = registered_bundle_path(bundle_id)
+        if not queried or not registered:
+            return None
+        recorded = os.path.realpath(str(state.get("registered_path") or ""))
+        observed = os.path.realpath(str(state.get("observed_registered_path") or recorded))
+        if os.path.realpath(registered) not in {recorded, observed}:
+            return None
+        mount = os.path.realpath(str(state.get("mount") or ""))
+        mount_root = os.path.realpath(mount_root).rstrip("/") + "/"
+        if (not mount.startswith(mount_root) or not os.path.ismount(mount) or
+                not os.path.isdir(os.path.join(mount, "Applications",
+                                               os.path.basename(source)))):
+            return None
+        info_path = os.path.join(registered, "Info.plist")
+        info_hash = _file_sha256(info_path)
+        if (info_hash != state.get("expected_info_plist_hash") or
+                _bundle_tree_sha256(registered) != state.get("expected_bundle_sha256")):
+            return None
+    except (OSError, ValueError, TypeError, json.JSONDecodeError):
+        return None
+    return {"status": 0, "stdout":
+            "Exact app artifact is already integrated through Cryptex/appregistrard.\n" +
+            registered, "stderr": "", "bundle_id": bundle_id,
+            "already_integrated": True,
+            "foreground_launch": state.get("foreground_launch", "UNKNOWN")}
 
 
 def runtime_status():
@@ -1641,6 +2480,185 @@ def runtime_status():
     return result
 
 
+def tweak_runtime_validation(package, payload, timeout=60):
+    """Require package-owned registry and live-loader evidence for a tweak."""
+    tweak_paths = {os.path.realpath(value) for value in payload.get("tweaks", [])}
+    if not tweak_paths:
+        return {"result": "NOT_APPLICABLE", "expected": 0, "loaded": 0,
+                "detail": "package owns no tweak dylib"}
+
+    def read_json(name):
+        path = os.path.join(RUNTIME_STATE_DIR, name)
+        try:
+            info = os.lstat(path)
+            if (not stat.S_ISREG(info.st_mode) or info.st_size > 4 * 1024 * 1024):
+                return {}
+            with open(path, "r", encoding="utf-8") as handle:
+                value = json.load(handle)
+            return value if isinstance(value, dict) else {}
+        except (OSError, ValueError, TypeError):
+            return {}
+
+    adapter = None
+    try:
+        adapter = package_adapter_manifest(package, payload)
+    except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+        # Adapter validation is an installation requirement and is reported by
+        # activate_package_adapter.  Never use an invalid manifest to weaken
+        # the set of dylibs required here.
+        adapter = None
+    runtime_contract = adapter.get("runtime", {}) if adapter else {}
+    required_paths = {
+        os.path.realpath(path) for path in runtime_contract.get("required_dylibs", [])
+        if isinstance(path, str)
+    }
+    deferred = {
+        os.path.realpath(item["dylib"]): item
+        for item in runtime_contract.get("configuration_dependent", [])
+        if isinstance(item, dict) and isinstance(item.get("dylib"), str)
+    }
+    # Every ordinary tweak dylib remains required. A reviewed typed adapter is
+    # the only mechanism allowed to defer one until an explicit app selection.
+    required_paths |= tweak_paths - set(deferred)
+
+    def configured_deferred_paths():
+        configured = set()
+        for path, item in deferred.items():
+            source = item.get("target_source", {})
+            source_path = source.get("path")
+            try:
+                if not isinstance(source_path, str):
+                    continue
+                info = os.lstat(source_path)
+                if (not stat.S_ISREG(info.st_mode) or info.st_mode & 0o022 or
+                        info.st_size > 1024 * 1024):
+                    continue
+                if source.get("kind") == "plist-string":
+                    key = source.get("key")
+                    if not isinstance(key, str):
+                        continue
+                    with open(source_path, "rb") as stream:
+                        preferences = plistlib.load(stream)
+                    if (isinstance(preferences, dict) and
+                            isinstance(preferences.get(key), str) and preferences[key]):
+                        configured.add(path)
+                elif source.get("kind") == "control-app-allowlist":
+                    with open(source_path, "r", encoding="utf-8") as stream:
+                        allowlist = json.load(stream)
+                    identifiers = allowlist.get("bundle_identifiers", []) \
+                        if isinstance(allowlist, dict) else []
+                    if (set(allowlist) == {"schema", "package", "bundle_identifiers",
+                                          "updated_at"} and
+                            allowlist.get("schema") == 1 and
+                            allowlist.get("package") == package and
+                            isinstance(identifiers, list) and identifiers and
+                            len(identifiers) <= 64 and len(set(identifiers)) == len(identifiers) and
+                            all(isinstance(value, str) and BUNDLE_ID.fullmatch(value)
+                                for value in identifiers)):
+                        configured.add(path)
+            except (OSError, ValueError, TypeError, plistlib.InvalidFileException,
+                    json.JSONDecodeError):
+                continue
+        return configured
+
+    deadline = time.monotonic() + max(0, min(timeout, 60))
+    last = None
+    while True:
+        registry = read_json("registry.json")
+        state = read_json("injection-state.json")
+        quarantine = read_json("injection-quarantine.json")
+        quarantined = []
+        for value in (quarantine.get("entries", {}) or {}).values():
+            if isinstance(value, dict) and value.get("package") == package:
+                quarantined.append({"target": value.get("target"),
+                                    "reason": str(value.get("reason") or "quarantined")[:500]})
+        expected = []
+        targets = registry.get("targets", {})
+        if isinstance(targets, dict):
+            for target in targets.values():
+                if not isinstance(target, dict):
+                    continue
+                target_name = str(target.get("name") or "")
+                for dylib in target.get("dylibs", []):
+                    if (isinstance(dylib, dict) and dylib.get("package") == package and
+                            os.path.realpath(str(dylib.get("path") or "")) in tweak_paths):
+                        expected.append({"target": target_name,
+                                         "dylib": os.path.realpath(str(dylib.get("path") or "")),
+                                         "sha256": str(dylib.get("sha256") or "")})
+        loaded_rows = [value for value in (state.get("loaded", {}) or {}).values()
+                       if isinstance(value, dict)]
+        loaded = []
+        for requirement in expected:
+            for item in loaded_rows:
+                if (item.get("target") == requirement["target"] and
+                        os.path.realpath(str(item.get("dylib") or "")) == requirement["dylib"] and
+                        item.get("sha256") == requirement["sha256"] and
+                        isinstance(item.get("pid"), int)):
+                    try:
+                        os.kill(item["pid"], 0)
+                    except OSError:
+                        continue
+                    loaded.append({**requirement, "pid": item["pid"]})
+                    break
+        if quarantined:
+            return {"result": "FAIL", "expected": len(expected),
+                    "loaded": len(loaded), "quarantine": quarantined,
+                    "detail": "runtime manager quarantined the installed tweak"}
+        registered_paths = {item["dylib"] for item in expected}
+        configured_deferred = configured_deferred_paths()
+        required_now = required_paths | configured_deferred
+        missing_required = sorted(required_now - registered_paths)
+        loaded_keys = {(item["target"], item["dylib"], item["sha256"])
+                       for item in loaded}
+        unloaded_required = [item for item in expected
+                             if item["dylib"] in required_now and
+                             (item["target"], item["dylib"], item["sha256"])
+                             not in loaded_keys]
+        deferred_unconfigured = sorted(set(deferred) - configured_deferred)
+        complete = not missing_required and not unloaded_required
+        result_value = ("PASS" if complete and not deferred_unconfigured else
+                        "CONFIGURATION_REQUIRED" if complete and deferred_unconfigured else
+                        "PENDING")
+        if result_value == "PENDING" and time.monotonic() >= deadline:
+            result_value = "FAIL"
+        last = {"result": result_value,
+                "expected": len(expected), "loaded": len(loaded),
+                "missing_registry": sorted(tweak_paths - registered_paths),
+                "missing_required": missing_required,
+                "configuration_dependent": deferred_unconfigured,
+                "targets": sorted({item["target"] for item in expected}),
+                "detail": ("all required package-owned injection targets are loaded"
+                           if result_value == "PASS" else
+                           "select an application before validating the configurable app hook"
+                           if result_value == "CONFIGURATION_REQUIRED" else
+                           "a required runtime registry target or live injection is absent"
+                           if result_value == "FAIL" else
+                           "runtime registry or live target evidence is pending")}
+        if last["result"] in ("PASS", "CONFIGURATION_REQUIRED", "FAIL"):
+            return last
+        time.sleep(1)
+
+
+def record_compatibility_runtime(result, evidence):
+    """Persist runtime evidence for every analyzed artifact in this request."""
+    from zero_sky_compat.integration import record_runtime_validation
+    compatibility = result.get("compatibility")
+    decisions = compatibility.get("decisions", []) if isinstance(compatibility, dict) else []
+    reports = []
+    for decision in decisions:
+        key = decision.get("registry_key") if isinstance(decision, dict) else None
+        if not key:
+            continue
+        try:
+            report = record_runtime_validation(key, evidence)
+            reports.append({"registry_key": key,
+                            "compatibility_state": report["compatibility_state"]})
+        except (OSError, ValueError, RuntimeError) as error:
+            reports.append({"registry_key": key, "compatibility_state": "UNKNOWN",
+                            "error_code": type(error).__name__})
+    return reports
+
+
 def bundle_id_at_path(path):
     try:
         with open(os.path.join(path, "Info.plist"), "rb") as handle:
@@ -1650,17 +2668,19 @@ def bundle_id_at_path(path):
         return None
 
 
-def remove_tweak_package(package):
-    protected = {"apt", "dpkg", "ellekit", "preferenceloader", "sileo",
-                 "org.coolstar.sileo", "com.liquidskysecurity.srd-runtime-manager"}
-    if package.lower() in protected:
+def remove_tweak_package(package, expected_version=None):
+    if package.lower() in sileo_package_service.PROTECTED_REMOVE_PACKAGES:
         return {"status": 126, "stdout": "", "stderr":
                 "This foundational package cannot be removed from 0-Sky Control."}
-    payload = package_payload(package)
-    if not payload["tweaks"] and not payload["preferences"]:
-        return {"status": 126, "stdout": "", "stderr":
-                "Removal is limited to packages that own a tweak or preference bundle."}
     with LOCK:
+        if (expected_version is not None and
+                installed_package_versions().get(package) != expected_version):
+            return {"status": 193, "stdout": "", "stderr":
+                    "Installed package version changed; refresh before removing it."}
+        payload = package_payload(package)
+        if not payload["tweaks"] and not payload["preferences"]:
+            return {"status": 126, "stdout": "", "stderr":
+                    "Removal is limited to packages that own a tweak or preference bundle."}
         completed = subprocess.run(
             ["/var/jb/usr/bin/dpkg", "--remove", package],
             cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
@@ -1672,7 +2692,7 @@ def remove_tweak_package(package):
         # any 0-Sky Control-generated descriptor for the package and renews the
         # runtime Cryptex so a removed menu cannot linger in Settings.
         return attach_preference_repair(
-            result, reason=f"{package} removed", force_refresh=True)
+            result, package=package, reason=package, force_refresh=True)
     return result
 
 def install_deb(path):
@@ -1786,6 +2806,202 @@ def install_deb(path):
         try: os.unlink(destination)
         except OSError: pass
 
+
+def sileo_package_operation(request):
+    """Run a user-selected Sileo APT operation in the paired root service."""
+    operation, specs = sileo_package_service.validate_request(request)
+    if operation in ("plan-remove", "remove"):
+        package, version = specs[0].split("=", 1)
+        if package in sileo_package_service.PROTECTED_REMOVE_PACKAGES:
+            return {"status": 193, "result": "BLOCKED", "stage": "PROTECTED_PACKAGE",
+                    "stdout": "", "stderr": package + ": foundational package removal is blocked"}
+        if installed_package_versions().get(package) != version:
+            return {"status": 193, "result": "BLOCKED", "stage": "VERSION_CHECK",
+                    "stdout": "", "stderr": "Installed version changed; refresh Sileo before removal"}
+        payload = package_payload(package)
+        if not payload["tweaks"] and not payload["preferences"]:
+            return {"status": 193, "result": "BLOCKED", "stage": "PACKAGE_CLASS",
+                    "stdout": "", "stderr": "Sileo removal currently supports tweak packages with verified ownership"}
+        plan_request = {"operation": "plan-remove", "packages": request["packages"]}
+        with LOCK:
+            plan = sileo_package_service.execute(plan_request, env=ENV)
+        if plan.get("status") != 0 or operation == "plan-remove":
+            return plan
+        try:
+            service_stop = deactivate_package_adapter(package, payload)
+        except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
+            return {"status": 192, "result": "REPAIR_REQUIRED",
+                    "stage": "SERVICE_STOP", "stdout": "",
+                    "stderr": str(error)[:2048]}
+        removed = remove_tweak_package(package, expected_version=version)
+        if removed.get("status") != 0:
+            if service_stop.get("result") == "PASS":
+                try:
+                    activate_package_adapter(package, payload)
+                except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+                    pass
+            return {**removed, "result": "REPAIR_REQUIRED" if package not in
+                    installed_package_versions() else "FAILED", "stage": "REMOVE"}
+        if package in installed_package_versions():
+            return {**removed, "status": 192, "result": "REPAIR_REQUIRED",
+                    "stage": "VERIFY_REMOVAL", "stderr": "Package remains installed after removal"}
+        refresh = removed.get("preference_runtime_refresh") or {}
+        if refresh.get("status") != 0:
+            return {**removed, "status": 192, "result": "REPAIR_REQUIRED",
+                    "stage": "RUNTIME_REFRESH", "stderr":
+                    "Package removed, but the runtime refresh was not verified"}
+        try:
+            installed_status = sileo_package_service.installed_status_snapshot()
+        except (OSError, sileo_package_service.SileoRequestError) as error:
+            return {**removed, "status": 192, "result": "REPAIR_REQUIRED",
+                    "stage": "STATUS_SNAPSHOT", "error_code": type(error).__name__,
+                    "stderr": "Package removed, but its installed-state snapshot failed: "
+                              + str(error)[:2048]}
+        return {**removed, "result": "REMOVED_AND_VERIFIED", "stage": "VERIFY_REMOVAL",
+                "removed_package": package,
+                "service_stop": service_stop,
+                "installed_status_b64": base64.b64encode(installed_status).decode("ascii")}
+    if operation == "install" and not worker_status().get("connected"):
+        return {"status": 190, "result": "BLOCKED", "stage": "PREFLIGHT",
+                "stderr": "Connect the trusted Mac before installing packages or tweaks."}
+    with LOCK:
+        before = installed_package_versions() if operation == "install" else {}
+        result = sileo_package_service.execute(request, env=ENV)
+        if result["status"] != 0 or operation in ("plan", "refresh"):
+            return result
+        check = subprocess.run(
+            ["/var/jb/usr/bin/apt-get", "check", "-o", "Dpkg::Use-Pty=0"],
+            cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=120, check=False)
+        if check.returncode:
+            return {**result, "status": 192, "result": "REPAIR_REQUIRED",
+                    "stage": "DEPENDENCY_VERIFY", "stderr":
+                    check.stderr.decode("utf-8", "replace")[:4096]}
+        after = installed_package_versions()
+        changed = sorted(package for package, version in after.items()
+                         if before.get(package) != version)
+        integration_failures = []
+        integration_messages = []
+        runtime_packages = []
+        package_payloads = {}
+        for package in changed:
+            payload, messages, failures = integration_report(package)
+            package_payloads[package] = payload
+            integration_messages.extend(messages)
+            integration_failures.extend(failures)
+            # Writable-prefix installation does not admit a new Mach-O
+            # CodeDirectory on an SRD. The host synchronizer safely inspects
+            # dpkg-owned CLI code and its dependency closure too.
+            runtime_packages.append(package)
+            if payload["tweaks"] or payload["preferences"]:
+                repair = preference_repair(package)
+                if str(repair.get("summary", "")).startswith("Preference conversion failed"):
+                    integration_failures.append(package + ": " + str(repair["summary"]))
+        if runtime_packages and not integration_failures:
+            sync = queue_runtime_sync(",".join(runtime_packages))
+            if sync.get("status") != 0:
+                integration_failures.append(str(sync.get("stderr") or
+                                                 "injection runtime refresh failed"))
+        runtime_evidence = {}
+        service_evidence = {}
+        if not integration_failures:
+            for package, payload in package_payloads.items():
+                if payload.get("adapters"):
+                    try:
+                        service_evidence[package] = activate_package_adapter(package, payload)
+                    except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as error:
+                        service_evidence[package] = {"result": "FAIL",
+                            "detail": str(error)[:1000], "services": []}
+                        integration_failures.append(package + ": " + str(error)[:1000])
+                if payload["tweaks"]:
+                    runtime_evidence[package] = tweak_runtime_validation(package, payload)
+                    if runtime_evidence[package]["result"] == "FAIL":
+                        integration_failures.append(
+                            package + ": " + runtime_evidence[package]["detail"])
+        result["changed_packages"] = changed
+        result["integration_messages"] = integration_messages[:32]
+        result["runtime_validation"] = runtime_evidence
+        result["service_validation"] = service_evidence
+        combined_evidence = list(runtime_evidence.values()) + list(service_evidence.values())
+        if combined_evidence:
+            aggregate = ("FAIL" if any(value["result"] == "FAIL"
+                                       for value in combined_evidence) else
+                         "PASS" if all(value["result"] == "PASS"
+                                       for value in combined_evidence) else "PENDING")
+            result["compatibility_reports"] = record_compatibility_runtime(
+                result, {"result": aggregate, "functional": False,
+                         "packages": runtime_evidence,
+                         "services": service_evidence})
+        if integration_failures:
+            if not result.get("compatibility_reports"):
+                result["compatibility_reports"] = record_compatibility_runtime(
+                    result, {"result": "FAIL", "functional": False,
+                             "stage": "RUNTIME_INTEGRATION",
+                             "failures": integration_failures[:16]})
+            fresh_tweaks = [package for package, payload in package_payloads.items()
+                            if package not in before and payload["tweaks"]]
+            rollback = []
+            for package in reversed(fresh_tweaks):
+                try:
+                    deactivate_package_adapter(package, package_payloads[package])
+                except (OSError, ValueError, RuntimeError, json.JSONDecodeError):
+                    pass
+                removed = subprocess.run(
+                    ["/var/jb/usr/bin/dpkg", "--remove", package],
+                    cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
+                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    timeout=300, check=False)
+                rollback.append({"package": package, "status": removed.returncode,
+                                 "stderr": removed.stderr.decode("utf-8", "replace")[-1000:]})
+            rollback_sync = None
+            if fresh_tweaks:
+                # The runtime-sync worker accepts only a comma-separated list
+                # of exact dpkg package identifiers.  Prefixing this value
+                # with a human-readable reason made rollback refreshes fail
+                # validation and could leave removed tweak code in the active
+                # runtime generation until the next successful sync.
+                rollback_sync = queue_runtime_sync(",".join(fresh_tweaks))
+            return {**result, "status": 192, "result": "REPAIR_REQUIRED",
+                    "stage": "RUNTIME_INTEGRATION",
+                    "rollback": rollback,
+                    "rollback_runtime_sync": rollback_sync,
+                    "rollback_verified": bool(rollback) and all(
+                        item["status"] == 0 for item in rollback) and all(
+                        package not in installed_package_versions() for package in fresh_tweaks) and
+                        bool(rollback_sync) and rollback_sync.get("status") == 0,
+                    "stderr": "\n".join(integration_failures)[:4096]}
+        try:
+            installed_status = sileo_package_service.installed_status_snapshot()
+        except (OSError, sileo_package_service.SileoRequestError) as error:
+            return {**result, "status": 192, "result": "REPAIR_REQUIRED",
+                    "stage": "STATUS_SNAPSHOT", "error_code": type(error).__name__,
+                    "stderr": "Package installed, but its installed-state snapshot failed: "
+                              + str(error)[:2048]}
+        all_loaded = bool(combined_evidence) and all(
+            value["result"] == "PASS" for value in combined_evidence)
+        return {**result,
+                "result": "INSTALLED_AND_LOADED" if all_loaded else "INSTALLED_UNVERIFIED",
+                "stage": "FUNCTIONAL_UAT_PENDING" if all_loaded else
+                         "RUNTIME_SMOKE_TEST_PENDING",
+                "installed_status_b64": base64.b64encode(installed_status).decode("ascii")}
+
+
+def installed_package_versions():
+    completed = subprocess.run(
+        ["/var/jb/usr/bin/dpkg-query", "--show",
+         "--showformat=${Package}\t${Version}\t${db:Status-Abbrev}\n"],
+        cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
+    if completed.returncode:
+        raise RequestError("package database could not be read")
+    values = {}
+    for line in completed.stdout.decode("utf-8", "replace").splitlines():
+        fields = line.split("\t")
+        if len(fields) == 3 and fields[2].startswith("ii") and BUNDLE_ID.fullmatch(fields[0]):
+            name, version = fields[:2]
+            values[name] = version
+    return values
+
 class Server(ThreadingHTTPServer):
     daemon_threads = True; allow_reuse_address = True
     def __init__(self, addr, handler): super().__init__(addr, handler); self.token = token()
@@ -1801,7 +3017,8 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path == "/health":
             return self.reply(200, {"ok": bridge_ready()})
         if parsed.path in ("/v1/status", "/v1/runtime", "/v1/pairing/status",
-                           "/v1/pairing/result"):
+                           "/v1/pairing/result", "/v1/bootsplash/status",
+                           "/v1/control/install/status"):
             if not hmac.compare_digest(self.headers.get("X-TrollStore-Bridge-Token", ""),
                                        self.server.token):
                 return self.reply(403, {"status": 126, "complete": True,
@@ -1813,8 +3030,28 @@ class Handler(BaseHTTPRequestHandler):
             status["pairing"] = pairing_status()
             status["paired"] = status["pairing"]["paired"]
             return self.reply(200, status)
+        if parsed.path == "/v1/control/install/status":
+            try:
+                value = control_install_service.inspect(runtime_status, pairing_status, worker_status)
+                return self.reply(200, control_install_service.public_status(value))
+            except Exception as error:
+                return self.reply(409, {"result": "BLOCKED", "stage": "PRECHECK",
+                                        "code": type(error).__name__.upper(),
+                                        "explanation": str(error)[:300]})
         if parsed.path == "/v1/pairing/status":
             return self.reply(200, pairing_status())
+        if parsed.path == "/v1/bootsplash/status":
+            status = bootsplash_snapshot(pairing_status, runtime_reader=runtime_status)
+            try:
+                core_runtime().logger.log("INFO", "CORE", "bootsplash snapshot",
+                    root=status["root_status"], bootstrap=status["bootstrap_status"],
+                    trustedHost=status["trusted_host_status"], ssh=status["ssh_status"],
+                    runtime=status["runtime_status"], control=status["control_status"],
+                    deviceMode=status["device_mode"],
+                    durationMs=status["duration_ms"], diagnostics=status["diagnostics"])
+            except Exception:
+                pass
+            return self.reply(200, status)
         if parsed.path == "/v1/pairing/result":
             job_id = (parse_qs(parsed.query).get("job_id") or [None])[0]
             result = pairing_result(job_id)
@@ -1835,7 +3072,7 @@ class Handler(BaseHTTPRequestHandler):
         privileged_paths = ("/v1/runtime/refresh", "/v1/crypstore/repair",
                             "/v1/trollstore", "/v1/geranium", "/v1/core",
                             "/v1/pairing/request", "/v1/pairing/cancel",
-                            "/v1/device-password")
+                            "/v1/device-password", "/v1/control/install")
         if self.path in privileged_paths:
             if not hmac.compare_digest(self.headers.get("X-TrollStore-Bridge-Token", ""),
                                        self.server.token):
@@ -1845,13 +3082,83 @@ class Handler(BaseHTTPRequestHandler):
             # established. They are still token-authenticated above. Gating
             # cancellation on pairing_status() made the Cancel button
             # impossible to use during the very operation it must stop.
-            if self.path not in ("/v1/pairing/request", "/v1/pairing/cancel"):
+            if self.path not in ("/v1/pairing/request", "/v1/pairing/cancel", "/v1/core"):
                 denial = pairing_denial()
                 if denial:
                     return self.reply(403, denial)
+        if self.path == "/v1/sileo/package":
+            if not sileo_package_service.authenticated(
+                    self.headers.get("X-0Sky-Sileo-Token", "")):
+                return self.reply(403, {"status": 126, "result": "BLOCKED",
+                                        "stage": "AUTH", "stderr": "Sileo Bridge authentication failed"})
+            denial = pairing_denial()
+            if denial:
+                return self.reply(403, {"status": denial.get("status", 193),
+                                        "result": "BLOCKED", "stage": "TRUST",
+                                        "stderr": denial.get("stderr", "Trusted Mac unavailable")})
+            request_stage = "REQUEST_DECODE"
+            try:
+                size = int(self.headers.get("Content-Length", "0"))
+                if size < 1 or size > 8192:
+                    raise RequestError("invalid Sileo request size")
+                request = json.loads(self.rfile.read(size).decode("utf-8"))
+                request_stage = "PACKAGE_OPERATION"
+                result = sileo_package_operation(request)
+                with open(LOG, "a", encoding="utf-8") as stream:
+                    stream.write(json.dumps({"operation": "sileo-package",
+                        "stage": result.get("stage"), "result": result.get("result"),
+                        "status": result.get("status")}) + "\n")
+                return self.reply(200 if result.get("status") == 0 else 409, result)
+            except (ValueError, UnicodeDecodeError, RequestError,
+                    sileo_package_service.SileoRequestError) as error:
+                return self.reply(400, {"status": 126, "result": "BLOCKED",
+                                        "stage": "VALIDATE", "stderr": str(error)[:300]})
+            except subprocess.TimeoutExpired:
+                return self.reply(504, {"status": 124, "result": "FAILED",
+                                        "stage": "APT", "stderr": "APT timed out"})
+            except Exception as error:
+                # Never let an unexpected analysis or adapter error turn into
+                # Sileo's opaque status 190. Preserve the traceback in the
+                # root-only service log and return a bounded, credential-free
+                # result. The client retains the exact verified archive for a
+                # deterministic retry.
+                traceback.print_exc(file=sys.stderr)
+                try:
+                    with open(LOG, "a", encoding="utf-8") as stream:
+                        stream.write(json.dumps({
+                            "operation": "sileo-package",
+                            "stage": request_stage,
+                            "result": "FAILED",
+                            "status": 192,
+                            "error_code": type(error).__name__,
+                            "error_detail": sanitized_error_detail(error),
+                        }, separators=(",", ":")) + "\n")
+                except OSError:
+                    pass
+                return self.reply(500, {"status": 192, "result": "FAILED",
+                    "stage": request_stage, "error_code": type(error).__name__,
+                    "stderr": ("0-Sky Bridge failed during package preflight; "
+                               "the verified archive was preserved for retry")})
         if self.path == "/v1/pairing/request":
             result = queue_pair_verify()
             return self.reply(202 if result.get("status") == 0 else 503, result)
+        if self.path == "/v1/control/install":
+            if self.headers.get("Content-Length", "0") not in ("0", ""):
+                return self.reply(400, {"result": "BLOCKED", "code": "UNEXPECTED_BODY"})
+            try:
+                result = control_install_service.install(
+                    runtime_status, pairing_status, worker_status, queue_control_install)
+                with open(LOG, "a", encoding="utf-8") as stream:
+                    for event in result.get("events", []):
+                        stream.write(json.dumps(event, separators=(",", ":")) + "\n")
+                return self.reply(200 if result.get("result") in
+                                  ("INSTALLED_AND_VERIFIED", "ALREADY_INSTALLED_AND_VERIFIED")
+                                  else 409, result)
+            except Exception as error:
+                return self.reply(409, {"result": "FAILED", "stage": "PRECHECK",
+                                        "code": type(error).__name__.upper(),
+                                        "explanation": str(error)[:300],
+                                        "rollback": "NOT_NEEDED"})
         if self.path == "/v1/pairing/cancel":
             try:
                 n = int(self.headers.get("Content-Length", "0"))
@@ -1866,7 +3173,27 @@ class Handler(BaseHTTPRequestHandler):
                 if n < 1 or n > MAX_BODY:
                     raise RequestError("invalid request length")
                 payload = json.loads(self.rfile.read(n).decode("utf-8"))
+                request = validate_request(payload)
                 caller = pairing_status()
+                # Local, token-authenticated reads remain available when the
+                # Mac heartbeat or Apple pairing needs repair. Mutations retain
+                # the live trusted-Mac requirement.
+                if request.access == "write":
+                    denial = pairing_denial()
+                    if denial:
+                        return self.reply(403, denial)
+                if request.operation == "cleanupCraneContainer":
+                    result = queue_crane_container_cleanup(request.parameters)
+                    envelope = core_response(
+                        request.request_id, result.get("status") == 0,
+                        result=result if result.get("status") == 0 else None,
+                        error_code=(None if result.get("status") == 0 else
+                                    str(result.get("result") or "CLEANUP_FAILED")),
+                        error_message=(None if result.get("status") == 0 else
+                                       str(result.get("stderr") or
+                                           "Crane container cleanup failed")),
+                    )
+                    return self.reply(200 if envelope["success"] else 409, envelope)
                 result = core_runtime().handle_ipc(payload, caller=caller)
                 return self.reply(200 if result.get("success") else 400, result)
             except (ValueError, UnicodeDecodeError, RequestError) as error:
@@ -1898,6 +3225,12 @@ class Handler(BaseHTTPRequestHandler):
                 # request data in an error, and this endpoint handles secrets.
                 return self.reply(500, {"status": 125, "stdout": "",
                     "stderr": "Unable to update password securely"})
+        if self.path in ("/v1/runtime/refresh", "/v1/crypstore/repair"):
+            from zero_sky_compat.integration import CompatibilityBlocked, block_legacy_mutation
+            try:
+                block_legacy_mutation(self.path)
+            except CompatibilityBlocked as error:
+                return self.reply(409, {"status": 193, "stdout": "", "stderr": str(error)})
         if self.path == "/v1/runtime/refresh":
             messages = ["[0-Sky] authenticated local refresh request",
                         "[0-Sky] rescanning installed dpkg/filter metadata"]
@@ -1958,6 +3291,13 @@ class Handler(BaseHTTPRequestHandler):
             except OSError:
                 pass
             args=validate(request.get("arguments"))
+            if args[0] in ("repair-preferences", "refresh", "refresh-all", "transfer-apps",
+                           "modify-registration", "enable-jit", "export-app", "export-app-deb", "export-package"):
+                from zero_sky_compat.integration import CompatibilityBlocked, block_legacy_mutation
+                try:
+                    block_legacy_mutation(args[0])
+                except CompatibilityBlocked as error:
+                    return self.reply(409, {"status": 193, "stdout": "", "stderr": str(error)})
             installing = args[0] in ("install", "install-app-bundle")
             if args[0] == "repair-preferences":
                 package = args[1] if len(args) == 2 else None
@@ -2098,5 +3438,81 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(403,{"status":126,"stdout":"","stderr":str(e)})
         except Exception as e: return self.reply(500,{"status":125,"stdout":"","stderr":str(e)})
 
+def integrate_package_app_cli(arguments):
+    """Complete Sileo's post-apt app install through the existing Mac worker.
+
+    Sileo invokes this as root with a typed argument array. The broker resolves
+    package ownership itself; the app cannot name a package or a Cryptex job.
+    """
+    if len(arguments) != 1 or os.geteuid() != 0:
+        return {"status": 126, "error": "root and one package app path are required"}
+    try:
+        app_path = arguments[0]
+        package = resolve_owner(app_path)
+        denial = pairing_denial()
+        if denial:
+            return {"status": 190, "package": package,
+                    "error": "trusted Mac Bridge is unavailable for Cryptex integration"}
+        payload = package_payload(package)
+        if os.path.realpath(app_path) not in payload["apps"]:
+            raise PackageIntegrationError("app is absent from its package file inventory")
+        if payload["tweaks"] or payload["preferences"] or payload["daemons"]:
+            return {"status": 192, "package": package,
+                    "error": "mixed app/runtime package requires 0-Sky Control's transactional installer"}
+        _, messages, failures = integration_report(
+            package, app_filter=os.path.realpath(app_path))
+        return {"status": 192 if failures else 0, "package": package,
+                "integrated_apps": [os.path.basename(app_path)] if not failures else [],
+                "messages": messages[:16], "errors": failures[:16]}
+    except (PackageIntegrationError, OSError, subprocess.TimeoutExpired) as error:
+        return {"status": 192, "error": str(error)[:300]}
+
+
 if __name__ == "__main__":
-    Server((HOST,PORT),Handler).serve_forever()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == "--provision-sileo-bridge" and len(sys.argv) == 2:
+            try:
+                raw_identity = sys.stdin.buffer.read(2049)
+                if len(raw_identity) > 2048:
+                    raise ValueError("Sileo identity request is too large")
+                identity = (json.loads(raw_identity.decode("utf-8"))
+                            if raw_identity.strip() else None)
+                outcome = sileo_package_service.provision(device_identity=identity)
+                print(json.dumps({"status": 0, "result": outcome}))
+                raise SystemExit(0)
+            except (OSError, ValueError) as error:
+                print(json.dumps({"status": 126, "result": "BLOCKED",
+                                  "error": str(error)[:300]}))
+                raise SystemExit(126)
+        if sys.argv[1] != "--integrate-package-app":
+            print(json.dumps({"status": 126, "error": "unknown broker command"}))
+            raise SystemExit(126)
+        result = integrate_package_app_cli(sys.argv[2:])
+        print(json.dumps(result, separators=(",", ":")))
+        raise SystemExit(0 if result["status"] == 0 else 1)
+    # The bridge's existing KeepAlive service is loaded after each rootless
+    # bootstrap. Bind its status endpoint first, then start the isolated,
+    # once-per-boot Link launcher. A failure cannot prevent the bridge serving.
+    server = Server((HOST, PORT), Handler)
+    try:
+        publish_control_bridge_token()
+    except Exception as error:
+        try:
+            core_runtime().logger.log("WARN", "CORE", "Control token publication failed",
+                                      errorClass=type(error).__name__)
+        except Exception:
+            pass
+    try:
+        splash = pathlib.Path("/var/jb/usr/local/libexec/bootsplash-launch.py")
+        if splash.is_file() and not splash.is_symlink():
+            subprocess.Popen(["/var/jb/usr/bin/python3", str(splash)],
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL, close_fds=True,
+                             start_new_session=True)
+    except Exception as error:
+        try:
+            core_runtime().logger.log("WARN", "CORE", "bootsplash launch failed",
+                                      errorClass=type(error).__name__)
+        except Exception:
+            pass
+    server.serve_forever()

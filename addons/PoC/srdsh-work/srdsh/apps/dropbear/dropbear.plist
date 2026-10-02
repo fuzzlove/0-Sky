@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>EnablePressuredExit</key>
+	<false/>
+
+	<key>EnableTransactions</key>
+	<false/>
+
+	<key>Label</key>
+	<string>com.liquidsky.srdssh.dropbear</string>
+
+	<!-- Tell `cryptexd` we want `CRYPTEX_MOUNT_PATH` set. -->
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>CRYPTEX_SHELL</key>
+		<string>/usr/bin/sh</string>
+	</dict>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/cryptex-run</string>
+		<string>toybox</string>
+		<string>sh</string>
+		<string>-c</string>
+		<string>exec "$CRYPTEX_MOUNT_PATH/usr/bin/toybox" sh "$CRYPTEX_MOUNT_PATH/usr/bin/srdsh-dropbear-start"</string>
+	</array>
+
+	<key>KeepAlive</key>
+	<true/>
+</dict>
+</plist>

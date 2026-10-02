@@ -305,6 +305,7 @@ struct DevicesView: View {
     @ObservedObject var model: BridgeAppModel
     let addressRequiredAction: () -> Void
     @State private var confirmHostKeyRepair = false
+    @State private var confirmReadWriteRootMount = false
     @State private var removalCandidate: SkyDevice?
     var body: some View {
         HSplitView {
@@ -347,6 +348,11 @@ struct DevicesView: View {
                         DeviceCard(device: device)
                         PairingWorkflowView(steps: model.pairingWorkflow)
                         MultiMacPairingCard(model: model, device: device)
+                        RootFilesystemCard(
+                            model: model,
+                            device: device,
+                            requestReadWriteMount: { confirmReadWriteRootMount = true }
+                        )
                         HealthDetails(snapshot: model.health)
                         HStack {
                             if !model.selectedHasProfile {
@@ -395,6 +401,18 @@ struct DevicesView: View {
             Text("Use only after confirming the selected UDID is physically connected by USB. Automatic recovery never replaces this trust pin.")
         }
         .confirmationDialog(
+            "Mount this SRD's root filesystem read/write?",
+            isPresented: $confirmReadWriteRootMount,
+            titleVisibility: .visible
+        ) {
+            Button("Mount Root Read/Write", role: .destructive) {
+                model.mountRootFilesystem(readWrite: true)
+            }
+            Button("Cancel", role: .cancel) { }
+        } message: {
+            Text("Finder will be able to create, replace, move, and delete files wherever AFC2 permits. Use the normal one-click mount for read-only access.")
+        }
+        .confirmationDialog(
             "Remove this device from 0-Sky Bridge?",
             isPresented: Binding(
                 get: { removalCandidate != nil },
@@ -410,6 +428,52 @@ struct DevicesView: View {
             Button("Cancel", role: .cancel) { removalCandidate = nil }
         } message: {
             Text("This stops and deletes only this device's 0-Sky-owned Mac services, local enrollment, host-key receipt, and cached transport capability. Research sessions, diagnostic evidence, shared SSH keys, and the Apple device are preserved. The device can be set up again after reconnecting it.")
+        }
+    }
+}
+
+struct RootFilesystemCard: View {
+    @ObservedObject var model: BridgeAppModel
+    let device: SkyDevice
+    let requestReadWriteMount: () -> Void
+
+    private var belongsToDevice: Bool {
+        model.rootFilesystemMountDeviceID == nil
+            || model.rootFilesystemMountDeviceID == device.udid
+    }
+
+    var body: some View {
+        Card("Root Filesystem", icon: "externaldrive.connected.to.line.below") {
+            KeyValue("Finder Mount", belongsToDevice
+                ? model.rootFilesystemMountPhase.rawValue
+                : "Another SRD is mounted")
+            if model.rootFilesystemMountPhase == .mounted && belongsToDevice {
+                KeyValue("Access", model.rootFilesystemMountReadOnly ? "Read Only" : "Read/Write")
+            }
+            Text("Uses the verified com.apple.afc2 service over USB and exposes only a loopback WebDAV endpoint to Finder.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            HStack {
+                if model.rootFilesystemMountPhase == .mounted && belongsToDevice {
+                    Button("Reveal in Finder") { model.revealRootFilesystemMount() }
+                        .buttonStyle(.borderedProminent)
+                    Button("Unmount") { model.stopRootFilesystemMount() }
+                } else if model.rootFilesystemMountPhase == .mounting && belongsToDevice {
+                    ProgressView().controlSize(.small)
+                    Button("Cancel") { model.stopRootFilesystemMount() }
+                } else if model.rootFilesystemMountPhase == .unmounting && belongsToDevice {
+                    ProgressView().controlSize(.small)
+                    Text("Unmounting…").foregroundStyle(.secondary)
+                } else {
+                    Button("Mount Root in Finder") {
+                        model.mountRootFilesystem()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(!device.usbConnected || !model.selectedHasProfile || !belongsToDevice)
+                    Button("Mount Read/Write…") { requestReadWriteMount() }
+                        .disabled(!device.usbConnected || !model.selectedHasProfile || !belongsToDevice)
+                }
+            }
         }
     }
 }
@@ -454,6 +518,21 @@ struct DeviceContextActions: View {
             model.fixBridge()
         }
         .disabled(!hasProfile || model.isBusy)
+        if model.rootFilesystemMountPhase == .mounted,
+           model.rootFilesystemMountDeviceID == device.udid {
+            Button("Reveal Root in Finder", systemImage: "folder") {
+                model.revealRootFilesystemMount()
+            }
+            Button("Unmount Root", systemImage: "eject") {
+                model.stopRootFilesystemMount()
+            }
+        } else {
+            Button("Mount Root in Finder", systemImage: "externaldrive.connected.to.line.below") {
+                model.select(device.udid)
+                model.mountRootFilesystem()
+            }
+            .disabled(!hasProfile || !device.usbConnected || model.rootFilesystemMountPhase == .mounting)
+        }
         Divider()
         Button("Pair This Mac (Keep Existing)", systemImage: "link") {
             model.select(device.udid)

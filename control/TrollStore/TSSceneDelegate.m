@@ -15,7 +15,15 @@
 
 		if(url)
 		{
-			if([url isFileURL])
+			if([url.scheme.lowercaseString isEqualToString:@"zerosky-control"] &&
+			   [url.host.lowercaseString isEqualToString:@"tweaks"] &&
+			   [url.path.lowercaseString isEqualToString:@"/crane"])
+			{
+				dispatch_async(dispatch_get_main_queue(), ^{
+					[(TSRootViewController*)_rootViewController openCraneSettings];
+				});
+			}
+			else if([url isFileURL])
 			{
 				[url startAccessingSecurityScopedResource];
 				void (^doneBlock)(BOOL) = ^(BOOL shouldExit)

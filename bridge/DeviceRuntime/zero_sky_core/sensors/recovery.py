@@ -87,8 +87,38 @@ class PackageInventory:
         self.status = paths.jailbreak("/Library/dpkg/status")
         self.info = paths.jailbreak("/Library/dpkg/info")
         self.registry = paths.jailbreak("/var/lib/srd-runtime/registry.json")
+        self.injection_state = paths.jailbreak("/var/lib/srd-runtime/injection-state.json")
         self.safe_mode = paths.jailbreak("/var/lib/srd-runtime/safe-mode-overrides.json")
+        self.adapters = paths.jailbreak("/usr/share/0-sky/package-adapters")
         self.pause = paths.system("/var/mobile/pl/srd-runtime-paused")
+
+    def _runtime_expectations(
+            self, package: str,
+            discovered: set[tuple[str, str]]) -> tuple[set[tuple[str, str]], int]:
+        """Apply a reviewed package adapter's required/conditional distinction.
+
+        Configuration-dependent dylibs such as Crane's per-application hook
+        are loaded only while a converted, selected application is running.
+        Treating those as permanently absent made a functional package appear
+        degraded.  Invalid or absent adapter metadata fails closed to the
+        complete discovered set.
+        """
+        manifest = _read_json(self.adapters / (package + ".json"), None)
+        if not isinstance(manifest, dict) or manifest.get("package") != package:
+            return discovered, 0
+        runtime = manifest.get("runtime")
+        required = runtime.get("required_dylibs") if isinstance(runtime, dict) else None
+        conditional = runtime.get("configuration_dependent") if isinstance(runtime, dict) else None
+        if not isinstance(required, list) or not all(
+                isinstance(item, str) and item.startswith("/var/jb/") and ".." not in Path(item).parts
+                for item in required):
+            return discovered, 0
+        required_paths = set(required)
+        narrowed = {identity for identity in discovered if identity[0] in required_paths}
+        if len(narrowed) != len(required_paths):
+            return discovered, 0
+        conditional_count = len(conditional) if isinstance(conditional, list) else 0
+        return narrowed, conditional_count
 
     def _files(self, package: str) -> tuple[list[str], bool, float | None]:
         candidates = (self.info / f"{package}.list", self.info / f"{package}:iphoneos-arm.list",
@@ -127,6 +157,14 @@ class PackageInventory:
         if not isinstance(registry, dict):
             registry = {}
         tweaks, quarantined = self._registry_maps(registry)
+        injection_state = _read_json(self.injection_state, {})
+        loaded_rows = (injection_state.get("loaded", {}).values()
+                       if isinstance(injection_state, dict) and
+                       isinstance(injection_state.get("loaded"), dict) else ())
+        loaded_identities = {
+            (str(item.get("dylib") or ""), str(item.get("sha256") or ""))
+            for item in loaded_rows if isinstance(item, dict)
+        }
         safe_mode = _read_json(self.safe_mode, {})
         safe_targets = safe_mode.get("targets", {}) if isinstance(safe_mode, dict) else {}
         safe_packages: set[str] = set()
@@ -151,6 +189,12 @@ class PackageInventory:
         for target in all_disabled_targets:
             safe_packages.update(target_packages.get(target, ()))
         installed = set(packages)
+        providers: dict[str, set[str]] = {}
+        for package, fields in packages.items():
+            for group in _dependency_groups(fields.get("Provides")):
+                for virtual_name in group:
+                    installed.add(virtual_name)
+                    providers.setdefault(virtual_name, set()).add(package)
         reverse: dict[str, set[str]] = {}
         dependency_map: dict[str, list[list[str]]] = {}
         for package, fields in packages.items():
@@ -159,6 +203,8 @@ class PackageInventory:
             for alternatives in groups:
                 for dependency in alternatives:
                     reverse.setdefault(dependency, set()).add(package)
+                    for provider in providers.get(dependency, ()):
+                        reverse.setdefault(provider, set()).add(package)
         needle = (query or "").strip().casefold()[:128]
         rows: list[dict[str, Any]] = []
         for package in sorted(packages, key=str.casefold):
@@ -174,6 +220,13 @@ class PackageInventory:
             package_health = (health or {}).get(package, {})
             conflicts = int(package_health.get("conflicts") or 0)
             crashes = int(package_health.get("crashes") or 0)
+            expected_runtime = {
+                (str(item.get("dylib") or ""), str(item.get("sha256") or ""))
+                for item in tweaks.get(package, []) if isinstance(item, dict)
+            }
+            expected_runtime, conditional_runtime_count = self._runtime_expectations(
+                package, expected_runtime)
+            loaded_runtime = expected_runtime & loaded_identities
             disabled = bool(quarantined.get(package)) and len(quarantined[package]) >= len(tweaks.get(package, []))
             if package in safe_packages:
                 disabled = True
@@ -181,6 +234,10 @@ class PackageInventory:
                 disabled = True
             status = ("Crashing" if crashes else "Conflict" if conflicts else
                       "Disabled" if disabled else "Warning" if missing else "Healthy")
+            runtime_status = ("NOT_APPLICABLE" if not expected_runtime else
+                              "FAILED" if quarantined.get(package) else
+                              "PASS" if loaded_runtime == expected_runtime else
+                              "DEGRADED" if loaded_runtime else "UNTESTED")
             rows.append({"package": package, "name": title[:256],
                          "version": fields.get("Version", "")[:256],
                          "architecture": fields.get("Architecture", "")[:128],
@@ -190,6 +247,10 @@ class PackageInventory:
                          "fileCount": len(files), "filesTruncated": truncated,
                          "serviceCount": len(services), "tweakCount": len(tweaks.get(package, [])),
                          "quarantinedCount": len(quarantined.get(package, [])),
+                         "runtimeState": runtime_status,
+                         "runtimeExpectedCount": len(expected_runtime),
+                         "runtimeLoadedCount": len(loaded_runtime),
+                         "runtimeConditionalCount": conditional_runtime_count,
                          "installedEvidenceTimestamp": installed_at,
                          "health": status, "recentCrashCount": crashes,
                          "conflictCount": conflicts})

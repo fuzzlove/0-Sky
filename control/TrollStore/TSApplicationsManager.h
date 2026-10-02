@@ -9,6 +9,7 @@
 + (instancetype)sharedInstance;
 
 - (NSArray*)installedAppPaths;
+- (NSArray<NSDictionary*>*)registeredApplicationRecords;
 - (NSDictionary*)srdInventory;
 - (NSDictionary*)coreRequestOperation:(NSString*)operation
     parameters:(NSDictionary*)parameters error:(NSError**)error;

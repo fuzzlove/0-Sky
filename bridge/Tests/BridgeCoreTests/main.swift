@@ -448,6 +448,35 @@ struct BridgeCoreTestRunner {
             _ = try BridgePaths(repositoryRoot: nil, bundledKitRoot: nil).projectSetupKit()
             throw TestFailure.failed("source checkout unexpectedly exposed a device kit")
         } catch BridgeCoreError.dependencyMissing { /* expected */ }
+        let kit = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("0sky-kit-fixture-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: kit) }
+        for relative in ["SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
+                         "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+                         "host-mac/install.py", "host-mac/pair.py",
+                         "host-mac/requirements-lock.txt",
+                         "payloads/0-Sky-Link-1.9.0-universal.ipa"] {
+            let file = kit.appendingPathComponent(relative)
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(), withIntermediateDirectories: true
+            )
+            try Data("fixture".utf8).write(to: file)
+        }
+        try FileManager.default.createDirectory(
+            at: kit.appendingPathComponent("host-mac/wheelhouse"),
+            withIntermediateDirectories: true
+        )
+        try expect(BridgePaths.hasCompleteKit(at: kit), "complete bundled kit rejected")
+        let resolved = try BridgePaths(repositoryRoot: nil, bundledKitRoot: kit).projectSetupKit()
+        try expect(resolved == kit, "bundled kit was not preferred")
+        try FileManager.default.removeItem(
+            at: kit.appendingPathComponent("host-mac/requirements-lock.txt")
+        )
+        try expect(!BridgePaths.hasCompleteKit(at: kit), "incomplete bundled kit accepted")
+        do {
+            _ = try BridgePaths(repositoryRoot: nil, bundledKitRoot: kit).projectSetupKit()
+            throw TestFailure.failed("incomplete bundled kit was accepted")
+        } catch BridgeCoreError.dependencyMissing { /* expected */ }
     }
 
     private static func diagnosticExport() async throws {

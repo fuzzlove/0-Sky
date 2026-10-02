@@ -4,6 +4,7 @@
 #import "TSAppTableViewController.h"
 #import "TSInventoryTableViewController.h"
 #import "TSHealthTableViewController.h"
+#import "TSCompatibilityTableViewController.h"
 #import "TSActivityTableViewController.h"
 #import "TSRecoveryTableViewController.h"
 #import "TSSnapshotsTableViewController.h"
@@ -126,6 +127,7 @@
             @{ @"title": @"Snapshots", @"detail": @"Verified application rollback", @"icon": @"clock.arrow.circlepath", @"destination": @"snapshots" },
             @{ @"title": @"Permissions", @"detail": @"Temporary policies when supported", @"icon": @"timer", @"destination": @"intelligence" }];
         case 4: return @[
+            @{ @"title": @"Compatibility", @"detail": @"Validated results and component diagnostics", @"icon": @"checkmark.shield", @"destination": @"compatibility" },
             @{ @"title": @"Packages & Tweaks", @"detail": @"Health, services, files, and conflicts", @"icon": @"shippingbox.fill", @"destination": @"inventory" },
             @{ @"title": @"Conflicts", @"detail": @"Evidence-based hook analysis", @"icon": @"exclamationmark.2", @"destination": @"recovery" },
             @{ @"title": @"Crashes", @"detail": @"Validated metadata and attribution", @"icon": @"doc.text.magnifyingglass", @"destination": @"recovery" },
@@ -213,6 +215,7 @@
 {
     if([destination isEqual:@"apps"]) return [TSAppTableViewController new];
     if([destination isEqual:@"inventory"]) return [TSInventoryTableViewController new];
+    if([destination isEqual:@"compatibility"]) return [TSCompatibilityTableViewController new];
     if([destination isEqual:@"health"]) return [TSHealthTableViewController new];
     if([destination isEqual:@"activity"]) return [TSActivityTableViewController new];
     if([destination isEqual:@"recovery"]) return [TSRecoveryTableViewController new];

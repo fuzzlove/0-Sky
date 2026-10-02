@@ -1,0 +1,146 @@
+#!/usr/bin/env python3
+"""Analyze or apply deterministic 0-Sky package conversions."""
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+from pathlib import Path
+import plistlib
+import sys
+import zipfile
+
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "bridge/DeviceRuntime"))
+
+from zero_sky_compat.converter import convert, load_locks, plan
+
+
+def file_sha256(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
+
+
+def crane_plan(source: Path, crane: Path, adapter_directory: Path) -> dict:
+    from convert_app_for_crane import REVIEWED_CRANE_SHA256
+
+    required = (adapter_directory / "0SkyCraneBootstrap.dylib",
+                adapter_directory / "lib0SkySubstrateFunctionShim.dylib")
+    if not crane.is_file() or crane.is_symlink():
+        raise ValueError("--crane-dylib must be one real reviewed Crane artifact")
+    if file_sha256(crane) != REVIEWED_CRANE_SHA256:
+        raise ValueError("Crane dylib differs from the reviewed paid artifact")
+    if any(not item.is_file() or item.is_symlink() for item in required):
+        raise ValueError("the built Crane adapter libraries are incomplete")
+    try:
+        with zipfile.ZipFile(source) as archive:
+            names = set(archive.namelist())
+            infos = [name for name in archive.namelist()
+                     if name.startswith("Payload/") and name.count("/") == 2
+                     and name.endswith(".app/Info.plist")]
+            if len(infos) != 1:
+                raise ValueError("IPA must contain exactly one top-level app")
+            info = plistlib.loads(archive.read(infos[0]))
+            bundle = info.get("CFBundleIdentifier")
+            executable = info.get("CFBundleExecutable")
+            prefix = infos[0].removesuffix("Info.plist")
+            if (not isinstance(bundle, str) or not bundle or
+                    not isinstance(executable, str) or not executable or
+                    "/" in executable or prefix + executable not in archive.namelist()):
+                raise ValueError("application identity or executable is incomplete")
+            reserved = {prefix + "0SkyCraneAdapter.plist",
+                        prefix + "Frameworks/Crane.dylib",
+                        prefix + "Frameworks/0SkyCraneBootstrap.dylib",
+                        prefix + "Frameworks/lib0SkySubstrateFunctionShim.dylib"}
+            if names & reserved:
+                raise ValueError("application already contains the Crane adapter")
+    except (OSError, KeyError, plistlib.InvalidFileException,
+            zipfile.BadZipFile) as error:
+        raise ValueError("source is not a valid single-application IPA") from error
+    return {
+        "source": source.name,
+        "sha256": file_sha256(source),
+        "format": "ipa",
+        "bundle_identifier": bundle,
+        "issues": [{"code": "CRANE_PRE_MAIN_INJECTION_REQUIRED",
+                    "detail": "paid Crane is a conditional tweak; this app needs the reviewed private handoff adapter"}],
+        "transformations": [{"rule": "crane-pre-main-app-adapter-v1",
+                             "action": "embed reviewed Crane and add a structured pre-main load command"}],
+        "compatibility": "LIKELY_CONVERTIBLE",
+        "confidence": "HIGH",
+        "device_changes": "NONE",
+        "runtime_validation": "NOT_RUN",
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("source", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--report", type=Path)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--explain", action="store_true")
+    parser.add_argument("--locks", type=Path,
+                        default=ROOT / "compatibility/conversion-locks")
+    parser.add_argument("--adapter", choices=("crane",),
+                        help="apply one explicit reviewed compatibility adapter")
+    parser.add_argument("--crane-dylib", type=Path,
+                        help="reviewed paid Crane.dylib; required with --adapter crane")
+    parser.add_argument("--adapter-directory", type=Path,
+                        default=ROOT / ".build/crane-app-adapter")
+    args = parser.parse_args()
+    if args.source.is_symlink() or not args.source.is_file():
+        parser.error("source must be one real artifact file")
+    locks = load_locks(args.locks)
+    if args.adapter == "crane":
+        if args.crane_dylib is None:
+            parser.error("--crane-dylib is required with --adapter crane")
+        try:
+            value = crane_plan(args.source, args.crane_dylib,
+                               args.adapter_directory)
+        except ValueError as error:
+            parser.error(str(error))
+    else:
+        value = plan(args.source, locks)
+    if not args.dry_run:
+        if args.output is None:
+            parser.error("--output is required unless --dry-run is used")
+        report = args.report or args.output.with_suffix(args.output.suffix + ".json")
+        if report.exists() or report.is_symlink():
+            parser.error("report destination already exists")
+        if args.adapter == "crane":
+            from convert_app_for_crane import convert as convert_for_crane
+            try:
+                result = convert_for_crane(
+                    args.source, args.output, crane=args.crane_dylib,
+                    bootstrap=args.adapter_directory / "0SkyCraneBootstrap.dylib",
+                    shim=args.adapter_directory / "lib0SkySubstrateFunctionShim.dylib")
+            except (FileExistsError, OSError, RuntimeError, ValueError) as error:
+                parser.error(str(error))
+            value = {"schema_version": 1, "plan": value, "result": result,
+                     "runtime_validation": "NOT_RUN",
+                     "compatibility_status": "UNTESTED"}
+        else:
+            value = convert(args.source, args.output, locks)
+        report.parent.mkdir(parents=True, exist_ok=True)
+        pending = report.with_name("." + report.name + ".tmp")
+        if pending.exists() or pending.is_symlink():
+            args.output.unlink(missing_ok=True)
+            parser.error("report staging path already exists")
+        pending.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n")
+        pending.replace(report)
+    if args.explain:
+        value["explanation"] = [
+            "A rule matches only when its structural preconditions or exact conversion lock match.",
+            "The source is never overwritten.",
+            "A converted artifact remains UNTESTED until SRD runtime validation passes.",
+        ]
+    print(json.dumps(value, indent=2, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -1,0 +1,75 @@
+diff --git a/Sileo/Backend/APT Wrapper/APTJsonParser.swift b/Sileo/Backend/APT Wrapper/APTJsonParser.swift
+index ecfd987..8bdefdc 100644
+--- a/Sileo/Backend/APT Wrapper/APTJsonParser.swift	
++++ b/Sileo/Backend/APT Wrapper/APTJsonParser.swift	
+@@ -199,12 +199,16 @@ extension APTWrapper {
+         var aptError = ""
+ 
+         if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
+-            if !removeList.isEmpty || installList.contains(where: { $0.package.package.contains("/") }) {
+-                throw APTParserErrors.blankJsonOutput(error: "0-Sky Bridge does not yet support package removal or local DEB planning")
++            if installList.contains(where: { $0.package.package.contains("/") }) ||
++                (!removeList.isEmpty && !installList.isEmpty) {
++                throw APTParserErrors.blankJsonOutput(error: "0-Sky Bridge requires separate transactions for local DEBs and mixed install/removal queues")
+             }
+-            let selections = installList.map { ["id": $0.package.packageID,
+-                                                "version": $0.package.version] }
+-            let result = SileoBridgeAPT.request(operation: "plan", packages: selections)
++            let removing = !removeList.isEmpty
++            let selected = removing ? Array(removeList) : Array(installList)
++            let selections = selected.map { ["id": $0.package.packageID,
++                                             "version": $0.package.version] }
++            let result = SileoBridgeAPT.request(operation: removing ? "plan-remove" : "plan",
++                                                packages: selections)
+             guard result.0 == 0 else {
+                 throw APTParserErrors.blankJsonOutput(error: result.2)
+             }
+@@ -297,7 +301,7 @@ enum SileoBridgeAPT {
+         var request = URLRequest(url: url)
+         request.httpMethod = "POST"
+         request.httpBody = body
+-        request.timeoutInterval = operation == "plan" ? 100 : 1200
++        request.timeoutInterval = operation == "plan" || operation == "plan-remove" ? 100 : 1200
+         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+         request.setValue(token, forHTTPHeaderField: "X-0Sky-Sileo-Token")
+         let completed = DispatchSemaphore(value: 0)
+diff --git a/Sileo/Backend/APT Wrapper/APTWrapper.swift b/Sileo/Backend/APT Wrapper/APTWrapper.swift
+index 1adf874..9a8bf7b 100644
+--- a/Sileo/Backend/APT Wrapper/APTWrapper.swift	
++++ b/Sileo/Backend/APT Wrapper/APTWrapper.swift	
+@@ -166,20 +166,27 @@ class APTWrapper {
+         #else
+         if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
+             DispatchQueue.global(qos: .userInitiated).async {
+-                guard removals.isEmpty,
+-                      installs.allSatisfy({ !$0.package.package.contains("/") }) else {
+-                    outputCallback("0-Sky Bridge does not yet support package removal or local DEB installation.\n", Int(STDERR_FILENO))
++                guard !(installs.isEmpty && removals.isEmpty),
++                      installs.allSatisfy({ !$0.package.package.contains("/") }),
++                      (installs.isEmpty || removals.isEmpty) else {
++                    outputCallback("0-Sky Bridge requires separate transactions for local DEBs and mixed install/removal queues.\n", Int(STDERR_FILENO))
+                     completionCallback(126, .back, false)
+                     return
+                 }
+-                let selected = installs.map { ["id": $0.package.packageID,
+-                                               "version": $0.package.version] }
+-                outputCallback("Installing through trusted 0-Sky Bridge…\n", Int(STDOUT_FILENO))
+-                let result = SileoBridgeAPT.request(operation: "install", packages: selected)
++                let removing = !removals.isEmpty
++                let selected = (removing ? removals : installs).map {
++                    ["id": $0.package.packageID, "version": $0.package.version]
++                }
++                outputCallback(removing ? "Removing through trusted 0-Sky Bridge…\n" :
++                    "Installing through trusted 0-Sky Bridge…\n", Int(STDOUT_FILENO))
++                let result = SileoBridgeAPT.request(operation: removing ? "remove" : "install",
++                                                    packages: selected)
+                 if !result.1.isEmpty { outputCallback(result.1, Int(STDOUT_FILENO)) }
+                 if !result.2.isEmpty { outputCallback(result.2, Int(STDERR_FILENO)) }
+                 if result.0 == 0 {
+-                    outputCallback("Package installed; runtime smoke test is still required before READY.\n", Int(STDOUT_FILENO))
++                    outputCallback(removing ? "Package removal and runtime cleanup verified.\n" :
++                        "Package installed; runtime smoke test is still required before READY.\n",
++                        Int(STDOUT_FILENO))
+                 }
+                 completionCallback(result.0, .back, false)
+             }

@@ -1,0 +1,15 @@
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index b4a09a7..54ebfb7 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -523,7 +523,9 @@ class DownloadsTableViewController: SileoViewController {
+         }
+         isInstalling = true
+         var earlyBreak = false
+-        if UIApplication.shared.applicationState == .background || UIApplication.shared.applicationState == .inactive,
++        let bridgeTransaction = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27
++        if !bridgeTransaction,
++           UIApplication.shared.applicationState == .background || UIApplication.shared.applicationState == .inactive,
+            let completion = backgroundCallback {
+             earlyBreak = true
+             completion()

@@ -708,6 +708,14 @@ class EventStore:
         for crash in self.latest_crashes(500):
             if float(crash["timestamp"]) < float(since):
                 continue
+            evidence = crash.get("evidence")
+            # A package being configured for a process is candidate context,
+            # not evidence that its image participated in the crash.  Keep the
+            # crash visible in Diagnostics, but do not turn every configured
+            # tweak into a false "Crashing" package state.
+            if (not isinstance(evidence, dict) or
+                    evidence.get("attribution") != "observed-image"):
+                continue
             for package in crash["package_candidates"]:
                 result.setdefault(str(package), {"crashes": 0, "conflicts": 0})["crashes"] += 1
         for conflict in self.current_conflicts(500):

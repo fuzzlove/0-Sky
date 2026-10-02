@@ -1,0 +1,256 @@
+{
+  "entries": [
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/AccessibilityUtilities.framework/AccessibilityUtilities",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/AssertionServices.framework/AssertionServices",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/BackBoardServices.framework/BackBoardServices",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/Celestial.framework/Celestial",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/FrontBoardServices.framework/FrontBoardServices",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/GraphicsServices.framework/GraphicsServices",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/IOMobileFramebuffer.framework/IOMobileFramebuffer",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/InstallCoordination.framework/InstallCoordination",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/MediaRemote.framework/MediaRemote",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/MobileContainerManager.framework/MobileContainerManager",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/MobileIcons.framework/MobileIcons",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/MobileInstallation.framework/MobileInstallation",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/MobileKeyBag.framework/MobileKeyBag",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/Preferences.framework/Preferences",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/RunningBoardServices.framework/RunningBoardServices",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/SpringBoardServices.framework/SpringBoardServices",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/TelephonyUtilities.framework/TelephonyUtilities",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/ToneLibrary.framework/ToneLibrary",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/UIKitServices.framework/UIKitServices",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "linked_framework",
+      "observed_ios27_api": null,
+      "old_api": "/System/Library/PrivateFrameworks/VoiceShortcutClient.framework/VoiceShortcutClient",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "class",
+      "observed_ios27_api": null,
+      "old_api": "MCMAppDataContainer",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "class",
+      "observed_ios27_api": null,
+      "old_api": "MCMPluginKitPluginDataContainer",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "class",
+      "observed_ios27_api": null,
+      "old_api": "PSDeleteButtonCell",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "class",
+      "observed_ios27_api": null,
+      "old_api": "SBUnknownController",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    },
+    {
+      "kind": "selector",
+      "observed_ios27_api": null,
+      "old_api": "privateAction:",
+      "replacement": null,
+      "runtime_discovery_possible": true,
+      "shim_available": false,
+      "source_modification_required": "UNKNOWN",
+      "status": "UNRESOLVED"
+    }
+  ],
+  "schema": 1,
+  "target": "ios27"
+}

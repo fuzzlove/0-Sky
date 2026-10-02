@@ -32,6 +32,7 @@ let package = Package(
                 .process("Resources/com.liquidsky.0sky.bridge.helper.plist"),
                 .process("Resources/com.liquidsky.0sky.bridge.service.plist"),
                 .process("Resources/Scripts/0sky_project_setup.py"),
+                .process("Resources/Scripts/afc2_root_mount.py"),
                 .process("Resources/Scripts/Install 0-Sky Dependencies.command"),
                 .copy("Resources/Legal"),
             ],

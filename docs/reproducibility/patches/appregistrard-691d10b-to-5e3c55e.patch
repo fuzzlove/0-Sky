@@ -1,0 +1,29 @@
+From 5e3c55eca13271e4746f42e889ab622136b7385f Mon Sep 17 00:00:00 2001
+From: Joe M <joem@Joes-Mac-Studio.local>
+Date: Fri, 2 Oct 2026 08:22:42 -0500
+Subject: [PATCH] checkpoint: preserve forced cryptex rescan support
+
+---
+ appregistrard/Core/CryptexObserver.swift | 6 +++++-
+ 1 file changed, 5 insertions(+), 1 deletion(-)
+
+diff --git a/appregistrard/Core/CryptexObserver.swift b/appregistrard/Core/CryptexObserver.swift
+index db22bb8..99518e4 100644
+--- a/appregistrard/Core/CryptexObserver.swift
++++ b/appregistrard/Core/CryptexObserver.swift
+@@ -24,7 +24,11 @@ final class CryptexObserver: NSObject {
+ 
+         logger.debug("Activating cryptex observer")
+ 
+-        self.knownCryptexMountPaths = loadPersistedCryptexMountPaths()
++        if ProcessInfo.processInfo.environment["APPREGISTRARD_RESCAN_ON_START"] == "1" {
++            self.knownCryptexMountPaths = []
++        } else {
++            self.knownCryptexMountPaths = loadPersistedCryptexMountPaths()
++        }
+ 
+         enumerateMountedCryptexes()
+ 
+-- 
+2.50.1 (Apple Git-155)
+

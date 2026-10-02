@@ -1,0 +1,22 @@
+diff --git a/Sileo/Backend/Download Manager/DownloadManager.swift b/Sileo/Backend/Download Manager/DownloadManager.swift
+index b91d67b..ef392bd 100644
+--- a/Sileo/Backend/Download Manager/DownloadManager.swift	
++++ b/Sileo/Backend/Download Manager/DownloadManager.swift	
+@@ -323,7 +323,7 @@ final class DownloadManager {
+                         forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
+                       values.isRegularFile == true, values.isSymbolicLink != true,
+                       values.fileSize == expectedSize else { continue }
+-                guard let expectedHash = download.package.rawControl["SHA256"]?.lowercased(),
++                guard let expectedHash = download.package.rawControl["sha256"]?.lowercased(),
+                       expectedHash.range(of: "^[0-9a-f]{64}$",
+                                          options: .regularExpression) != nil,
+                       candidate.hash(ofType: .sha256) == expectedHash else { continue }
+@@ -475,7 +475,7 @@ final class DownloadManager {
+     }
+ 
+     private func stageVerifiedBridgeArchive(package: Package, fileURL: URL) throws {
+-        guard let sha256 = package.rawControl["SHA256"]?.lowercased(),
++        guard let sha256 = package.rawControl["sha256"]?.lowercased(),
+               sha256.range(of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
+             throw Error.untrustedPackage(packageID: package.package)
+         }

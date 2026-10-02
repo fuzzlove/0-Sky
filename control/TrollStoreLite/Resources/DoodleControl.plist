@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>items</key>
+  <array>
+    <dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>Unlock Pattern</string></dict>
+    <dict>
+      <key>cell</key><string>PSLinkCell</string>
+      <key>id</key><string>recordingController</string>
+      <key>label</key><string>Record Doodle</string>
+      <key>defaults</key><string>com.nahtedetihw.doodleprefs</string>
+    </dict>
+    <dict>
+      <key>cell</key><string>PSSwitchCell</string>
+      <key>label</key><string>Enable Tweak</string>
+      <key>defaults</key><string>com.nahtedetihw.doodleprefs</string>
+      <key>key</key><string>enabled</string>
+      <key>default</key><false/>
+      <key>PostNotification</key><string>com.nahtedetihw.doodleprefs/ReloadPrefs</string>
+    </dict>
+    <dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>Pattern Options</string></dict>
+    <dict>
+      <key>cell</key><string>PSLinkListCell</string>
+      <key>label</key><string>Restriction</string>
+      <key>defaults</key><string>com.nahtedetihw.doodleprefs</string>
+      <key>key</key><string>restriction</string>
+      <key>default</key><integer>0</integer>
+      <key>values</key><array><integer>0</integer><integer>1</integer><integer>2</integer></array>
+      <key>titles</key><array><string>Default</string><string>Less Strict</string><string>More Strict</string></array>
+      <key>PostNotification</key><string>com.nahtedetihw.doodleprefs/ReloadPrefs</string>
+    </dict>
+    <dict>
+      <key>cell</key><string>PSEditTextCell</string>
+      <key>label</key><string>Unlock Message</string>
+      <key>defaults</key><string>com.nahtedetihw.doodleprefs</string>
+      <key>key</key><string>unlockText</string>
+      <key>default</key><string>Doodle Passcode</string>
+      <key>PostNotification</key><string>com.nahtedetihw.doodleprefs/ReloadPrefs</string>
+    </dict>
+    <dict>
+      <key>cell</key><string>PSLinkListCell</string>
+      <key>label</key><string>Stroke Style</string>
+      <key>defaults</key><string>com.nahtedetihw.doodleprefs</string>
+      <key>key</key><string>strokeStyle</string>
+      <key>default</key><integer>0</integer>
+      <key>values</key><array><integer>0</integer><integer>1</integer></array>
+      <key>titles</key><array><string>Solid Color</string><string>Transparent</string></array>
+      <key>PostNotification</key><string>com.nahtedetihw.doodleprefs/ReloadPrefs</string>
+    </dict>
+  </array>
+</dict>
+</plist>

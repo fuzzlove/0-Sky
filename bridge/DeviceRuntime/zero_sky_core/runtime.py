@@ -2,11 +2,15 @@
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
 import os
+import plistlib
+import re
 import signal
 import time
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .capabilities import CapabilityMatrix
 from .database import EventStore, SCHEMA_VERSION
@@ -22,10 +26,14 @@ from .automation import (AutomationEngine, FreezeCoordinator, PolicyError,
                          ProfileEngine)
 from .intelligence import PermissionTimeoutCoordinator
 from .storage import StorageScanner
+from .research_toolkit_device import collect as collect_research_toolkit
+from .research_toolkit import load_catalog
+from .research_toolkit_runner import overall_result, run_smoke, run_uat, write_bundle
 
 
 class CoreRuntime:
-    def __init__(self, root: Path = Path("/"), telemetry_owner: bool = True) -> None:
+    def __init__(self, root: Path = Path("/"), telemetry_owner: bool = True,
+                 crane_handoff: Callable[[list[dict[str, str]]], Any] | None = None) -> None:
         self.paths = RootlessPaths(root=Path(root))
         self.logger = StructuredLogger(self.paths.log_directory / "core.jsonl")
         self.store = EventStore(self.paths.database_path)
@@ -44,6 +52,360 @@ class CoreRuntime:
         self.storage = StorageScanner(self.paths, self.snapshots.installed_apps)
         self.permissions = PermissionTimeoutCoordinator(self.store)
         self._next_permission_maintenance = 0.0
+        self._core_ipc_recovered = False
+        self._crane_handoff = crane_handoff
+
+    def _toolkit_evidence(self) -> dict:
+        path = self.paths.state_directory / "research-toolkit/evidence.json"
+        if not path.is_file() or path.is_symlink() or path.stat().st_size > 512 * 1024:
+            return {}
+        try:
+            value = json.loads(path.read_text(encoding="utf-8"))
+            return value if isinstance(value, dict) else {}
+        except (OSError, ValueError, UnicodeDecodeError) as error:
+            self.logger.log("WARN", "TOOLKIT", "stored toolkit evidence unreadable",
+                            error=type(error).__name__)
+            return {}
+
+    def _toolkit_snapshot(self) -> dict:
+        health = self.store.package_health(time.time() - 7 * 86400)
+        packages = PackageInventory(self.paths).collect(512, health=health)
+        result = collect_research_toolkit(self.paths, catalog=load_catalog(),
+                                        package_rows=packages,
+                                        prior=self._toolkit_evidence())
+        latest = self.paths.state_directory / "research-toolkit/latest.json"
+        if latest.is_file() and not latest.is_symlink() and latest.stat().st_size <= 32768:
+            try:
+                value = json.loads(latest.read_text(encoding="utf-8"))
+                result["uat_summary"] = value if isinstance(value, dict) else None
+            except (OSError, ValueError, UnicodeDecodeError):
+                result["uat_summary"] = None
+        return result
+
+    @staticmethod
+    def _supported_tweak_target_package(value: Any) -> str:
+        if value != "com.opa334.crane":
+            raise IPCValidationError("INVALID_PARAMETERS",
+                                     "this package has no reviewed application-target adapter")
+        return value
+
+    def _tweak_target_path(self, package: str) -> Path:
+        return self.paths.jailbreak(
+            f"/var/lib/srd-runtime/tweak-targets/{package}.json")
+
+    def _read_tweak_targets(self, package: str) -> list[str]:
+        path = self._tweak_target_path(package)
+        try:
+            info = path.lstat()
+            if (path.is_symlink() or not path.is_file() or info.st_mode & 0o022 or
+                    info.st_size > 64 * 1024):
+                return []
+            value = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError, UnicodeError):
+            return []
+        if not isinstance(value, dict):
+            return []
+        identifiers = value.get("bundle_identifiers", [])
+        if (set(value) != {"schema", "package", "bundle_identifiers", "updated_at"} or
+                value.get("schema") != 1 or value.get("package") != package or
+                not isinstance(value.get("updated_at"), (int, float)) or
+                isinstance(value.get("updated_at"), bool) or
+                not isinstance(identifiers, list) or len(identifiers) > 64 or
+                len(set(identifiers)) != len(identifiers) or
+                not all(isinstance(item, str) and PACKAGE_ID.fullmatch(item)
+                        for item in identifiers)):
+            return []
+        return identifiers
+
+    @staticmethod
+    def _crane_adapter_state(app: dict[str, Any],
+                             paths: RootlessPaths | None = None) -> str:
+        bundle = app.get("bundleID")
+        raw_path = app.get("bundlePath")
+        if isinstance(raw_path, Path):
+            bundle_path = raw_path
+        else:
+            display = app.get("bundlePathDisplay")
+            if (not isinstance(display, str) or "\x00" in display or
+                    not re.fullmatch(
+                        r"/(?:private/)?var/containers/Bundle/Application/"
+                        r"[A-Za-z0-9-]+/[^/]+\.app|"
+                        r"/private/var/run/com\.apple\.security\.cryptexd/mnt/"
+                        r"[^/]+/Applications/[^/]+\.app", display)):
+                return "ADAPTATION_REQUIRED"
+            if paths is None:
+                return "ADAPTATION_REQUIRED"
+            try:
+                bundle_path = paths.system(display)
+            except ValueError:
+                return "ADAPTATION_REQUIRED"
+        if not isinstance(bundle, str):
+            return "ADAPTATION_REQUIRED"
+        marker = bundle_path / "0SkyCraneAdapter.plist"
+        try:
+            if marker.is_symlink() or not marker.is_file() or marker.stat().st_size > 16 * 1024:
+                return "ADAPTATION_REQUIRED"
+            value = plistlib.loads(marker.read_bytes())
+        except (OSError, ValueError, plistlib.InvalidFileException):
+            return "ADAPTATION_REQUIRED"
+        expected = {
+            "Schema": 1,
+            "Adapter": "crane-pre-main-v1",
+            "BundleIdentifier": bundle,
+            "StateTransport": "private-data-handoff-v1",
+            "Runtime": "embedded-reviewed-crane",
+        }
+        return "COMPATIBLE_WITH_ADAPTER" if value == expected else "ADAPTATION_REQUIRED"
+
+    def _crane_active_container(self, bundle: str) -> str:
+        preferences = self.paths.jailbreak(
+            "/var/mobile/Library/Preferences/com.opa334.craneprefs.plist")
+        try:
+            if (preferences.is_symlink() or not preferences.is_file() or
+                    preferences.stat().st_size > 4 * 1024 * 1024):
+                return "DEFAULT"
+            value = plistlib.loads(preferences.read_bytes())
+        except (OSError, ValueError, plistlib.InvalidFileException):
+            return "DEFAULT"
+        settings = value.get("appSettings_" + bundle) if isinstance(value, dict) else None
+        if not isinstance(settings, dict):
+            return "DEFAULT"
+        active = settings.get("activeContainer", "DEFAULT")
+        if active == "DEFAULT":
+            return active
+        if (not isinstance(active, str) or not re.fullmatch(
+                r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}", active)):
+            raise IPCValidationError("INVALID_STATE", "Crane active container is malformed")
+        identifiers = {
+            item.get("identifier") for item in settings.get("Containers", [])
+            if isinstance(item, dict) and isinstance(item.get("identifier"), str)
+        }
+        if active not in identifiers:
+            raise IPCValidationError("INVALID_STATE",
+                                     "Crane active container is absent from its inventory")
+        return active.upper()
+
+    @staticmethod
+    def _atomic_private_file(path: Path, payload: bytes | None,
+                             owner: tuple[int, int]) -> None:
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        os.chmod(path.parent, 0o700)
+        os.chown(path.parent, owner[0], owner[1])
+        if payload is None:
+            path.unlink(missing_ok=True)
+            return
+        temporary = path.with_name(path.name + f".{os.getpid()}.{time.time_ns()}.tmp")
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                             getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            os.write(descriptor, payload)
+            os.fsync(descriptor)
+            os.fchmod(descriptor, 0o600)
+            os.fchown(descriptor, owner[0], owner[1])
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, path)
+
+    def _reconcile_crane_handoffs(self, selected: set[str],
+                                  applications: dict[str, dict[str, Any]]) -> None:
+        for bundle, app in applications.items():
+            if self._crane_adapter_state(app, self.paths) != "COMPATIBLE_WITH_ADAPTER":
+                continue
+            container = app.get("containerPath")
+            if (not isinstance(container, Path) or container.is_symlink() or
+                    not container.is_dir()):
+                raise IPCValidationError("INVALID_STATE",
+                                         "converted application data container is unavailable")
+            info = container.stat()
+            handoff = container / "Library/0Sky/Crane/active-container"
+            active = self._crane_active_container(bundle) if bundle in selected else "DEFAULT"
+            payload = None if active == "DEFAULT" else (active + "\n").encode("ascii")
+            self._atomic_private_file(handoff, payload, (info.st_uid, info.st_gid))
+
+    def _tweak_target_apps(self, package_value: Any) -> dict[str, Any]:
+        package = self._supported_tweak_target_package(package_value)
+        selected = set(self._read_tweak_targets(package))
+        protected = {
+            "com.liquidsky.CrypStore", "codes.liquidsky.research.zerosky",
+            "com.amywhile.sileo", "com.opa334.CraneApplication",
+        }
+        applications = []
+        # Snapshot inventory requires both a readable bundle and its exact MCM
+        # data container. The launchd-hosted broker can be denied traversal of
+        # those directories on an SRD even though LaunchServices can still
+        # prove the app registration. Merge both views for this picker only.
+        inventory = {app.get("bundleID"): app
+                     for app in self.snapshots.registered_apps()
+                     if isinstance(app.get("bundleID"), str)}
+        inventory.update({app.get("bundleID"): app
+                          for app in self.snapshots.installed_apps()
+                          if isinstance(app.get("bundleID"), str)})
+        for app in inventory.values():
+            bundle = app.get("bundleID")
+            if not isinstance(bundle, str) or bundle in protected:
+                continue
+            applications.append({
+                "bundleID": bundle,
+                "name": str(app.get("name") or bundle)[:255],
+                "version": str(app.get("version") or "unknown")[:128],
+                "enabled": bundle in selected,
+                "compatibility": self._crane_adapter_state(app, self.paths),
+            })
+        applications.sort(key=lambda item: (item["name"].casefold(), item["bundleID"]))
+        return {"package": package, "applications": applications,
+                "selected": sorted(selected), "targetCount": len(selected),
+                "scope": "explicit-user-selected-third-party-applications"}
+
+    def _set_tweak_targets(self, request: Any,
+                           caller: dict[str, Any] | None) -> dict[str, Any]:
+        self._require_paired(caller)
+        package = self._supported_tweak_target_package(request.parameters.get("package"))
+        identifiers = request.parameters.get("bundleIDs")
+        if (not isinstance(identifiers, list) or len(identifiers) > 64 or
+                len(set(identifiers)) != len(identifiers) or
+                not all(isinstance(item, str) and PACKAGE_ID.fullmatch(item)
+                        for item in identifiers)):
+            raise IPCValidationError("INVALID_PARAMETERS",
+                                     "bundleIDs must be a unique bounded identifier list")
+        registered = {item["bundleID"]: item for item in self.snapshots.registered_apps()
+                      if isinstance(item.get("bundleID"), str)}
+        installed = {item["bundleID"]: item for item in self.snapshots.installed_apps()
+                     if isinstance(item.get("bundleID"), str)}
+        inventory = {**registered, **installed}
+        available = {item["bundleID"] for item in
+                     self._tweak_target_apps(package)["applications"]}
+        unavailable = sorted(set(identifiers) - available)
+        if unavailable:
+            raise IPCValidationError("INVALID_PARAMETERS",
+                                     "one or more selected applications are unavailable")
+        unconverted = sorted(bundle for bundle in identifiers
+                             if self._crane_adapter_state(inventory.get(bundle, {}), self.paths) !=
+                             "COMPATIBLE_WITH_ADAPTER")
+        if unconverted:
+            raise IPCValidationError(
+                "ADAPTATION_REQUIRED",
+                "Crane requires a verified pre-main 0-Sky app conversion: " +
+                ", ".join(unconverted[:8]))
+        path = self._tweak_target_path(package)
+        path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
+        path.parent.chmod(0o700)
+        previous_targets = set(self._read_tweak_targets(package))
+        handoff_roots = request.parameters.get("dataRoots", {})
+        affected = previous_targets | set(identifiers)
+        if self._crane_handoff is not None:
+            if (not isinstance(handoff_roots, dict) or len(handoff_roots) > 64 or
+                    not all(isinstance(key, str) and PACKAGE_ID.fullmatch(key) and
+                            isinstance(value, str) and re.fullmatch(
+                                r"/(?:private/)?var/mobile/Containers/Data/Application/"
+                                r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}",
+                                value)
+                            for key, value in handoff_roots.items()) or
+                    not affected.issubset(handoff_roots)):
+                raise IPCValidationError(
+                    "INVALID_PARAMETERS",
+                    "dataRoots must map every changed Crane target to its exact MCM root")
+        try:
+            previous_payload = path.read_bytes() if path.is_file() and not path.is_symlink() else None
+        except OSError:
+            previous_payload = None
+        payload = {"schema": 1, "package": package,
+                   "bundle_identifiers": sorted(identifiers),
+                   "updated_at": time.time()}
+        temporary = path.with_name(path.name + f".{os.getpid()}.{time.time_ns()}.tmp")
+        descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL |
+                             getattr(os, "O_NOFOLLOW", 0), 0o600)
+        try:
+            os.write(descriptor, (json.dumps(payload, separators=(",", ":")) + "\n").encode())
+            os.fsync(descriptor)
+            os.fchmod(descriptor, 0o600)
+        except Exception:
+            try:
+                temporary.unlink()
+            except OSError:
+                pass
+            raise
+        finally:
+            os.close(descriptor)
+        os.replace(temporary, path)
+        directory = os.open(path.parent, os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+        try:
+            os.fsync(directory)
+        finally:
+            os.close(directory)
+        try:
+            if self._crane_handoff is not None:
+                plans = [{
+                    "bundle_id": bundle,
+                    "data_root": ("/private" + handoff_roots[bundle]
+                                  if handoff_roots[bundle].startswith("/var/mobile/")
+                                  else handoff_roots[bundle]),
+                    "active": (self._crane_active_container(bundle)
+                               if bundle in identifiers else "DEFAULT"),
+                } for bundle in sorted(affected)]
+                self._crane_handoff(plans)
+            else:
+                self._reconcile_crane_handoffs(set(identifiers), installed)
+        except Exception:
+            self._atomic_private_file(path, previous_payload, (0, 0))
+            if self._crane_handoff is None:
+                try:
+                    self._reconcile_crane_handoffs(previous_targets, installed)
+                except Exception as rollback_error:
+                    self.logger.log("ERROR", "PACKAGE",
+                                    "Crane target handoff rollback failed",
+                                    package=package, error=type(rollback_error).__name__)
+            raise
+        (self.paths.jailbreak("/var/lib/srd-runtime") / "rescan.request").touch()
+        self.logger.log("INFO", "PACKAGE", "application targets updated",
+                        package=package, targetCount=len(identifiers),
+                        caller="authenticated-control")
+        return self._tweak_target_apps(package)
+
+    def _run_toolkit_suite(self, with_uat: bool) -> dict:
+        snapshot = self._toolkit_snapshot()
+        smoke = run_smoke(snapshot)
+        evidence = self._toolkit_evidence()
+        now = time.time()
+        os_version = snapshot["environment"]["ios_version"]
+        for row in snapshot["components"]:
+            component = row["id"]
+            test = smoke.get("component_results", {}).get(component)
+            if not isinstance(test, dict):
+                continue
+            evidence[component] = {
+                "os_version": os_version,
+                "installed_version": row.get("installed_version"),
+                "timestamp": now,
+                "smoke": test["smoke"], "runtime": test["runtime"],
+                "configured": test["configured"], "uat": "SKIP"}
+        directory = self.paths.state_directory / "research-toolkit"
+        directory.mkdir(mode=0o700, parents=True, exist_ok=True)
+        temporary = directory / "evidence.json.tmp"
+        temporary.write_text(json.dumps(evidence, separators=(",", ":")) + "\n",
+                             encoding="utf-8")
+        temporary.chmod(0o600)
+        os.replace(temporary, directory / "evidence.json")
+        snapshot = self._toolkit_snapshot()
+        uat = run_uat(snapshot, smoke) if with_uat else {"result": "DEGRADED",
+            "counts": {"SKIP": 12}, "tests": [], "timestamp": smoke["timestamp"]}
+        report = write_bundle(directory / "reports", snapshot, smoke, uat)
+        overall = overall_result(smoke, uat if with_uat else None)
+        latest = {"smoke": smoke["counts"], "smoke_result": smoke["result"],
+                  "uat": uat["counts"], "uat_result": uat["result"],
+                  "overall": overall, "report": str(report / "0sky-uat.zip"), "timestamp": now}
+        temporary = directory / "latest.json.tmp"
+        temporary.write_text(json.dumps(latest, separators=(",", ":")) + "\n", encoding="utf-8")
+        temporary.chmod(0o600)
+        os.replace(temporary, directory / "latest.json")
+        self.logger.log("INFO", "TOOLKIT", "research toolkit suite completed",
+                        result=overall,
+                        smoke=smoke["counts"], uat=uat["counts"])
+        return {"smoke": smoke, "uat": uat if with_uat else None,
+                "report": str(report / "0sky-uat.zip"),
+                "overall": overall}
 
     def start(self) -> None:
         if self._started:
@@ -732,17 +1094,64 @@ class CoreRuntime:
         self.logger.log("ERROR" if failed else "WARN", "CORE",
                         "subsystem failure", sensor=sensor, error=str(error))
 
+    def _ipc_success(self, request_id: str, result: Any) -> dict[str, Any]:
+        if not self._core_ipc_recovered:
+            self.sensor_success("core_ipc")
+            self._core_ipc_recovered = True
+        return response(request_id, True, result=result)
+
     def handle_ipc(self, payload: Any, caller: dict[str, Any] | None = None) -> dict[str, Any]:
         request_id = payload.get("requestId", "invalid") if isinstance(payload, dict) else "invalid"
         try:
             request = validate_request(payload)
+            if request.operation in ("restoreSnapshot", "undoChange", "applyProfile",
+                                     "temporarilyActivateApp", "unfreezeApp", "emitAutomationEvent",
+                                     "setAutomationRuleEnabled"):
+                from zero_sky_compat.integration import CompatibilityBlocked, block_legacy_mutation
+                try:
+                    block_legacy_mutation(request.operation)
+                except CompatibilityBlocked as error:
+                    raise IPCValidationError("COMPATIBILITY_BLOCKED", str(error)) from error
             self.start()
             self.logger.log("DEBUG", "IPC", "core request",
                             requestId=request.request_id, operation=request.operation,
                             access=request.access, caller=caller or {})
+            if request.operation == "getCompatibilityAdmission":
+                from zero_sky_compat.integration import existing_admission
+                component = request.parameters.get("component")
+                action = request.parameters.get("action")
+                if not isinstance(component, str) or not component or len(component) > 255 or action != "launch":
+                    raise IPCValidationError("INVALID_PARAMETERS", "bounded component and supported action required")
+                return self._ipc_success(request.request_id, existing_admission(component, action))
+            if request.operation == "getCompatibilityDetail":
+                from zero_sky_compat.integration import registry_detail
+                try:
+                    detail = registry_detail(request.parameters.get("registryKey"),
+                                             self.paths.state_directory / "compatibility")
+                except ValueError as error:
+                    raise IPCValidationError("INVALID_PARAMETERS", str(error)) from error
+                return self._ipc_success(request.request_id, {"component": detail})
+            if request.operation == "analyzeCompatibility":
+                from zero_sky_compat.integration import analyze_registry_entry
+                try:
+                    detail = analyze_registry_entry(
+                        request.parameters.get("registryKey"),
+                        self.paths.state_directory / "compatibility")
+                except ValueError as error:
+                    raise IPCValidationError("INVALID_PARAMETERS", str(error)) from error
+                return self._ipc_success(request.request_id, {"component": detail})
+            if request.operation == "getCompatibility":
+                from zero_sky_compat.integration import registry_view
+                return self._ipc_success(request.request_id,
+                                         registry_view(self.paths.state_directory / "compatibility"))
+            if request.operation in ("runToolkitSmoke", "runToolkitUAT"):
+                return self._ipc_success(request.request_id,
+                                         self._run_toolkit_suite(request.operation == "runToolkitUAT"))
             if request.access == "write":
                 if request.operation == "publishPowerTelemetry":
                     result = self._publish_power_telemetry(request, caller)
+                elif request.operation == "setTweakTargets":
+                    result = self._set_tweak_targets(request, caller)
                 elif request.operation in {"restartNormally", "disableRecentTweaks",
                                          "disableSelectedTweak", "startWithoutTweaks"}:
                     result = self._queue_recovery(request, caller)
@@ -758,6 +1167,21 @@ class CoreRuntime:
                 result = self.status()
             elif request.operation == "getCapabilities":
                 result = {"capabilities": self.capability_payload()}
+            elif request.operation == "getResearchToolkit":
+                result = self._toolkit_snapshot()
+            elif request.operation == "getToolkitReport":
+                latest = self._toolkit_snapshot().get("uat_summary") or {}
+                report = latest.get("report")
+                path = Path(report) if isinstance(report, str) else None
+                directory = self.paths.state_directory / "research-toolkit/reports"
+                if (path is None or path.is_symlink() or not path.is_file() or
+                        not path.resolve().is_relative_to(directory.resolve()) or
+                        path.stat().st_size > 4 * 1024 * 1024):
+                    raise IPCValidationError("REPORT_UNAVAILABLE", "No bounded toolkit report is available")
+                contents = path.read_bytes()
+                result = {"filename": "0sky-uat.zip",
+                          "base64": base64.b64encode(contents).decode("ascii"),
+                          "sha256": hashlib.sha256(contents).hexdigest()}
             elif request.operation == "getSensorHealth":
                 result = {"sensors": self.store.sensor_health()}
             elif request.operation == "getControlCenterSummary":
@@ -857,6 +1281,8 @@ class CoreRuntime:
             elif request.operation == "getTweakHooks":
                 limit = self._bounded_integer(request.parameters.get("limit"), 200, 1000)
                 result = {"hooks": self.store.current_hooks(limit)}
+            elif request.operation == "getTweakTargetApps":
+                result = self._tweak_target_apps(request.parameters.get("package"))
             elif request.operation == "getRecoveryStatus":
                 registry = self._runtime_registry()
                 safe_mode: dict[str, Any] = {}
@@ -994,7 +1420,7 @@ class CoreRuntime:
                           "capability": self.permissions.capability()}
             else:  # Defensive: validation already rejects unknown operations.
                 raise IPCValidationError("OPERATION_NOT_APPROVED", "operation is not approved")
-            return response(request.request_id, True, result=result)
+            return self._ipc_success(request.request_id, result)
         except IPCValidationError as error:
             operation = payload.get("operation") if isinstance(payload, dict) else None
             self.logger.log("WARN", "IPC", "core request rejected",
@@ -1003,6 +1429,7 @@ class CoreRuntime:
             return response(str(request_id)[:128], False, error_code=error.code,
                             error_message=str(error))
         except Exception as error:
+            self._core_ipc_recovered = False
             self.sensor_failure("core_ipc", repr(error))
             return response(str(request_id)[:128], False, error_code="INTERNAL_ERROR",
                             error_message="The core service could not complete the request")

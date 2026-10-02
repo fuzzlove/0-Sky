@@ -1,0 +1,8 @@
+{
+  "converted_sha256": "02f90c91d9df7c3c963fbdfef71394dc34f5648d9ecb35ae47a084b379c79adb",
+  "members_verified": 401,
+  "original_sha256": "ffddee2dea5c407ff435d18348b20119f24f6da935ea99ec0ca247eeb46916ac",
+  "output": "TRApp_4.7-3658+0sky1.tipa",
+  "payload_bytes_preserved": true,
+  "rule": "zip-compression-normalization-v1"
+}

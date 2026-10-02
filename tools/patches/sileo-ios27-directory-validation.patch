@@ -1,0 +1,25 @@
+diff --git a/Sileo/Backend/Download Manager/DownloadManager.swift b/Sileo/Backend/Download Manager/DownloadManager.swift
+index 9c697c1..b91d67b 100644
+--- a/Sileo/Backend/Download Manager/DownloadManager.swift	
++++ b/Sileo/Backend/Download Manager/DownloadManager.swift	
+@@ -7,6 +7,7 @@
+ //
+ 
+ import Foundation
++import Darwin
+ import Evander
+ 
+ public enum DownloadManagerQueue: Int {
+@@ -483,9 +484,9 @@ final class DownloadManager {
+         try FileManager.default.createDirectory(at: directory,
+             withIntermediateDirectories: true,
+             attributes: [.posixPermissions: 0o700])
+-        let values = try directory.resourceValues(
+-            forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+-        guard values.isDirectory == true, values.isSymbolicLink != true else {
++        var directoryStat = stat()
++        guard lstat(directory.path, &directoryStat) == 0,
++              (directoryStat.st_mode & S_IFMT) == S_IFDIR else {
+             throw Error.untrustedPackage(packageID: package.package)
+         }
+         let destination = directory.appendingPathComponent(sha256 + ".deb")

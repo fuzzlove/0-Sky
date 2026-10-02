@@ -114,33 +114,12 @@ class SnapshotCoordinator:
         This matters on SRDs because an app may be registered directly from a
         mounted research Cryptex while an older MCM copy remains on disk.
         """
-        binaries = (self.paths.jailbreak("/usr/bin/uicache"),
-                    self.paths.system("/usr/bin/uicache"))
-        binary = next((value for value in binaries
-                       if value.is_file() and os.access(value, os.X_OK)), None)
-        if binary is None:
-            return None
-        try:
-            result = subprocess.run([str(binary), "-l"], stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-                timeout=8, check=False)
-        except (OSError, subprocess.SubprocessError):
-            return None
-        if result.returncode != 0 or len(result.stdout) > 2 * 1024 * 1024:
+        rows = self._registered_app_rows()
+        if rows is None:
             return None
         answer: dict[str, Path] = {}
         ambiguous: set[str] = set()
-        for raw in result.stdout.decode("utf-8", "replace").splitlines()[:8192]:
-            bundle_id, marker, raw_path = raw.partition(": ")
-            bundle_id, raw_path = bundle_id.strip(), raw_path.strip()
-            if (not marker or not bundle_id or len(bundle_id) > 255 or
-                    bundle_id.startswith("com.apple.") or
-                    any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_"
-                        for char in bundle_id)):
-                continue
-            pure = PurePosixPath(raw_path)
-            if not pure.is_absolute() or ".." in pure.parts or pure.suffix != ".app":
-                continue
+        for bundle_id, pure in rows:
             mapped = self.paths.system(pure)
             try:
                 resolved = mapped.resolve(strict=True)
@@ -167,6 +146,93 @@ class SnapshotCoordinator:
             else:
                 answer[bundle_id] = resolved
         return answer
+
+    def _registered_app_rows(self) -> list[tuple[str, PurePosixPath]] | None:
+        """Return bounded, canonical third-party registrations from uicache.
+
+        The broker's launchd sandbox can query LaunchServices while being
+        unable to traverse application MCM directories.  Registration is
+        sufficient for a tweak target picker, but snapshot/restore continues
+        to require readable bundle and data containers in ``installed_apps``.
+        """
+        binaries = (self.paths.jailbreak("/usr/bin/uicache"),
+                    self.paths.system("/usr/bin/uicache"))
+        binary = next((value for value in binaries
+                       if value.is_file() and os.access(value, os.X_OK)), None)
+        if binary is None:
+            return None
+        try:
+            result = subprocess.run([str(binary), "-l"], stdin=subprocess.DEVNULL,
+                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                timeout=8, check=False)
+        except (OSError, subprocess.SubprocessError):
+            return None
+        if result.returncode != 0 or len(result.stdout) > 2 * 1024 * 1024:
+            return None
+        rows: list[tuple[str, PurePosixPath]] = []
+        seen: set[tuple[str, str]] = set()
+        for raw in result.stdout.decode("utf-8", "replace").splitlines()[:8192]:
+            bundle_id, marker, raw_path = raw.partition(": ")
+            bundle_id, raw_path = bundle_id.strip(), raw_path.strip()
+            if (not marker or not bundle_id or len(bundle_id) > 255 or
+                    bundle_id.startswith("com.apple.") or
+                    any(char not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_"
+                        for char in bundle_id)):
+                continue
+            pure = PurePosixPath(raw_path)
+            if (not pure.is_absolute() or ".." in pure.parts or
+                    pure.suffix != ".app" or any(ord(char) < 32 for char in raw_path)):
+                continue
+            display = str(pure)
+            mcm = display.startswith((
+                "/private/var/containers/Bundle/Application/",
+                "/var/containers/Bundle/Application/",
+            ))
+            cryptex = (display.startswith(
+                "/private/var/run/com.apple.security.cryptexd/mnt/") and
+                "/Applications/" in display)
+            key = (bundle_id, display)
+            if not (mcm or cryptex) or key in seen:
+                continue
+            seen.add(key)
+            rows.append((bundle_id, pure))
+        return rows
+
+    def registered_apps(self) -> list[dict[str, Any]]:
+        """Return LaunchServices inventory without requiring MCM traversal.
+
+        This deliberately excludes data-container paths and is therefore not
+        accepted by snapshot, rollback, or storage operations.
+        """
+        rows = self._registered_app_rows()
+        if rows is None:
+            return []
+        by_identifier: dict[str, dict[str, Any]] = {}
+        ambiguous: set[str] = set()
+        for bundle_id, pure in rows:
+            if bundle_id in ambiguous:
+                continue
+            if bundle_id in by_identifier:
+                by_identifier.pop(bundle_id, None)
+                ambiguous.add(bundle_id)
+                continue
+            name = pure.stem[:255] or bundle_id
+            version = "unknown"
+            info = self._read_plist(self.paths.system(pure) / "Info.plist")
+            if info.get("CFBundleIdentifier") == bundle_id:
+                name = str(info.get("CFBundleDisplayName") or
+                           info.get("CFBundleName") or name)[:255]
+                version = str(info.get("CFBundleShortVersionString") or
+                              info.get("CFBundleVersion") or version)[:128]
+            by_identifier[bundle_id] = {
+                "bundleID": bundle_id,
+                "name": name,
+                "version": version,
+                "bundlePathDisplay": str(pure),
+                "inventorySource": "launchservices-registration",
+            }
+        return sorted(by_identifier.values(),
+                      key=lambda value: (value["name"].casefold(), value["bundleID"]))[:2048]
 
     @staticmethod
     def _bounded_children(path: Path, limit: int = 8192) -> Iterator[Path]:

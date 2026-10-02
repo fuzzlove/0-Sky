@@ -362,6 +362,12 @@ class DevicePairingBridgeTests(unittest.TestCase):
                 denied.read(); connection.close()
 
                 connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
+                connection.request("GET", "/v1/bootsplash/status")
+                denied = connection.getresponse()
+                self.assertEqual(denied.status, 403)
+                denied.read(); connection.close()
+
+                connection = http.client.HTTPConnection("127.0.0.1", server.server_port, timeout=3)
                 connection.request("GET", f"/v1/pairing/result?job_id={job_id}",
                                    headers={"X-TrollStore-Bridge-Token": secret})
                 accepted = connection.getresponse()

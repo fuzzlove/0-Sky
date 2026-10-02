@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleIdentifier</key><string>com.liquidsky.SecurityTest</string>
+  <key>CFBundleName</key><string>0-Sky Security Test</string>
+  <key>CFBundleDisplayName</key><string>0-Sky Test</string>
+  <key>CFBundleExecutable</key><string>ZeroSkySecurityTest</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>1.1.0</string>
+  <key>CFBundleVersion</key><string>2</string>
+  <key>CFBundleURLTypes</key><array><dict>
+    <key>CFBundleURLName</key><string>com.liquidsky.SecurityTest.UAT</string>
+    <key>CFBundleURLSchemes</key><array><string>zeroskytest</string></array>
+  </dict></array>
+  <key>LSRequiresIPhoneOS</key><true/>
+  <key>MinimumOSVersion</key><string>17.0</string>
+  <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+  <key>UILaunchScreen</key><dict/>
+</dict></plist>

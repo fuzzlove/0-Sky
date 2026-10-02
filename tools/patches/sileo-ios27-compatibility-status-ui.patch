@@ -1,0 +1,47 @@
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index d34cf1d..c6e7465 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -515,6 +515,18 @@ class DownloadsTableViewController: SileoViewController {
+         present(alert, animated: true)
+     }
+ 
++    private func presentCompatibilityAnalysisRequired() {
++        confirmButton?.isEnabled = false
++        confirmButton?.alpha = 0.5
++        confirmButton?.setTitle("Compatibility Required", for: .normal)
++        let alert = UIAlertController(
++            title: "Compatibility analysis required",
++            message: "Package downloaded and verified. Open 0-Sky Control → Compatibility before installation.",
++            preferredStyle: .alert)
++        alert.addAction(UIAlertAction(title: "OK", style: .default))
++        present(alert, animated: true)
++    }
++
+     private func awaitVerifiedBridgeInstall(packageIDs: [String], remaining: Int) {
+         guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27,
+               isDownloading, !isInstalling else { return }
+@@ -772,16 +784,18 @@ class DownloadsTableViewController: SileoViewController {
+             if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 && status != 0 {
+                 DispatchQueue.main.async {
+                     self.isInstalling = false
+-                    self.hasErrored = true
++                    self.hasErrored = status != 193
+                     DownloadManager.shared.lockedForInstallation = false
+                     DownloadManager.shared.queueStarted = false
+                     self.tableView?.setEditing(true, animated: true)
+                     self.actions.removeAll()
+                     self.reloadData()
+-                    let message = status == 193 ?
+-                        "Package downloaded and verified. 0-Sky compatibility analysis is required before installation. Open 0-Sky Control → Compatibility." :
+-                        "0-Sky Bridge could not install this package (status \(status)). Check the package source and compatibility result before retrying."
+-                    self.presentConfirmFailure(message)
++                    if status == 193 {
++                        self.presentCompatibilityAnalysisRequired()
++                    } else {
++                        self.presentConfirmFailure(
++                            "0-Sky Bridge could not install this package (status \(status)). Check the package source and compatibility result before retrying.")
++                    }
+                 }
+                 return
+             }

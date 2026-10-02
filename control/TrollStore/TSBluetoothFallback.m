@@ -103,8 +103,11 @@ static NSString *TSBLEServiceUUIDForToken(NSData *token)
 
 - (void)start
 {
+    // Bluetooth is an optional transport and iOS consent must follow an
+    // explicit user action.  A fresh Control data container therefore starts
+    // disabled; the Settings toggle records YES before calling this method.
     if([[NSUserDefaults standardUserDefaults] objectForKey:TSBLEEnabledKey] == nil)
-        [[NSUserDefaults standardUserDefaults] setBool:YES forKey:TSBLEEnabledKey];
+        [[NSUserDefaults standardUserDefaults] setBool:NO forKey:TSBLEEnabledKey];
     if(![[NSUserDefaults standardUserDefaults] boolForKey:TSBLEEnabledKey]) {
         self.statusText = @"Disabled";
         return;

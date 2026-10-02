@@ -1,5 +1,9 @@
 # Release procedure
 
+For the signed Universal 2 package pipeline, start with
+[`docs/RELEASE.md`](docs/RELEASE.md) and [`scripts/build_release.sh`](scripts/build_release.sh).
+The steps below describe lower-level inputs and verification.
+
 Use a clean checkout and a separately obtained, authorized kit. Keep the kit,
 signing identities, pairing records, SSH keys, provisioning profiles, and
 generated device state outside Git. Verify the kit's provenance before use.

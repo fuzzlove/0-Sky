@@ -1,0 +1,9 @@
+{
+  "schema": 1,
+  "candidates": {
+    "com.nahtedetihw.doodle": {
+      "component_id": "com-nahtedetihw-doodle-1-3a1-1-0sky27-2-iphoneos-71493a815083",
+      "artifact_sha256": "3bd29448716730774e20583f1b634b44cf7c2879a8cd949742ff9835c591c24f"
+    }
+  }
+}

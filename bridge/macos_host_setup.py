@@ -414,7 +414,7 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
                 and environment.get("CRYPSTORE_DEVICE_KEY") == str(identity)
             )
             if role == "usbmux":
-                valid = valid and "-u" in arguments and udid in arguments and f"{port}:22" in arguments
+                valid = valid and "-u" in arguments and udid in arguments and f"{port}:{environment.get("CRYPSTORE_DEVICE_REMOTE_PORT", "22")}" in arguments
             elif role == "worker":
                 valid = valid and any(item.endswith("/crypstore_worker.py") for item in arguments)
             else:

@@ -1,0 +1,107 @@
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index cb1efd7..9d033d0 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -40,6 +40,9 @@ class DownloadsTableViewController: SileoViewController {
+     private var isFired = false
+     private var isInstalling = false
+     private var isPlanning = false
++    private weak var confirmCoverView: UIView?
++    private var confirmCoverTap: UITapGestureRecognizer?
++    private var confirmCoverTapAllowedAt = TimeInterval.greatestFiniteMagnitude
+     public var isDownloading = false
+     private var isFinishedInstalling = false
+     private var returnButtonAction: APTWrapper.FINISH = .back
+@@ -129,6 +132,9 @@ class DownloadsTableViewController: SileoViewController {
+     
+     public override func viewDidLayoutSubviews() {
+         super.viewDidLayoutSubviews()
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            armConfirmCoverTapAfterPresentation()
++        }
+         
+         guard let tableView = self.tableView,
+             let cancelButton = self.cancelButton,
+@@ -155,6 +161,82 @@ class DownloadsTableViewController: SileoViewController {
+         hideDetailsButton?.tintColor = UINavigationBar.appearance().tintColor
+         hideDetailsButton?.isHighlighted = hideDetailsButton?.isHighlighted ?? false
+     }
++
++    private func clearConfirmCoverTap() {
++        if let tap = confirmCoverTap {
++            confirmCoverView?.removeGestureRecognizer(tap)
++        }
++        confirmCoverTap = nil
++        confirmCoverView = nil
++    }
++
++    private func disarmConfirmCoverTap() {
++        clearConfirmCoverTap()
++        confirmCoverTapAllowedAt = .greatestFiniteMagnitude
++    }
++
++    private func armConfirmCoverTapAfterPresentation() {
++        guard let confirm = confirmButton, !confirm.isHidden,
++              confirm.alpha > 0, confirm.window != nil else {
++            disarmConfirmCoverTap()
++            return
++        }
++        guard confirmCoverTapAllowedAt == .greatestFiniteMagnitude else {
++            if CACurrentMediaTime() >= confirmCoverTapAllowedAt {
++                syncConfirmCoverTap()
++            }
++            return
++        }
++        // A package row can present the popup before the finger used to tap
++        // GET has lifted. Do not attach the forwarding recognizer until that
++        // presentation gesture is over; confirmation must be a second tap.
++        confirmCoverTapAllowedAt = CACurrentMediaTime() + 0.75
++        DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) { [weak self] in
++            guard let self = self,
++                  CACurrentMediaTime() >= self.confirmCoverTapAllowedAt else { return }
++            self.syncConfirmCoverTap()
++        }
++    }
++
++    private func syncConfirmCoverTap() {
++        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27,
++              CACurrentMediaTime() >= confirmCoverTapAllowedAt,
++              let window = view.window,
++              let confirm = confirmButton, !confirm.isHidden else {
++            clearConfirmCoverTap()
++            return
++        }
++        let center = confirm.convert(CGPoint(x: confirm.bounds.midX,
++                                             y: confirm.bounds.midY), to: window)
++        guard let cover = window.hitTest(center, with: nil),
++              cover !== confirm, !cover.isDescendant(of: confirm) else {
++            clearConfirmCoverTap()
++            return
++        }
++        if confirmCoverView === cover { return }
++        clearConfirmCoverTap()
++        let tap = UITapGestureRecognizer(target: self,
++                                         action: #selector(confirmCoverTapped(_:)))
++        tap.cancelsTouchesInView = false
++        cover.addGestureRecognizer(tap)
++        confirmCoverView = cover
++        confirmCoverTap = tap
++    }
++
++    @objc private func confirmCoverTapped(_ recognizer: UITapGestureRecognizer) {
++        guard recognizer.state == .ended,
++              let touched = recognizer.view,
++              let confirm = confirmButton,
++              confirm.isEnabled, !confirm.isHidden else { return }
++        let point = touched.convert(recognizer.location(in: touched), to: confirm)
++        guard confirm.bounds.contains(point) else { return }
++        confirmQueued(nil)
++    }
++
++    public override func viewDidDisappear(_ animated: Bool) {
++        super.viewDidDisappear(animated)
++        disarmConfirmCoverTap()
++    }
+     
+     public func loadData(_ main: @escaping () -> Void) {
+         if Thread.isMainThread {

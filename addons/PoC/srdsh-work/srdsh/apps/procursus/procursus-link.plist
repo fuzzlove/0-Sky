@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.liquidsky.srdssh.procursus-link</string>
+
+	<key>EnvironmentVariables</key>
+	<dict>
+		<key>CRYPTEX_SHELL</key>
+		<string>/usr/bin/sh</string>
+	</dict>
+
+	<key>ProgramArguments</key>
+	<array>
+		<string>/usr/bin/cryptex-run</string>
+		<string>toybox</string>
+		<string>sh</string>
+		<string>-c</string>
+		<string>TARGET="/private/preboot/$(cat /private/preboot/active)/procursus"; [ -d "$TARGET" ] || exit 1; if [ -L /var/jb ]; then [ "$(readlink /var/jb)" = "$TARGET" ] &amp;&amp; exit 0; rm /var/jb; elif [ -e /var/jb ]; then mv /var/jb "/var/jb.stale.$$"; fi; ln -s "$TARGET" /var/jb</string>
+	</array>
+
+	<key>RunAtLoad</key>
+	<true/>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+
+	<key>StandardOutPath</key>
+	<string>/private/var/tmp/procursus-link.log</string>
+	<key>StandardErrorPath</key>
+	<string>/private/var/tmp/procursus-link.log</string>
+</dict>
+</plist>

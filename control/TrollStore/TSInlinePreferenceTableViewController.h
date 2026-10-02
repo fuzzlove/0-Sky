@@ -1,9 +1,13 @@
 #import <UIKit/UIKit.h>
 
-// Native host for legacy, data-only PreferenceLoader descriptors.  This is
-// intentionally limited to plist specifiers and never loads a third-party
-// PreferenceBundle into 0-Sky Control's process.
+// Native host for data-only PreferenceLoader specifiers, including supported
+// rows from an installed bundle's Root.plist. Third-party preference code is
+// never loaded into 0-Sky Control's process.
 @interface TSInlinePreferenceTableViewController : UITableViewController <UITextFieldDelegate>
+
+// Set only after the installed package, dylib hash, device build and local
+// lock-screen UAT receipt have all matched.
+@property(nonatomic,assign) BOOL doodlePortVerified;
 
 - (instancetype)initWithDescriptorPath:(NSString*)descriptorPath
                                   title:(NSString*)title;

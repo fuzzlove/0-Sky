@@ -22,6 +22,8 @@ done
   echo "Prepared release kit is missing; run tools/prepare_release_kit.py, then pass --kit PATH" >&2; exit 2;
 }
 python3 "$project_root/tools/verify_prepared_kit.py" "$kit"
+python3 "$project_root/tools/kit_manifest.py" verify "$kit"
+python3 "$project_root/tools/wheel_inventory.py" "$kit" --verify
 preflight_scan=(python3 "$project_root/tools/release_sanitize.py" "$kit")
 if [[ -n ${ZERO_SKY_RELEASE_DENY_FILE:-} ]]; then
   preflight_scan+=(--deny-file "$ZERO_SKY_RELEASE_DENY_FILE")
@@ -33,19 +35,26 @@ derived=$(cd "$derived" && pwd)
 
 ZERO_SKY_KIT_SOURCE="$kit" xcodebuild -project "$project" -scheme 0SkyBridge -configuration Release \
   -derivedDataPath "$derived" -sdk macosx \
-  ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO -quiet build
+  ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
+  OTHER_SWIFT_FLAGS="-debug-prefix-map $project_root=./source -file-prefix-map $project_root=./source -debug-prefix-map $derived=./build -file-prefix-map $derived=./build" \
+  OTHER_CFLAGS="-fdebug-prefix-map=$project_root=./source -ffile-prefix-map=$project_root=./source -fdebug-prefix-map=$derived=./build -ffile-prefix-map=$derived=./build" \
+  -quiet build
 
 app="$derived/Build/Products/Release/0SkyBridge.app"
 python3 "$project_root/tools/verify_eula.py" --bundle "$app"
 binary="$app/Contents/MacOS/0SkyBridge"
 link_ipa="$app/Contents/Resources/Kit/payloads/0-Sky-Link-1.9.0-universal.ipa"
 controller="$app/Contents/Resources/Scripts/0sky_project_setup.py"
+afc2_mount_controller="$app/Contents/Resources/Scripts/afc2_root_mount.py"
 [[ -f "$binary" && -f "$app/Contents/Resources/Kit/SHA256SUMS" \
-   && -f "$controller" && -f "$link_ipa" ]] || {
-  echo "Universal build is missing the app, setup controller, Link IPA, or verified kit" >&2; exit 1;
+   && -f "$controller" && -f "$afc2_mount_controller" && -f "$link_ipa" ]] || {
+  echo "Universal build is missing the app, setup controller, AFC2 mount controller, Link IPA, or verified kit" >&2; exit 1;
 }
-# This build is unsigned; remove DWARF/source paths before the app-wide gate.
-/usr/bin/strip -S "$binary"
+# This build is unsigned; keep internal dSYMs in DerivedData, not in the app.
+for native in "$binary" "$app/Contents/MacOS/0SkyBridgeService" \
+  "$app/Contents/Library/LaunchServices/0SkyBridgeHelper"; do
+  /usr/bin/strip -S "$native"
+done
 python3 "$project_root/tools/verify_link_ipa.py" "$link_ipa"
 xcrun lipo "$binary" -verify_arch x86_64 arm64
 xcrun lipo "$app/Contents/Resources/Kit/host-mac/zero-sky-bluetooth-tunnel" \

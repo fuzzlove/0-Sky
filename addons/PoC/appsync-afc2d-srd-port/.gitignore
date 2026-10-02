@@ -1,0 +1,10 @@
+build/
+downloads/
+dist/
+cryptex*/
+device-validation/
+inputs/
+recovery/
+rejected/
+reports/
+.DS_Store

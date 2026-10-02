@@ -1,0 +1,290 @@
+diff --git a/Sileo/AppDelegate.swift b/Sileo/AppDelegate.swift
+index 1264e37..c6fe9dd 100644
+--- a/Sileo/AppDelegate.swift
++++ b/Sileo/AppDelegate.swift
+@@ -20,11 +20,13 @@ class SileoAppDelegate: UIResponder, UIApplicationDelegate, UITabBarControllerDe
+     
+     func applicationDidFinishLaunching(_ application: UIApplication) {
+         EvanderNetworking.CACHE_FORCE = .libraryDirectory
+-        let prefix = CommandPath.prefix
+-        let old = EvanderNetworking._cacheDirectory
+-        EvanderNetworking._cacheDirectory = URL(fileURLWithPath: prefix + old.path)
+-        if prefix != "" && old.dirExists {
+-            deleteFileAsRoot(old)
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 {
++            let prefix = CommandPath.prefix
++            let old = EvanderNetworking._cacheDirectory
++            EvanderNetworking._cacheDirectory = URL(fileURLWithPath: prefix + old.path)
++            if prefix != "" && old.dirExists {
++                deleteFileAsRoot(old)
++            }
+         }
+         // Prepare the Evander manifest
+         Evander.prepare()
+diff --git a/Sileo/Backend/APT Wrapper/APTWrapper.swift b/Sileo/Backend/APT Wrapper/APTWrapper.swift
+index e3b993a..7ded828 100644
+--- a/Sileo/Backend/APT Wrapper/APTWrapper.swift	
++++ b/Sileo/Backend/APT Wrapper/APTWrapper.swift	
+@@ -72,6 +72,7 @@ class APTWrapper {
+         }
+ 
+         for app in apps {
++            guard app.hasSuffix(".app") else { continue }
+             let infoPlist = String(format: "\(CommandPath.prefix)/Applications/%@/Info.plist", app)
+ 
+             guard let attr = try? fileManager.attributesOfItem(atPath: infoPlist) else {
+@@ -165,11 +166,7 @@ class APTWrapper {
+         #else
+         var arguments = [CommandPath.aptget,
+                          "install", "--reinstall",
+-                         "--allow-unauthenticated",
+-                         "--allow-downgrades",
+                          "--no-download",
+-                         "--allow-remove-essential",
+-                         "--allow-change-held-packages",
+                          "-oDir::State::lists=sileolists/",
+                          "-y", "-f",
+                          "-oAPT::Status-Fd=5",
+@@ -177,7 +174,7 @@ class APTWrapper {
+                          "-oAcquire::AllowUnsizedPackages=true",
+                          "-oAPT::Sandbox::User=root",
+                          "-oDpkg::Options::=--force-confdef",
+-                         "-oDpkg::Options::=--force-confnew"]
++                         "-oDpkg::Options::=--force-confold"]
+         for package in installs {
+             var packagesStr = package.package.package + "=" + package.package.version
+             if package.package.package.contains("/") {
+@@ -483,10 +480,31 @@ class APTWrapper {
+                 }
+             }
+             if !difference.isEmpty {
+-                outputCallback("Updating Icon Cache\n", debugFD)
++                let needsCryptex = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27
++                outputCallback(needsCryptex ? "Integrating package apps with 0-Sky Bridge\n" :
++                               "Updating Icon Cache\n", debugFD)
+                 for appName in difference {
+                     let appPath = URL(fileURLWithPath: "\(CommandPath.prefix)/Applications/").appendingPathComponent(appName)
+-                    if appPath.path == Bundle.main.bundlePath {
++                    if needsCryptex {
++                        guard FileManager.default.fileExists(atPath: appPath.path) else {
++                            status = 192
++                            outputCallback("Removed package app requires Cryptex registration cleanup in 0-Sky Control.\n", debugFD)
++                            continue
++                        }
++                        let bridge = "\(CommandPath.prefix)/usr/local/libexec/trollstorelite-srd-bridge.py"
++                        let (integrationStatus, integrationOutput, integrationError) = spawnAsRoot(
++                            args: ["\(CommandPath.prefix)/usr/bin/python3", bridge,
++                                   "--integrate-package-app", appPath.path])
++                        if integrationStatus != 0 {
++                            status = 192
++                            outputCallback("0-Sky Cryptex integration failed: \(integrationError.isEmpty ? integrationOutput : integrationError)\n", debugFD)
++                        } else {
++                            outputCallback("0-Sky Cryptex integration completed.\n", debugFD)
++                            if appName == Bundle.main.bundleURL.lastPathComponent {
++                                refreshSileo = true
++                            }
++                        }
++                    } else if appPath.path == Bundle.main.bundlePath {
+                         refreshSileo = true
+                     } else {
+                         spawn(command: "\(CommandPath.prefix)/usr/bin/uicache", args: ["uicache", "-p", "\(appPath.path)"])
+diff --git a/Sileo/Backend/C Contrib/dpkgversion.c b/Sileo/Backend/C Contrib/dpkgversion.c
+index 88cd5b2..a1d38da 100644
+--- a/Sileo/Backend/C Contrib/dpkgversion.c	
++++ b/Sileo/Backend/C Contrib/dpkgversion.c	
+@@ -22,7 +22,11 @@ int order(char ch) {
+ int validate(char *string, int *length) {
+     for (int i = 0; i < *length; i++) {
+         char character = string[i];
+-        if (!(isdigit(character) || isalpha(character) || strrchr(".-+~:", character))) {
++        // Darwin's iOS libSystem does not export memrchr, which newer Clang
++        // can emit when optimizing a reverse search of this constant string.
++        if (!(isdigit((unsigned char)character) || isalpha((unsigned char)character) ||
++              character == '.' || character == '-' || character == '+' ||
++              character == '~' || character == ':')) {
+             return 1;
+         }
+     }
+diff --git a/Sileo/Backend/C Contrib/dpkgversion.h b/Sileo/Backend/C Contrib/dpkgversion.h
+index 5b8169a..56801d5 100644
+--- a/Sileo/Backend/C Contrib/dpkgversion.h	
++++ b/Sileo/Backend/C Contrib/dpkgversion.h	
+@@ -15,11 +15,12 @@
+ #include <stdlib.h>
+ #include <limits.h>
+ #include <ctype.h>
++#include <stdint.h>
+ 
+ struct DpkgVersion {
+     char *version;
+     char *revision;
+-    uint epoch;
++    unsigned int epoch;
+     uint8_t requiresFree;
+ };
+ 
+diff --git a/Sileo/Backend/Dependency Resolver/DependencyResolverAccelerator.swift b/Sileo/Backend/Dependency Resolver/DependencyResolverAccelerator.swift
+index a81e16e..3c85eb4 100644
+--- a/Sileo/Backend/Dependency Resolver/DependencyResolverAccelerator.swift	
++++ b/Sileo/Backend/Dependency Resolver/DependencyResolverAccelerator.swift	
+@@ -51,6 +51,12 @@ class DependencyResolverAccelerator {
+         }
+         return listsURL
+         #else
++        // The dependency resolver's Packages files are temporary Sileo data.
++        // On iOS 27 the rootless bootstrap resolves through a randomized
++        // preboot path that is outside this app's writable container.
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            return FileManager.default.documentDirectory.appendingPathComponent("sileolists")
++        }
+         return URL(fileURLWithPath: CommandPath.sileolists)
+         #endif
+     }()
+@@ -59,10 +65,12 @@ class DependencyResolverAccelerator {
+         #if targetEnvironment(simulator) || TARGET_SANDBOX
+         try? FileManager.default.removeItem(atPath: CommandPath.sileolists)
+         #else
+-        spawnAsRoot(args: [CommandPath.rm, "-rf", CommandPath.sileolists])
+-        spawnAsRoot(args: [CommandPath.mkdir, "-p", CommandPath.sileolists])
+-        spawnAsRoot(args: [CommandPath.chown, "-R", CommandPath.group, CommandPath.sileolists])
+-        spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", CommandPath.sileolists])
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 {
++            spawnAsRoot(args: [CommandPath.rm, "-rf", CommandPath.sileolists])
++            spawnAsRoot(args: [CommandPath.mkdir, "-p", CommandPath.sileolists])
++            spawnAsRoot(args: [CommandPath.chown, "-R", CommandPath.group, CommandPath.sileolists])
++            spawnAsRoot(args: [CommandPath.chmod, "-R", "0755", CommandPath.sileolists])
++        }
+         #endif
+     }
+     
+@@ -74,7 +82,11 @@ class DependencyResolverAccelerator {
+         #if targetEnvironment(simulator) || TARGET_SANDBOX
+         try? FileManager.default.removeItem(at: newSourcesFile)
+         #else
+-        spawnAsRoot(args: [CommandPath.rm, "-rf", newSourcesFile.aptPath])
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            try? FileManager.default.removeItem(at: newSourcesFile)
++        } else {
++            spawnAsRoot(args: [CommandPath.rm, "-rf", newSourcesFile.aptPath])
++        }
+         #endif
+     }
+     
+@@ -89,6 +101,9 @@ class DependencyResolverAccelerator {
+         }
+         
+         let resolverPrefix = depResolverPrefix
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            try FileManager.default.createDirectory(at: resolverPrefix, withIntermediateDirectories: true)
++        }
+         for (sourcesFile, packages) in toBePreflighted {
+             if sourcesFile.lastPathComponent == "status" || sourcesFile.scheme == "local" {
+                 continue
+diff --git a/Sileo/UI/SourcesViewController/SourcesViewController.swift b/Sileo/UI/SourcesViewController/SourcesViewController.swift
+index 3076db5..60d08af 100644
+--- a/Sileo/UI/SourcesViewController/SourcesViewController.swift
++++ b/Sileo/UI/SourcesViewController/SourcesViewController.swift
+@@ -246,6 +246,11 @@ final class SourcesViewController: SileoViewController {
+     
+     private func killIndicator() {
+         let item = self.splitViewController?.tabBarItem
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            self.refreshControl.endRefreshing()
++            item?.badgeValue = nil
++            return
++        }
+         item?.badgeValue = ""
+         let badge = item?.view()?.value(forKey: "_badge") as? UIView ?? UIView()
+         self.refreshControl.endRefreshing()
+@@ -261,17 +266,20 @@ final class SourcesViewController: SileoViewController {
+     
+     func refreshSources(forceUpdate: Bool, forceReload: Bool, isBackground: Bool, useRefreshControl: Bool, useErrorScreen: Bool, completion: ((Bool, NSAttributedString) -> Void)?) {
+         let item = self.splitViewController?.tabBarItem
+-        item?.badgeValue = ""
+-        guard let style = UIActivityIndicatorView.Style(rawValue: 5) else {
+-            fatalError("OK iOS...")
+-        }
+-        let indicatorView = UIActivityIndicatorView(style: style)
+-        let badge = item?.view()?.value(forKey: "_badge") as? UIView
+-        
+         if updatingRepoList.isEmpty {
+-            indicatorView.frame = indicatorView.frame.offsetBy(dx: 2, dy: 2)
+-            indicatorView.startAnimating()
+-            badge?.addSubview(indicatorView)
++            if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++                item?.badgeValue = "…"
++            } else {
++                item?.badgeValue = ""
++                guard let style = UIActivityIndicatorView.Style(rawValue: 5) else {
++                    fatalError("OK iOS...")
++                }
++                let indicatorView = UIActivityIndicatorView(style: style)
++                indicatorView.frame = indicatorView.frame.offsetBy(dx: 2, dy: 2)
++                indicatorView.startAnimating()
++                let badge = item?.view()?.value(forKey: "_badge") as? UIView
++                badge?.addSubview(indicatorView)
++            }
+             
+             if useRefreshControl {
+                 if let tableView = self.tableView, let refreshControl = tableView.refreshControl, !refreshControl.isRefreshing {
+@@ -304,17 +312,21 @@ final class SourcesViewController: SileoViewController {
+     func updateSingleRepo(_ repo: Repo) {
+ 
+         let item = self.splitViewController?.tabBarItem
+-        item?.badgeValue = ""
+         
+         if updatingRepoList.isEmpty {
+-            let badge = item?.view()?.value(forKey: "_badge") as? UIView
+-            guard let style = UIActivityIndicatorView.Style(rawValue: 5) else {
+-                fatalError("OK iOS...")
++            if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++                item?.badgeValue = "…"
++            } else {
++                item?.badgeValue = ""
++                let badge = item?.view()?.value(forKey: "_badge") as? UIView
++                guard let style = UIActivityIndicatorView.Style(rawValue: 5) else {
++                    fatalError("OK iOS...")
++                }
++                let indicatorView = UIActivityIndicatorView(style: style)
++                indicatorView.frame = indicatorView.frame.offsetBy(dx: 2, dy: 2)
++                indicatorView.startAnimating()
++                badge?.addSubview(indicatorView)
+             }
+-            let indicatorView = UIActivityIndicatorView(style: style)
+-            indicatorView.frame = indicatorView.frame.offsetBy(dx: 2, dy: 2)
+-            indicatorView.startAnimating()
+-            badge?.addSubview(indicatorView)
+         }
+         
+         RepoManager.shared.update(force: true, forceReload: true, isBackground: false, repos: [repo], completion: { didFindErrors, errorOutput in
+@@ -331,17 +343,21 @@ final class SourcesViewController: SileoViewController {
+     
+     func updateSpecific(_ repos: [Repo]) {
+         let item = self.splitViewController?.tabBarItem
+-        item?.badgeValue = ""
+ 
+         if updatingRepoList.isEmpty {
+-            let badge = item?.view()?.value(forKey: "_badge") as? UIView
+-            guard let style = UIActivityIndicatorView.Style(rawValue: 5) else {
+-                fatalError("OK iOS...")
+-            }
+-            let indicatorView = UIActivityIndicatorView(style: style)
+-            indicatorView.frame = indicatorView.frame.offsetBy(dx: 2, dy: 2)
+-            indicatorView.startAnimating()
+-            badge?.addSubview(indicatorView)
++            if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++                item?.badgeValue = "…"
++            } else {
++                item?.badgeValue = ""
++                let badge = item?.view()?.value(forKey: "_badge") as? UIView
++                guard let style = UIActivityIndicatorView.Style(rawValue: 5) else {
++                    fatalError("OK iOS...")
++                }
++                let indicatorView = UIActivityIndicatorView(style: style)
++                indicatorView.frame = indicatorView.frame.offsetBy(dx: 2, dy: 2)
++                indicatorView.startAnimating()
++                badge?.addSubview(indicatorView)
++            }
+         }
+         
+         for repo in repos {

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "sources": [
+    {
+      "id": "procursus",
+      "uri": "https://apt.procurs.us/",
+      "suite": "1900",
+      "components": "main",
+      "architecture": "iphoneos-arm64",
+      "key_file": "trusted.gpg.d/memo.gpg",
+      "key_sha256": "10864afeaff3151d5bee4444335f33fb1042904e4bbb757f8a76033e6e2692bb",
+      "signing_fingerprint": "C59F3798A305ADD7E7E6C7256430292CF9551B0E",
+      "trust_state": "OFFICIAL",
+      "provenance": "ProcursusTeam/Procursus identifies apt.procurs.us and this signing key; cached iOS 27 Release signature verified on both authorized SRDs on 2026-09-28"
+    },
+    {
+      "id": "chariz",
+      "uri": "https://repo.chariz.com/",
+      "suite": "./",
+      "architecture": "iphoneos-arm64",
+      "key_file": "apt_keys/chariz.gpg",
+      "key_sha256": "bba53eaf8b6dedaf50e45910aac4adbb289bb3edeee82d417b424dc9f9819f47",
+      "signing_fingerprint": "3D32F8ECD0930A1BC4F2A4A817C6BB3FC4114BDF",
+      "trust_state": "VERIFIED_COMMUNITY",
+      "provenance": "Official HTTPS Release bytes matched the peer SRD cache and passed gpgv with this public key on 2026-09-28"
+    },
+    {
+      "id": "havoc",
+      "uri": "https://havoc.app/",
+      "suite": "./",
+      "architecture": "iphoneos-arm64",
+      "key_file": "apt_keys/havoc.gpg",
+      "key_sha256": "c302d84e55eb1a1354ad741261220b131b944a5b503896798341c5c071e4fc52",
+      "signing_fingerprint": "C101A4205F8616491D9B23BAB4532449E1E8AA68",
+      "trust_state": "VERIFIED_COMMUNITY",
+      "provenance": "Official HTTPS Release bytes matched the peer SRD cache and passed gpgv with this public key on 2026-09-28"
+    }
+  ]
+}

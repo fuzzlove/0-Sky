@@ -15,6 +15,85 @@ extern NSUserDefaults* trollStoreUserDefaults();
     return sharedInstance;
 }
 
+- (NSArray<NSDictionary*>*)registeredApplicationRecords
+{
+    NSMutableDictionary<NSString*, NSDictionary*>* records = [NSMutableDictionary dictionary];
+    void (^collect)(LSApplicationProxy*) = ^(LSApplicationProxy* proxy) {
+        if(!proxy.isInstalled || proxy.isPlaceholder || !proxy.bundleIdentifier.length ||
+           !proxy.bundleURL.path.length) return;
+        NSString* path = proxy.bundleURL.path;
+        if([path hasPrefix:@"/Applications/"] || [path hasPrefix:@"/System/"] ||
+           [proxy.bundleIdentifier hasPrefix:@"com.apple."]) return;
+        NSDictionary* info = [NSDictionary dictionaryWithContentsOfURL:
+            [proxy.bundleURL URLByAppendingPathComponent:@"Info.plist"] error:nil];
+        NSString* name = proxy.localizedName;
+        if(!name.length && [info[@"CFBundleDisplayName"] isKindOfClass:NSString.class])
+            name = info[@"CFBundleDisplayName"];
+        if(!name.length && [info[@"CFBundleName"] isKindOfClass:NSString.class])
+            name = info[@"CFBundleName"];
+        NSString* version = [info[@"CFBundleShortVersionString"] isKindOfClass:NSString.class]
+            ? info[@"CFBundleShortVersionString"] : nil;
+        if(!version.length && [info[@"CFBundleVersion"] isKindOfClass:NSString.class])
+            version = info[@"CFBundleVersion"];
+        NSMutableDictionary* record = [@{
+            @"bundle_identifier": proxy.bundleIdentifier,
+            @"name": name.length ? name : proxy.bundleIdentifier,
+            @"path": path,
+            @"system": @NO,
+            @"removed": @NO,
+        } mutableCopy];
+        if(version.length) record[@"version"] = version;
+        records[proxy.bundleIdentifier] = record.copy;
+    };
+    LSEnumerator* enumerator = [LSEnumerator enumeratorForApplicationProxiesWithOptions:0];
+    LSApplicationProxy* proxy = nil;
+    while((proxy = [enumerator nextObject])) collect(proxy);
+
+    // Some SRD builds expose only a partial LaunchServices enumeration to an
+    // app process. Scan the bounded user-app container as a fallback so names,
+    // versions and bundle icons remain available. LaunchServices wins when a
+    // bundle is present in both sources.
+    NSString* applicationsRoot = @"/private/var/containers/Bundle/Application";
+    NSArray<NSString*>* containers = [[NSFileManager defaultManager]
+        contentsOfDirectoryAtPath:applicationsRoot error:nil] ?: @[];
+    for(NSString* containerName in containers) {
+        NSString* containerPath = [applicationsRoot stringByAppendingPathComponent:containerName];
+        NSArray<NSString*>* children = [[NSFileManager defaultManager]
+            contentsOfDirectoryAtPath:containerPath error:nil] ?: @[];
+        for(NSString* child in children) {
+            if(![child.pathExtension.lowercaseString isEqualToString:@"app"]) continue;
+            NSString* appPath = [containerPath stringByAppendingPathComponent:child];
+            NSDictionary* info = [NSDictionary dictionaryWithContentsOfFile:
+                [appPath stringByAppendingPathComponent:@"Info.plist"]];
+            if(![info isKindOfClass:NSDictionary.class]) continue;
+            NSString* bundleID = [info[@"CFBundleIdentifier"] isKindOfClass:NSString.class]
+                ? info[@"CFBundleIdentifier"] : nil;
+            if(!bundleID.length || [bundleID hasPrefix:@"com.apple."] || records[bundleID]) continue;
+            NSString* name = [info[@"CFBundleDisplayName"] isKindOfClass:NSString.class]
+                ? info[@"CFBundleDisplayName"] : nil;
+            if(!name.length && [info[@"CFBundleName"] isKindOfClass:NSString.class])
+                name = info[@"CFBundleName"];
+            NSString* version = [info[@"CFBundleShortVersionString"] isKindOfClass:NSString.class]
+                ? info[@"CFBundleShortVersionString"] : nil;
+            if(!version.length && [info[@"CFBundleVersion"] isKindOfClass:NSString.class])
+                version = info[@"CFBundleVersion"];
+            NSMutableDictionary* record = [@{
+                @"bundle_identifier": bundleID,
+                @"name": name.length ? name : bundleID,
+                @"path": appPath,
+                @"system": @NO,
+                @"removed": @NO,
+            } mutableCopy];
+            if(version.length) record[@"version"] = version;
+            records[bundleID] = record.copy;
+        }
+    }
+    return [records.allValues sortedArrayUsingComparator:^NSComparisonResult(
+        NSDictionary* left, NSDictionary* right) {
+        return [left[@"name"] localizedStandardCompare:right[@"name"]];
+    }];
+}
+
 - (NSArray*)installedAppPaths
 {
     NSDictionary* inventory = [self srdInventory];
@@ -33,7 +112,13 @@ extern NSUserDefaults* trollStoreUserDefaults();
     // Keep the old marker-based view as a fallback if the local bridge is
     // temporarily restarting. This prevents a blank screen without hiding a
     // successfully fetched empty inventory.
-    return inventory ? paths.copy : trollStoreInstalledAppBundlePaths();
+    if(paths.count) return paths.copy;
+    for(NSDictionary* app in [self registeredApplicationRecords]) {
+        NSString* path = app[@"path"];
+        if(path.length) [paths addObject:path];
+    }
+    if(paths.count) return paths.copy;
+    return trollStoreInstalledAppBundlePaths();
 }
 
 - (NSDictionary*)srdInventory
@@ -87,7 +172,8 @@ extern NSUserDefaults* trollStoreUserDefaults();
     NSData* body = [NSJSONSerialization dataWithJSONObject:envelope options:0 error:errorOut];
     if(!body) return nil;
     NSSet* longOperations = [NSSet setWithArray:@[@"createSnapshot", @"restoreSnapshot",
-        @"deleteSnapshot", @"undoChange"]];
+        @"deleteSnapshot", @"undoChange", @"cleanupCraneContainer",
+        @"runToolkitSmoke", @"runToolkitUAT"]];
     NSTimeInterval timeout = [longOperations containsObject:operation] ? 300.0 : 15.0;
     NSMutableURLRequest* request = [NSMutableURLRequest
         requestWithURL:TSRootlessPaths.coreEndpointURL
@@ -321,6 +407,9 @@ extern NSUserDefaults* trollStoreUserDefaults();
 
 - (BOOL)openApplicationWithBundleID:(NSString *)appId
 {
+    NSDictionary* envelope = [self coreRequestOperation:@"getCompatibilityAdmission"
+        parameters:@{@"component": appId ?: @"", @"action": @"launch"} error:nil];
+    if(![envelope[@"success"] boolValue] || ![envelope[@"result"][@"allowed"] boolValue]) return NO;
     return [[LSApplicationWorkspace defaultWorkspace] openApplicationWithBundleID:appId];
 }
 

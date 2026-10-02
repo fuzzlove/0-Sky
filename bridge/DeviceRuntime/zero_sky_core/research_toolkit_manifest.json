@@ -1,0 +1,2118 @@
+{
+  "components": [
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": "filza/Filza-4.0-permanent.dmg",
+      "bundle_ids": [
+        "com.tigisoftware.Filza"
+      ],
+      "category": "Apps/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "Filza",
+      "id": "filza",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "VERIFIED_ARTIFACT_ONLY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "com.tigisoftware.filza",
+      "package_ids": [
+        "com.tigisoftware.filza"
+      ],
+      "package_repository": null,
+      "package_source_trust": "LOCAL_0SKY",
+      "provenance": [
+        "filza/source-manifest.json"
+      ],
+      "release_channel": "0sky-adapted",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "registered",
+        "executable",
+        "signature",
+        "launch"
+      ],
+      "scope": "DEVICE",
+      "sha256": "5a8acb826f7342a41ec491305157cbea862f460aa6286d2a61409533764f997a",
+      "signature_state": "PROVENANCE_PINNED",
+      "tested_os_versions": [],
+      "trust_state": "LOCAL_0SKY",
+      "type": "APP",
+      "upstream_project": "https://www.tigisoftware.com/download/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Apps/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "NewTerm",
+      "id": "newterm",
+      "last_checked": "2026-09-28",
+      "license": "Apache-2.0",
+      "management": "USER_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "registered",
+        "executable",
+        "signature",
+        "launch"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "source_revision": "cf74efb27e65a5cc7021c317c18d26b3e5cc6cb3",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "APP",
+      "upstream_project": "https://github.com/hbang/NewTerm",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [
+        "com.opa334.trollstore"
+      ],
+      "category": "Apps/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": "iOS 14.0 beta 2\u201316.6.1, 16.7 RC (20H18), and 17.0",
+      "dependencies": [],
+      "display_name": "TrollStore",
+      "id": "trollstore",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED",
+      "maximum_ios": "17.0",
+      "maximum_tested_ios": null,
+      "minimum_ios": "14.0",
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "registered",
+        "executable",
+        "signature",
+        "launch"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "APP",
+      "upstream_project": "https://github.com/opa334/TrollStore",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [
+        "com.fiore.trolldecrypt"
+      ],
+      "category": "Apps/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "trollstore"
+      ],
+      "display_name": "TrollDecrypt (legacy)",
+      "id": "trolldecrypt",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "registered",
+        "executable",
+        "signature",
+        "launch"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "source_revision": "c4bd8c1b7efd248068fb82d7efacbf9d98a9ccf7",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "APP",
+      "upstream_project": "https://github.com/donato-fiore/TrollDecrypt",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "adaptation_patch": "tools/patches/trolldecrypt-ios27-discovery.patch",
+      "adaptation_patch_sha256": "2f8f42e73107e6b43a0e0e67d378680b133d37898a0af2905ac0554b16ef1486",
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [
+        "com.liquidsky.TrollDecryptResearch"
+      ],
+      "category": "Apps/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "TrollDecrypt 0-Sky",
+      "id": "trolldecrypt_0sky",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "REVIEW_REQUIRED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "LOCAL_0SKY",
+      "provenance": [
+        "0sky-uat/0152601e/trolldecrypt-adapted-job.json",
+        "0sky-uat/03402e/trolldecrypt-adapted-job.json"
+      ],
+      "release_channel": "0sky-adapted",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "registered",
+        "executable",
+        "signature",
+        "launch",
+        "application_list"
+      ],
+      "scope": "DEVICE",
+      "sha256": "fd57abb5c3426590f84e562ce54e4288b75545c350fb4af297e46c8ff56218ab",
+      "signature_state": "ADHOC_CRYPTEX",
+      "source_revision": "c4bd8c1b7efd248068fb82d7efacbf9d98a9ccf7",
+      "tested_os_versions": [],
+      "trust_state": "LOCAL_0SKY",
+      "type": "APP",
+      "upstream_project": "https://github.com/donato-fiore/TrollDecrypt",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [
+        "org.coolstar.SileoStore"
+      ],
+      "category": "Apps/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "apt",
+        "dpkg"
+      ],
+      "display_name": "Sileo",
+      "id": "sileo",
+      "last_checked": "2026-09-28",
+      "license": "BSD-4-Clause",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "org.coolstar.sileo",
+      "package_ids": [
+        "org.coolstar.sileo"
+      ],
+      "package_repository": null,
+      "package_source_trust": "LOCAL_0SKY",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "registered",
+        "executable",
+        "signature",
+        "launch"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "source_mirror": "https://github.com/fuzzlove/Sileo",
+      "source_mirror_revision": "c9f70158a037dc76b91c450e72af2de0514dd3ee",
+      "source_release": "2.5.1",
+      "source_revision": "c9f70158a037dc76b91c450e72af2de0514dd3ee",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "APP",
+      "upstream_project": "https://github.com/Sileo/Sileo",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [
+        "xyz.willy.Zebra"
+      ],
+      "category": "Apps/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "apt",
+        "dpkg"
+      ],
+      "display_name": "Zebra",
+      "id": "zebra",
+      "last_checked": "2026-09-28",
+      "license": "GPL-3.0",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "xyz.willy.zebra",
+      "package_ids": [
+        "xyz.willy.zebra"
+      ],
+      "package_repository": "https://getzbra.com/repo/",
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "registered",
+        "executable",
+        "signature",
+        "launch"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "source_release": "v1.1.36",
+      "source_revision": "c615ab451ce596baef5abf3e43bc305c3c9cf192",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "APP",
+      "upstream_project": "https://github.com/zbrateam/Zebra",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Tweaks/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "ellekit"
+      ],
+      "display_name": "SSL Kill Switch 3",
+      "id": "ssl_kill_switch_3",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "REVIEW_REQUIRED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": "https://github.com/NyaMisty/ssl-kill-switch3/releases",
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "dylib",
+        "injection",
+        "preferences",
+        "controlled_target"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "TWEAK",
+      "upstream_project": "https://github.com/NyaMisty/ssl-kill-switch3",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Tweaks/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "ellekit",
+        "preferenceloader"
+      ],
+      "display_name": "Choicy",
+      "id": "choicy",
+      "last_checked": "2026-09-28",
+      "license": "MIT",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "com.opa334.choicy",
+      "package_ids": [
+        "com.opa334.choicy"
+      ],
+      "package_repository": "https://opa334.github.io/",
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "dylib",
+        "injection",
+        "preferences",
+        "controlled_target"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "TWEAK",
+      "upstream_project": "https://github.com/opa334/Choicy",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Tweaks/Security Research",
+      "compatibility_state": "ADAPTATION_REQUIRED",
+      "conflicts": [],
+      "declared_supported": "iOS 14.0\u201316.7.8",
+      "dependencies": [
+        "ellekit",
+        "preferenceloader"
+      ],
+      "display_name": "Doodle",
+      "id": "doodle",
+      "adapted_variants": [
+        {
+          "package_version": "1:1.1+0sky27.2",
+          "dylib_path": "/Library/MobileSubstrate/DynamicLibraries/Doodle.dylib",
+          "dylib_sha256": "64eae513d7a96e691ba177660141fcaa26327d0b3b5f862338584b28f7522086",
+          "verified_targets": [
+            {"model": "iPhone13,2", "ios_build": "24A5390f"},
+            {"model": "iPhone12,8", "ios_build": "24A437"}
+          ],
+          "receipt_path": "/var/mobile/Library/Preferences/com.0sky.doodle-uat.plist",
+          "target_process": "SpringBoard"
+        }
+      ],
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_ios": "16.7.8",
+      "maximum_tested_ios": "16.7.8",
+      "minimum_ios": "14.0",
+      "package_identifier": "com.nahtedetihw.doodle",
+      "package_ids": [
+        "com.nahtedetihw.doodle"
+      ],
+      "package_repository": "https://havoc.app/",
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [
+        "compat/ios27/doodle/0sky-compat.json"
+      ],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "dylib",
+        "injection",
+        "preferences",
+        "controlled_target",
+        "springboard_stability"
+      ],
+      "scope": "DEVICE",
+      "sha256": "4725c0170e89413308b8434e4f1e80fc7357880e628d87af76c9e45920aa656a",
+      "signature_state": "HOST_CODESIGN_UNVERIFIED",
+      "source_revision": "a364b0cdcae3198336eee16e62ca56b3f540cc18",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "TWEAK",
+      "upstream_project": "https://github.com/nahtedetihw/Doodle",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_logs",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Tweaks/Security Research",
+      "compatibility_state": "ADAPTATION_REQUIRED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "ellekit",
+        "preferenceloader"
+      ],
+      "display_name": "CATVNC",
+      "id": "catvnc",
+      "last_checked": "2026-09-29",
+      "license": "UNKNOWN",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "com.catvnc.server",
+      "package_ids": [
+        "com.catvnc.server"
+      ],
+      "package_repository": null,
+      "package_source_trust": "LOCAL_0SKY",
+      "provenance": [],
+      "release_channel": "local-reviewed",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "dylib",
+        "injection",
+        "preferences",
+        "controlled_target",
+        "service_health"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "LOCAL_0SKY",
+      "type": "TWEAK",
+      "upstream_project": null,
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Tweaks/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "ellekit"
+      ],
+      "display_name": "PreferenceLoader",
+      "id": "preferenceloader",
+      "last_checked": "2026-09-29",
+      "license": "LGPL-3.0",
+      "management": "PROTECTED_RUNTIME",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "preferenceloader",
+      "package_ids": [
+        "preferenceloader"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "DEPENDENCY",
+      "upstream_project": "https://github.com/DHowett/preferenceloader",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Tweaks/Security Research",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "ElleKit",
+      "id": "ellekit",
+      "last_checked": "2026-09-29",
+      "license": "BSD-3-Clause",
+      "management": "PROTECTED_RUNTIME",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "ellekit",
+      "package_ids": [
+        "ellekit"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "FRAMEWORK",
+      "upstream_project": "https://github.com/tealbathingsuit/ellekit",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Instrumentation",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "frida_server",
+        "frida_cli"
+      ],
+      "display_name": "Frida",
+      "id": "frida",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "VERIFIED_ARTIFACT_ONLY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "versions_match",
+        "enumerate",
+        "attach",
+        "spawn",
+        "rpc",
+        "disconnect"
+      ],
+      "scope": "DEVICE_AND_HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "INSTRUMENTATION",
+      "upstream_project": "https://github.com/frida/frida",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": "frida/17.18.0-ios/var/jb/usr/sbin/frida-server",
+      "bundle_ids": [],
+      "category": "Research Tools/Instrumentation",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "frida-server"
+      ],
+      "display_name": "frida-server",
+      "id": "frida_server",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "VERIFIED_ARTIFACT_ONLY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "LOCAL_0SKY",
+      "provenance": [
+        "frida/17.18.0-ios/0sky-frida-manifest.json"
+      ],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "version",
+        "process",
+        "socket",
+        "enumerate"
+      ],
+      "scope": "DEVICE",
+      "sha256": "187683acc51d26561405cd44fa6f990305f677ced12b2f32635073c95b4dc216",
+      "signature_state": "PROVENANCE_PINNED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "RUNTIME",
+      "upstream_project": "https://github.com/frida/frida",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Instrumentation",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "frida_cli"
+      ],
+      "display_name": "Frida Gadget",
+      "id": "frida_gadget",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "CONTEXT_DEPENDENT",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "LIBRARY",
+      "upstream_project": "https://github.com/frida/frida",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Instrumentation",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "frida_cli"
+      ],
+      "display_name": "Objection",
+      "host_commands": [
+        "objection"
+      ],
+      "id": "objection",
+      "last_checked": "2026-09-28",
+      "license": "GPL-3.0-or-later",
+      "management": "USER_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": "https://pypi.org/project/objection/",
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "version",
+        "python_bindings",
+        "device_connection",
+        "clean_disconnect"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "source_revision": "35c4e2c9e68a0354b21db4833252e0c4acd5bd28",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://github.com/sensepost/objection",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "ssh"
+      ],
+      "display_name": "OpenSSH",
+      "id": "openssh",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "PROTECTED_RUNTIME",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "openssh-server",
+      "package_ids": [
+        "openssh-server",
+        "openssh-client"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "process",
+        "key_auth",
+        "shell",
+        "copy",
+        "reconnect"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://www.openssh.com/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "ldid"
+      ],
+      "display_name": "ldid",
+      "id": "ldid",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "ldid",
+      "package_ids": [
+        "ldid"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "source_git": "git://git.saurik.com/ldid.git",
+      "source_git_revision": "e0db9af2b1636cc6b67ea602003053c4aa995cd7",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://git.saurik.com/ldid.git",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "otool",
+        "llvm-objdump"
+      ],
+      "display_name": "otool equivalent",
+      "id": "otool",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "CAPABILITY_ONLY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://github.com/llvm/llvm-project",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "nm",
+        "llvm-nm"
+      ],
+      "display_name": "nm",
+      "id": "nm",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "CAPABILITY_ONLY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://github.com/llvm/llvm-project",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "strings",
+        "llvm-strings"
+      ],
+      "display_name": "strings",
+      "id": "strings",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "CAPABILITY_ONLY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://github.com/llvm/llvm-project",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "file"
+      ],
+      "display_name": "file",
+      "id": "file",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "file",
+      "package_ids": [
+        "file"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://github.com/file/file",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "plutil"
+      ],
+      "display_name": "plutil",
+      "id": "plutil",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "CAPABILITY_ONLY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://developer.apple.com/documentation/foundation/propertylistserialization",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "sqlite3"
+      ],
+      "display_name": "sqlite3",
+      "id": "sqlite3",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "sqlite3",
+      "package_ids": [
+        "sqlite3"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://www.sqlite.org/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "tcpdump"
+      ],
+      "display_name": "tcpdump",
+      "id": "tcpdump",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "tcpdump",
+      "package_ids": [
+        "tcpdump"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://www.tcpdump.org/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs",
+        "install",
+        "update",
+        "repair",
+        "remove"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "curl"
+      ],
+      "display_name": "curl",
+      "id": "curl",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "EXISTING_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "curl",
+      "package_ids": [
+        "curl"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://curl.se/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "git"
+      ],
+      "display_name": "git",
+      "id": "git",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "OPTIONAL_PACKAGE_MANAGER",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "git",
+      "package_ids": [
+        "git"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://git-scm.com/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "dpkg"
+      ],
+      "display_name": "dpkg",
+      "id": "dpkg",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "PROTECTED_RUNTIME",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "dpkg",
+      "package_ids": [
+        "dpkg"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://git.dpkg.org/git/dpkg/dpkg.git",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [
+        "dpkg"
+      ],
+      "device_commands": [
+        "apt-get"
+      ],
+      "display_name": "apt",
+      "id": "apt",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "PROTECTED_RUNTIME",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": "apt",
+      "package_ids": [
+        "apt"
+      ],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://salsa.debian.org/apt-team/apt",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "arm64e"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Research Tools/Command Line",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "device_commands": [
+        "sh",
+        "grep",
+        "sed"
+      ],
+      "display_name": "Shell utilities",
+      "id": "shell_utilities",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "CAPABILITY_ONLY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [
+        "rootless"
+      ],
+      "runtime_tests": [
+        "command_executes"
+      ],
+      "scope": "DEVICE",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "CLI",
+      "upstream_project": "https://github.com/ProcursusTeam/Procursus",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "Frida CLI",
+      "host_commands": [
+        "frida",
+        "frida-ps"
+      ],
+      "id": "frida_cli",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "BRIDGE_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": "https://pypi.org/project/frida-tools/",
+      "package_source_trust": "LOCAL_0SKY",
+      "provenance": [
+        "host-mac/frida-wheelhouse.sha256"
+      ],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://github.com/frida/frida-tools",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "LLDB",
+      "host_commands": [
+        "lldb"
+      ],
+      "id": "lldb",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://lldb.llvm.org/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "mitmproxy",
+      "host_commands": [
+        "mitmproxy"
+      ],
+      "id": "mitmproxy",
+      "last_checked": "2026-09-28",
+      "license": "MIT",
+      "management": "USER_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": "https://pypi.org/project/mitmproxy/",
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "source_release": "v12.2.3",
+      "source_revision": "6c09d56e4c29a92f5ad01b03199977584b8ea14f",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://github.com/mitmproxy/mitmproxy",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "Burp Suite",
+      "host_apps": [
+        "Burp Suite.app"
+      ],
+      "id": "burp_suite",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED_PROPRIETARY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://portswigger.net/burp",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "Wireshark",
+      "host_apps": [
+        "Wireshark.app"
+      ],
+      "host_commands": [
+        "tshark"
+      ],
+      "id": "wireshark",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://www.wireshark.org/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "Ghidra",
+      "host_commands": [
+        "ghidraRun"
+      ],
+      "id": "ghidra",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://github.com/NationalSecurityAgency/ghidra",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "Hopper",
+      "host_apps": [
+        "Hopper Disassembler.app"
+      ],
+      "id": "hopper",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED_PROPRIETARY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://www.hopperapp.com/",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "IDA",
+      "host_apps": [
+        "IDA Pro.app"
+      ],
+      "id": "ida",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED_PROPRIETARY",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://hex-rays.com/ida-pro",
+      "zero_sky_verified": []
+    },
+    {
+      "actions": [
+        "verify",
+        "test",
+        "view_source",
+        "view_logs"
+      ],
+      "architectures": [
+        "arm64",
+        "x86_64"
+      ],
+      "artifact_path": null,
+      "bundle_ids": [],
+      "category": "Host Security Tools",
+      "compatibility_state": "UNVERIFIED",
+      "conflicts": [],
+      "declared_supported": null,
+      "dependencies": [],
+      "display_name": "libimobiledevice tools",
+      "host_commands": [
+        "ideviceinfo"
+      ],
+      "id": "libimobiledevice",
+      "last_checked": "2026-09-28",
+      "license": "UNKNOWN",
+      "management": "USER_MANAGED",
+      "maximum_tested_ios": null,
+      "minimum_ios": null,
+      "package_identifier": null,
+      "package_ids": [],
+      "package_repository": null,
+      "package_source_trust": "UNVERIFIED",
+      "provenance": [],
+      "release_channel": "upstream",
+      "root_models": [],
+      "runtime_tests": [
+        "host_detected"
+      ],
+      "scope": "HOST",
+      "sha256": null,
+      "signature_state": "UNVERIFIED",
+      "tested_os_versions": [],
+      "trust_state": "OFFICIAL",
+      "type": "HOST_TOOL",
+      "upstream_project": "https://libimobiledevice.org/",
+      "zero_sky_verified": []
+    }
+  ],
+  "reviewed_at": "2026-09-28",
+  "schema": 1
+}

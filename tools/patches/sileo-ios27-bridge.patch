@@ -1,0 +1,185 @@
+diff --git a/Sileo/Backend/APT Wrapper/APTJsonParser.swift b/Sileo/Backend/APT Wrapper/APTJsonParser.swift
+--- a/Sileo/Backend/APT Wrapper/APTJsonParser.swift
++++ b/Sileo/Backend/APT Wrapper/APTJsonParser.swift
+@@ -7,6 +7,7 @@
+ //
+ import Evander
+ import ZippyJSON
++import Foundation
+ 
+ enum APTParserErrors: LocalizedError {
+     case missingSileoConf
+@@ -16,7 +17,7 @@
+     
+     var errorDescription: String? {
+         switch self {
+-        case .blankJsonOutput(let error): return "APT was unable to find this package. Please try refreshing your sources\n \(error)"
++        case .blankJsonOutput(let error): return "Package planning failed: \(error)"
+         case .failedDataEncoding: return "APT returned an invalid response that cannot be parsed."
+         case .missingSileoConf: return "Your Sileo install is incomplete. Please reinstall"
+         case .blankRequest: return "Internal Error: Blank Request sent for packages"
+@@ -164,9 +165,6 @@
+         
+         var queryArguments = [
+             "-sqf",
+-            "--allow-remove-essential",
+-            "--allow-change-held-packages",
+-            "--allow-downgrades",
+             "-oquiet::NoUpdate=true",
+             "-oApt::Get::HideAutoRemove=true",
+             "-oquiet::NoProgress=true",
+@@ -200,7 +198,20 @@
+         var aptStdout = ""
+         var aptError = ""
+ 
+-        (_, aptStdout, aptError) = spawn(command: CommandPath.aptget, args: ["apt-get"] + queryArguments + packageOperations)
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            if !removeList.isEmpty || installList.contains(where: { $0.package.package.contains("/") }) {
++                throw APTParserErrors.blankJsonOutput(error: "0-Sky Bridge does not yet support package removal or local DEB planning")
++            }
++            let selections = installList.map { ["id": $0.package.packageID,
++                                                "version": $0.package.version] }
++            let result = SileoBridgeAPT.request(operation: "plan", packages: selections)
++            guard result.0 == 0 else {
++                throw APTParserErrors.blankJsonOutput(error: result.2)
++            }
++            aptStdout = result.1
++        } else {
++            (_, aptStdout, aptError) = spawn(command: CommandPath.aptget, args: ["apt-get"] + queryArguments + packageOperations)
++        }
+         let aptJsonOutput = try normalizeAptOutput(rawOutput: aptStdout, error: aptError)
+         
+         return aptJsonOutput
+@@ -269,3 +280,66 @@
+         return aptOutput
+     }
+ }
++
++enum SileoBridgeAPT {
++    static func request(operation: String, packages: [[String: String]]) -> (Int, String, String) {
++        guard let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first,
++              let token = try? String(contentsOf: documents.appendingPathComponent("0sky-sileo-bridge.token"),
++                                      encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
++              token.count == 64 else {
++            return (126, "", "0-Sky Bridge credential is missing; repair Sileo from 0-Sky Control")
++        }
++        guard let url = URL(string: "http://127.0.0.1:48654/v1/sileo/package"),
++              let body = try? JSONSerialization.data(withJSONObject:
++                    ["operation": operation, "packages": packages]) else {
++            return (126, "", "0-Sky Bridge request could not be encoded")
++        }
++        var request = URLRequest(url: url)
++        request.httpMethod = "POST"
++        request.httpBody = body
++        request.timeoutInterval = operation == "plan" ? 100 : 1200
++        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
++        request.setValue(token, forHTTPHeaderField: "X-0Sky-Sileo-Token")
++        let completed = DispatchSemaphore(value: 0)
++        var answer: (Int, String, String) = (190, "", "0-Sky Bridge did not respond")
++        URLSession.shared.dataTask(with: request) { data, _, error in
++            defer { completed.signal() }
++            guard let data = data,
++                  let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
++                  let status = object["status"] as? Int else {
++                answer = (190, "", "0-Sky Bridge is unavailable: \(error?.localizedDescription ?? "invalid response")")
++                return
++            }
++            if status == 0,
++               let encoded = object["installed_status_b64"] as? String,
++               !installStatusSnapshot(encoded, in: documents) {
++                answer = (192, "", "Package changed, but Sileo could not refresh its installed-package view")
++                return
++            }
++            answer = (status, object["stdout"] as? String ?? "",
++                      object["stderr"] as? String ?? "Unknown Bridge failure")
++        }.resume()
++        if completed.wait(timeout: .now() + request.timeoutInterval + 5) == .timedOut {
++            return (124, "", "0-Sky Bridge package operation timed out")
++        }
++        return answer
++    }
++
++    private static func installStatusSnapshot(_ encoded: String,
++                                              in documents: URL) -> Bool {
++        guard encoded.utf8.count <= 6 * 1024 * 1024,
++              let data = Data(base64Encoded: encoded),
++              data.count > 0, data.count <= 4 * 1024 * 1024,
++              let prefix = String(data: data.prefix(4096), encoding: .utf8),
++              prefix.contains("Package: ") else { return false }
++        let destination = documents.appendingPathComponent("sileo-dpkg-status")
++        do {
++            try data.write(to: destination, options: .atomic)
++            try FileManager.default.setAttributes([.posixPermissions: 0o600],
++                                                  ofItemAtPath: destination.path)
++            return true
++        } catch {
++            return false
++        }
++    }
++}
+diff --git a/Sileo/Backend/APT Wrapper/APTWrapper.swift b/Sileo/Backend/APT Wrapper/APTWrapper.swift
+--- a/Sileo/Backend/APT Wrapper/APTWrapper.swift
++++ b/Sileo/Backend/APT Wrapper/APTWrapper.swift
+@@ -164,6 +164,27 @@
+         #if targetEnvironment(simulator) || TARGET_SANDBOX
+         return completionCallback(0, .back, true)
+         #else
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            DispatchQueue.global(qos: .userInitiated).async {
++                guard removals.isEmpty,
++                      installs.allSatisfy({ !$0.package.package.contains("/") }) else {
++                    outputCallback("0-Sky Bridge does not yet support package removal or local DEB installation.\n", Int(STDERR_FILENO))
++                    completionCallback(126, .back, false)
++                    return
++                }
++                let selected = installs.map { ["id": $0.package.packageID,
++                                               "version": $0.package.version] }
++                outputCallback("Installing through trusted 0-Sky Bridge…\n", Int(STDOUT_FILENO))
++                let result = SileoBridgeAPT.request(operation: "install", packages: selected)
++                if !result.1.isEmpty { outputCallback(result.1, Int(STDOUT_FILENO)) }
++                if !result.2.isEmpty { outputCallback(result.2, Int(STDERR_FILENO)) }
++                if result.0 == 0 {
++                    outputCallback("Package installed; runtime smoke test is still required before READY.\n", Int(STDOUT_FILENO))
++                }
++                completionCallback(result.0, .back, false)
++            }
++            return
++        }
+         var arguments = [CommandPath.aptget,
+                          "install", "--reinstall",
+                          "--no-download",
+diff --git a/Sileo/Backend/Download Manager/DownloadManager.swift b/Sileo/Backend/Download Manager/DownloadManager.swift
+--- a/Sileo/Backend/Download Manager/DownloadManager.swift
++++ b/Sileo/Backend/Download Manager/DownloadManager.swift
+@@ -383,7 +383,12 @@
+         let destFileName = "\(CommandPath.prefix)/var/cache/apt/archives/\(packageID)_\(version)_\(architecture).deb"
+         let destURL = URL(fileURLWithPath: destFileName)
+ 
+-        moveFileAsRoot(from: fileURL, to: destURL)
++        // iOS 27 Sileo is sandboxed.  The authenticated root Bridge downloads
++        // from its signature-checked APT source during the install transaction.
++        // Keep Sileo's hash-verified copy in its own cache until completion.
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion < 27 {
++            moveFileAsRoot(from: fileURL, to: destURL)
++        }
+         #endif
+         DownloadManager.shared.cachedFiles.append(fileURL)
+         return true
+diff --git a/Sileo/UI/TabBarController/TabBarController.swift b/Sileo/UI/TabBarController/TabBarController.swift
+--- a/Sileo/UI/TabBarController/TabBarController.swift
++++ b/Sileo/UI/TabBarController/TabBarController.swift
+@@ -287,7 +287,13 @@
+             }
+             return
+         }
+-        let alertController = UIAlertController(title: String(localizationKey: "Unknown", type: .error), message: string, preferredStyle: .alert)
++        let title: String
++        if string.contains("iOS 27 tweak injection") && string.contains("installation is blocked") {
++            title = "Tweak compatibility check blocked installation"
++        } else {
++            title = String(localizationKey: "Unknown", type: .error)
++        }
++        let alertController = UIAlertController(title: title, message: string, preferredStyle: .alert)
+         alertController.addAction(UIAlertAction(title: String(localizationKey: "OK"), style: .default))
+         self.present(alertController, animated: true, completion: nil)
+     }

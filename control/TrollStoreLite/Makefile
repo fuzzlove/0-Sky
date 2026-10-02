@@ -1,4 +1,4 @@
-TARGET := iphone:clang:16.5:14.0
+TARGET := iphone:clang:latest:14.0
 INSTALL_TARGET_PROCESSES = CrypStore
 ARCHS = arm64
 
@@ -11,7 +11,27 @@ CrypStore_FRAMEWORKS = UIKit CoreGraphics CoreServices CoreTelephony CoreBluetoo
 CrypStore_PRIVATE_FRAMEWORKS = Preferences MobileIcons MobileContainerManager
 CrypStore_LIBRARIES = archive
 CrypStore_CFLAGS = -fobjc-arc -I../Shared -I$(shell brew --prefix)/opt/libarchive/include -DTROLLSTORE_LITE
-CrypStore_LDFLAGS = -F../build-stubs
+CrypStore_LDFLAGS = -F../build-stubs -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,/var/jb/usr/lib
 CrypStore_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/application.mk
+
+# A paid Crane license is never committed or bundled in ordinary releases.
+# An authorized private build may point CRANE_RUNTIME_DIR at an isolated
+# extraction containing the exact installed Crane and dependency artifacts.
+ifneq ($(strip $(CRANE_RUNTIME_DIR)),)
+after-CrypStore-stage::
+	@test -f "$(CRANE_RUNTIME_DIR)/libcrane.dylib"
+	@test -f "$(CRANE_RUNTIME_DIR)/libsandy.dylib"
+	@test -f "$(CRANE_RUNTIME_DIR)/libellekit.dylib"
+	@test -f "$(CRANE_RUNTIME_DIR)/AltList.framework/AltList"
+	@test -f "$(CRANE_RUNTIME_DIR)/CranePrefs.bundle/CranePrefs"
+	@mkdir -p "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/Frameworks"
+	@cp "$(CRANE_RUNTIME_DIR)/libcrane.dylib" "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/Frameworks/"
+	@cp "$(CRANE_RUNTIME_DIR)/libsandy.dylib" "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/Frameworks/"
+	@cp "$(CRANE_RUNTIME_DIR)/libellekit.dylib" "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/Frameworks/"
+	@cp -R "$(CRANE_RUNTIME_DIR)/AltList.framework" "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/Frameworks/"
+	@cp -R "$(CRANE_RUNTIME_DIR)/CranePrefs.bundle" "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/"
+	@/usr/bin/install_name_tool -add_rpath '@loader_path/../Frameworks' \
+		"$(THEOS_STAGING_DIR)/Applications/CrypStore.app/CranePrefs.bundle/CranePrefs"
+endif

@@ -85,7 +85,7 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>3.4.4</string>
+	<string>3.5.24</string>
 	<key>CFBundleSignature</key>
 	<string>????</string>
 	<key>CFBundleSupportedPlatforms</key>
@@ -102,9 +102,17 @@
 				<string>apple-magnifier</string>
 			</array>
 		</dict>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.liquidsky.CrypStore.Crane</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>zerosky-control</string>
+			</array>
+		</dict>
 	</array>
 	<key>CFBundleVersion</key>
-	<string>3.4.4.4</string>
+	<string>3.5.24.0</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
@@ -114,6 +122,8 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSFaceIDUsageDescription</key>
+	<string>0-Sky Control uses Face ID only when you enable Crane authentication controls for protected container access.</string>
 	<key>NSBluetoothAlwaysUsageDescription</key>
 	<string>0-Sky uses Bluetooth only as an encrypted fallback connection to this paired research Mac.</string>
 	<key>TSRootBinaries</key>

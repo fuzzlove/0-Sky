@@ -13,7 +13,11 @@ AUTOMATION_CONTROLLER = ROOT.parent / "TrollStore" / "TSAutomationTableViewContr
 INTELLIGENCE_CONTROLLER = ROOT.parent / "TrollStore" / "TSIntelligenceTableViewController.m"
 CONTROL_CENTER = ROOT.parent / "TrollStore" / "TSControlCenterTableViewController.m"
 INVENTORY_CONTROLLER = ROOT.parent / "TrollStore" / "TSInventoryTableViewController.m"
+CRANE_CONTROLLER = ROOT.parent / "TrollStore" / "TSCraneSettingsViewController.m"
+SCENE_DELEGATE = ROOT.parent / "TrollStore" / "TSSceneDelegate.m"
+BLUETOOTH_FALLBACK = ROOT.parent / "TrollStore" / "TSBluetoothFallback.m"
 INFO_PLIST = ROOT / "Resources" / "Info.plist"
+CONTROL = ROOT / "control"
 
 class DeviceCompatibilityTests(unittest.TestCase):
     def test_declares_iphone_and_ipad(self):
@@ -22,8 +26,12 @@ class DeviceCompatibilityTests(unittest.TestCase):
         self.assertEqual(info["CFBundleExecutable"], "CrypStore")
         self.assertEqual(info["CFBundleDisplayName"], "0-Sky Control")
         self.assertEqual(info["CFBundleName"], "0-Sky Control")
-        self.assertEqual(info["CFBundleShortVersionString"], "3.4.4")
+        package_version = re.search(r"(?m)^Version:\s*(\S+)$", CONTROL.read_text()).group(1)
+        self.assertEqual(info["CFBundleShortVersionString"], package_version)
+        self.assertRegex(info["CFBundleVersion"],
+                         r"^" + re.escape(info["CFBundleShortVersionString"]) + r"\.\d+$")
         self.assertEqual(set(info["UIDeviceFamily"]), {1, 2})
+        self.assertIn("Crane", info.get("NSFaceIDUsageDescription", ""))
 
     def test_table_reload_uses_one_bounded_snapshot(self):
         source = SOURCE.read_text()
@@ -36,6 +44,57 @@ class DeviceCompatibilityTests(unittest.TestCase):
     def test_async_icon_reload_handles_disappearing_row(self):
         source = SOURCE.read_text()
         self.assertIn("if(row == NSNotFound) return;", source)
+
+    def test_inventory_merges_runtime_health_with_local_metadata_and_icons(self):
+        source = INVENTORY_CONTROLLER.read_text()
+        self.assertIn("arrayByAddingObjectsFromArray:localTweaks", source)
+        self.assertIn('@"name", @"version", @"description", @"preference_title"', source)
+        self.assertIn("TSPreferenceIconPath", source)
+        self.assertIn("imageWithContentsOfFile:iconPath", source)
+
+    def test_crane_container_delete_uses_verified_bridge_cleanup(self):
+        source = CRANE_CONTROLLER.read_text()
+        self.assertIn("TSInstallCraneDeleteAdapter", source)
+        self.assertIn("deleteContainerWithIdentifier:forApplicationWithIdentifier:", source)
+        self.assertIn('coreRequestOperation:@"cleanupCraneContainer"', source)
+        self.assertIn("Container cleanup requires attention", source)
+
+    def test_crane_targets_use_paired_mcm_handoffs(self):
+        source = CRANE_CONTROLLER.read_text()
+        self.assertIn('@"dataRoots": dataRoots', source)
+        self.assertIn("TSValidatedMCMDataRoot", source)
+        self.assertIn('pathsAssociatedToContainerWithIdentifier:@"DEFAULT"', source)
+        load_targets = source[source.index("- (void)loadTargets"):
+                              source.index("- (NSInteger)numberOfSections")]
+        self.assertNotIn('coreRequestOperation:@"setTweakTargets"', load_targets)
+
+    def test_crane_home_icon_has_a_deterministic_control_route(self):
+        info = plistlib.loads(INFO_PLIST.read_bytes())
+        schemes = {
+            scheme
+            for url_type in info.get("CFBundleURLTypes", [])
+            for scheme in url_type.get("CFBundleURLSchemes", [])
+        }
+        self.assertIn("zerosky-control", schemes)
+        scene = SCENE_DELEGATE.read_text()
+        root = ROOT_CONTROLLER.read_text()
+        self.assertIn('@"zerosky-control"', scene)
+        self.assertIn('@"tweaks"', scene)
+        self.assertIn('@"/crane"', scene)
+        self.assertIn("openCraneSettings]", scene)
+        self.assertIn("- (void)openCraneSettings", root)
+        self.assertIn("self.selectedIndex = 2", root)
+        self.assertIn("TSCraneSettingsViewController", root)
+        self.assertIn("dismissViewControllerAnimated:NO completion:route", root)
+        self.assertIn("[controller openNativeContainerManager]", root)
+        crane = CRANE_CONTROLLER.read_text()
+        self.assertIn('@"Native Crane Settings"', crane)
+        self.assertNotIn("TSInlinePreferenceTableViewController", crane)
+
+    def test_bluetooth_fallback_requires_explicit_opt_in(self):
+        source = BLUETOOTH_FALLBACK.read_text()
+        self.assertIn("setBool:NO forKey:TSBLEEnabledKey", source)
+        self.assertNotIn("setBool:YES forKey:TSBLEEnabledKey];\n    if(!", source)
 
     def test_health_dashboard_is_shared_by_phone_and_ipad(self):
         root = ROOT_CONTROLLER.read_text()

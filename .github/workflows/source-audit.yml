@@ -13,3 +13,26 @@ jobs:
         with:
           python-version: '3.12'
       - run: python3 tools/pii_audit.py .
+  release-tool-tests:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 -m unittest discover -s tools/tests -q
+      - run: python3 tools/verify_eula.py
+      - run: bash -n build.sh scripts/build_release.sh scripts/verify_release.sh bridge/Scripts/embed_verified_kit.sh
+      - run: zsh -n link/build.sh 'bridge/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command'
+  ios27-compatibility:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: brew install dpkg
+      - run: command -v dpkg-deb
+      - run: python3 -m unittest tools.tests.test_ios27_build tools.tests.test_ios27_compat_pipeline tools.tests.test_compatibility tools.tests.test_compatibility_integration -q
+      - run: python3 tools/ios27_compat_pipeline.py --output /tmp/0sky-ios27-compatibility
+      - run: python3 -c 'import json,pathlib; p=pathlib.Path("/tmp/0sky-ios27-compatibility"); a=json.loads((p/"inventory.json").read_text()); g=json.loads((p/"repository-admission.json").read_text()); assert a["schema"]==1 and g["repo_admitted"]==0'

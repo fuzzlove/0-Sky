@@ -1,0 +1,40 @@
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index 92ef3d8..905b7cf 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -103,6 +103,12 @@ class DownloadsTableViewController: SileoViewController {
+         confirmButton?.layer.cornerRadius = 10
+         
+         confirmButton?.setTitle(String(localizationKey: "Queue_Confirm_Button"), for: .normal)
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27,
++           let confirmButton = confirmButton {
++            confirmButton.isExclusiveTouch = true
++            confirmButton.addTarget(self, action: #selector(confirmQueued(_:)), for: .touchUpInside)
++            footerView?.bringSubviewToFront(confirmButton)
++        }
+         cancelButton?.setTitle(String(localizationKey: "Queue_Clear_Button"), for: .normal)
+         completeButton?.setTitle(String(localizationKey: "After_Install_Respring"), for: .normal)
+         completeLaterButton?.setTitle(String(localizationKey: "After_Install_Respring_Later"), for: .normal)
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.xib b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.xib
+index 03b1322..446b83b 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.xib
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.xib
+@@ -95,7 +95,7 @@
+                                 <action selector="completeLaterButtonTapped:" destination="-1" eventType="touchUpInside" id="rRh-2c-Fie"/>
+                             </connections>
+                         </button>
+-                        <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="hbf-91-V4N" customClass="DownloadConfirmButton" customModule="Sileo" customModuleProvider="target">
++                        <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="hbf-91-V4N">
+                             <rect key="frame" x="20" y="15" width="335" height="50"/>
+                             <color key="backgroundColor" white="0.66666666666666663" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                             <constraints>
+@@ -105,9 +105,6 @@
+                             <state key="normal" title="Confirm">
+                                 <color key="titleColor" white="1" alpha="1" colorSpace="custom" customColorSpace="genericGamma22GrayColorSpace"/>
+                             </state>
+-                            <connections>
+-                                <action selector="confirmQueued:" destination="-1" eventType="touchUpInside" id="drK-cu-L5d"/>
+-                            </connections>
+                         </button>
+                         <button opaque="NO" contentMode="scaleToFill" contentHorizontalAlignment="center" contentVerticalAlignment="center" buttonType="system" lineBreakMode="middleTruncation" translatesAutoresizingMaskIntoConstraints="NO" id="KuX-Le-H3l">
+                             <rect key="frame" x="20" y="80" width="335" height="33"/>

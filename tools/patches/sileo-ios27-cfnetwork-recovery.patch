@@ -1,0 +1,103 @@
+diff --git a/Sileo/Backend/Download Manager/DownloadManager.swift b/Sileo/Backend/Download Manager/DownloadManager.swift
+index 39241e8..8a13fd1 100644
+--- a/Sileo/Backend/Download Manager/DownloadManager.swift
++++ b/Sileo/Backend/Download Manager/DownloadManager.swift
+@@ -293,5 +293,59 @@ final class DownloadManager {
+         downloads[package]
+     }
++
++    // CFNetwork on iOS 27 can deliver every byte of a valid HTTP 206 response
++    // without calling URLSessionDownloadDelegate's completion callback. Only
++    // recover a file whose size and signed repository hash match exactly.
++    public func recoverVerifiedDownloads(packageIDs: [String]) -> Bool {
++        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27,
++              let candidates = try? FileManager.default.contentsOfDirectory(
++                at: EvanderNetworking.downloadCache,
++                includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey,
++                                             .fileSizeKey],
++                options: [.skipsHiddenFiles]) else { return false }
++        var complete = true
++        for packageID in packageIDs {
++            guard let download = downloads[packageID] else {
++                complete = false
++                continue
++            }
++            if download.success { continue }
++            guard download.progress == 1, download.failureReason == nil,
++                  let expectedSizeText = download.package.size,
++                  let expectedSize = Int(expectedSizeText) else {
++                complete = false
++                continue
++            }
++            var recovered = false
++            for candidate in candidates {
++                guard let values = try? candidate.resourceValues(
++                        forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]),
++                      values.isRegularFile == true, values.isSymbolicLink != true,
++                      values.fileSize == expectedSize else { continue }
++                guard let expectedHash = download.package.rawControl["SHA256"]?.lowercased(),
++                      expectedHash.range(of: "^[0-9a-f]{64}$",
++                                         options: .regularExpression) != nil,
++                      candidate.hash(ofType: .sha256) == expectedHash else { continue }
++                do {
++                    try stageVerifiedBridgeArchive(
++                        package: download.package, fileURL: candidate)
++                    cachedFiles.append(candidate)
++                    download.task?.cancel()
++                    currentDownloads = max(0, currentDownloads - 1)
++                    download.failureReason = nil
++                    download.success = true
++                    download.completed = true
++                    download.progress = 1
++                    recovered = true
++                    break
++                } catch {
++                    download.failureReason = error.localizedDescription
++                }
++            }
++            if !recovered { complete = false }
++        }
++        return complete
++    }
+     
+     private func aptEncoded(string: String, isArch: Bool) -> String {
+         var encodedString = string.replacingOccurrences(of: "_", with: "%5f")
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index 7d4255e..bb2a4c1 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -491,7 +491,8 @@ class DownloadsTableViewController: SileoViewController {
+                     self.confirmButton?.setTitle("Downloading…", for: .normal)
+                     manager.startMoreDownloads()
+                     manager.reloadData(recheckPackages: false)
+-                    self.awaitVerifiedBridgeInstall(remaining: 240)
++                    self.awaitVerifiedBridgeInstall(
++                        packageIDs: packages.compactMap { $0["id"] }, remaining: 240)
+                 }
+             }
+             return
+@@ -514,11 +515,12 @@ class DownloadsTableViewController: SileoViewController {
+         present(alert, animated: true)
+     }
+ 
+-    private func awaitVerifiedBridgeInstall(remaining: Int) {
++    private func awaitVerifiedBridgeInstall(packageIDs: [String], remaining: Int) {
+         guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27,
+               isDownloading, !isInstalling else { return }
+         let manager = DownloadManager.shared
+-        if manager.verifyComplete() {
++        let recovered = manager.recoverVerifiedDownloads(packageIDs: packageIDs)
++        if recovered || manager.verifyComplete() {
+             manager.lockedForInstallation = true
+             isDownloading = false
+             cancelDownload?.isHidden = true
+@@ -534,7 +537,8 @@ class DownloadsTableViewController: SileoViewController {
+             return
+         }
+         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+-            self?.awaitVerifiedBridgeInstall(remaining: remaining - 1)
++            self?.awaitVerifiedBridgeInstall(
++                packageIDs: packageIDs, remaining: remaining - 1)
+         }
+     }
+     

@@ -16,6 +16,33 @@ struct PairingWorkflowStep: Identifiable {
     let detail: String?
 }
 
+enum RootFilesystemMountPhase: String {
+    case unmounted = "Not Mounted"
+    case mounting = "Mounting…"
+    case mounted = "Mounted"
+    case unmounting = "Unmounting…"
+    case failed = "Mount Failed"
+}
+
+private final class RootMountOutputBuffer: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func append(_ value: Data) {
+        guard !value.isEmpty else { return }
+        lock.lock()
+        data.append(value)
+        lock.unlock()
+    }
+
+    func text() -> String {
+        lock.lock()
+        let snapshot = data
+        lock.unlock()
+        return String(decoding: snapshot, as: UTF8.self)
+    }
+}
+
 @MainActor
 final class BridgeAppModel: ObservableObject {
     private static let serviceLogger = Logger(
@@ -55,6 +82,10 @@ final class BridgeAppModel: ObservableObject {
     @Published var activeOperationName: String?
     @Published var activeOperationStartedAt: Date?
     @Published var cancellationInProgress = false
+    @Published var rootFilesystemMountPhase: RootFilesystemMountPhase = .unmounted
+    @Published var rootFilesystemMountPath: String?
+    @Published var rootFilesystemMountReadOnly = true
+    @Published var rootFilesystemMountDeviceID: String?
 
     let environment: BridgeEnvironment
     let daemonClient = BridgeDaemonClient()
@@ -71,6 +102,9 @@ final class BridgeAppModel: ObservableObject {
     private var dismissedConnectedDeviceIDs: Set<String> = []
     private var activeOperationTask: Task<Void, Never>?
     private var activeOperationToken: UUID?
+    private var rootFilesystemMountProcess: Process?
+    private var rootFilesystemMountMonitorTask: Task<Void, Never>?
+    private var rootFilesystemMountToken: UUID?
 
     init(environment: BridgeEnvironment = BridgeEnvironment()) {
         self.environment = environment
@@ -81,7 +115,13 @@ final class BridgeAppModel: ObservableObject {
         self.startAtLogin = SMAppService.mainApp.status == .enabled
     }
 
-    deinit { monitorTask?.cancel() }
+    deinit {
+        monitorTask?.cancel()
+        rootFilesystemMountMonitorTask?.cancel()
+        if rootFilesystemMountProcess?.isRunning == true {
+            rootFilesystemMountProcess?.terminate()
+        }
+    }
 
     var selectedDevice: SkyDevice? {
         guard let selectedDeviceID else { return nil }
@@ -175,6 +215,7 @@ final class BridgeAppModel: ObservableObject {
             NSWorkspace.shared.notificationCenter.removeObserver(observer)
         }
         workspaceObservers.removeAll()
+        stopRootFilesystemMount()
         Task { await environment.runner.cancelAll() }
     }
 
@@ -391,6 +432,180 @@ final class BridgeAppModel: ObservableObject {
             self.isBusy = false
         }
         return true
+    }
+
+    func mountRootFilesystem(readWrite: Bool = false) {
+        guard let device = selectedDevice else {
+            lastError = "Select an SRD before mounting its root filesystem."
+            return
+        }
+        guard device.usbConnected else {
+            lastError = "Connect and unlock the selected SRD over USB before mounting AFC2."
+            return
+        }
+        if rootFilesystemMountPhase == .mounted {
+            if rootFilesystemMountDeviceID == device.udid {
+                revealRootFilesystemMount()
+            } else {
+                lastError = "Unmount the currently mounted SRD before mounting another device."
+            }
+            return
+        }
+        guard rootFilesystemMountProcess == nil else {
+            lastError = "The root filesystem mount is already starting or stopping."
+            return
+        }
+
+        Task { [weak self] in
+            guard let self else { return }
+            guard let profile = await self.environment.registry.profile(for: device.udid) else {
+                self.lastError = "The selected SRD has no verified 0-Sky device profile."
+                return
+            }
+            do {
+                let python = try self.environment.paths.afc2RootMountPython(for: profile)
+                let controller = try self.environment.paths.afc2RootMountController()
+                let process = Process()
+                let output = Pipe()
+                let buffer = RootMountOutputBuffer()
+                let token = UUID()
+                process.executableURL = python
+                process.arguments = [
+                    "-u", controller.path,
+                    "--udid", device.udid,
+                    "--label", device.name ?? device.productType ?? "iPhone",
+                    "--parent-pid", String(ProcessInfo.processInfo.processIdentifier),
+                ] + (readWrite ? ["--read-write"] : [])
+                process.environment = try BridgeValidation.safeEnvironment(
+                    overrides: ["PYTHONUNBUFFERED": "1"]
+                )
+                process.currentDirectoryURL = self.environment.paths.supportRoot
+                process.standardOutput = output
+                process.standardError = output
+                output.fileHandleForReading.readabilityHandler = { handle in
+                    buffer.append(handle.availableData)
+                }
+                process.terminationHandler = { [weak self] terminated in
+                    let status = terminated.terminationStatus
+                    output.fileHandleForReading.readabilityHandler = nil
+                    buffer.append(output.fileHandleForReading.readDataToEndOfFile())
+                    Task { @MainActor [weak self] in
+                        self?.rootFilesystemMountDidTerminate(
+                            token: token, status: status, output: buffer.text()
+                        )
+                    }
+                }
+
+                self.rootFilesystemMountToken = token
+                self.rootFilesystemMountProcess = process
+                self.rootFilesystemMountDeviceID = device.udid
+                self.rootFilesystemMountReadOnly = !readWrite
+                self.rootFilesystemMountPath = nil
+                self.rootFilesystemMountPhase = .mounting
+                self.statusMessage = readWrite
+                    ? "Mounting the selected SRD root read/write…"
+                    : "Mounting the selected SRD root read-only…"
+                try process.run()
+                self.monitorRootFilesystemMount(
+                    token: token, process: process, buffer: buffer, device: device
+                )
+            } catch {
+                self.rootFilesystemMountProcess = nil
+                self.rootFilesystemMountToken = nil
+                self.rootFilesystemMountDeviceID = nil
+                self.rootFilesystemMountPhase = .failed
+                self.lastError = "Root filesystem mount failed: \(DiagnosticRedactor.redact(error.localizedDescription))"
+            }
+        }
+    }
+
+    func stopRootFilesystemMount() {
+        rootFilesystemMountMonitorTask?.cancel()
+        rootFilesystemMountMonitorTask = nil
+        guard let process = rootFilesystemMountProcess else {
+            rootFilesystemMountPhase = .unmounted
+            rootFilesystemMountPath = nil
+            rootFilesystemMountDeviceID = nil
+            return
+        }
+        rootFilesystemMountPhase = .unmounting
+        statusMessage = "Unmounting the SRD root filesystem…"
+        if process.isRunning { process.terminate() }
+    }
+
+    func revealRootFilesystemMount() {
+        guard rootFilesystemMountPhase == .mounted,
+              let path = rootFilesystemMountPath,
+              FileManager.default.fileExists(atPath: path) else {
+            lastError = "The SRD root filesystem is not currently mounted."
+            return
+        }
+        NSWorkspace.shared.open(URL(fileURLWithPath: path, isDirectory: true))
+    }
+
+    private func monitorRootFilesystemMount(
+        token: UUID,
+        process: Process,
+        buffer: RootMountOutputBuffer,
+        device: SkyDevice
+    ) {
+        rootFilesystemMountMonitorTask?.cancel()
+        rootFilesystemMountMonitorTask = Task { [weak self] in
+            for _ in 0..<300 {
+                guard let self, self.rootFilesystemMountToken == token else { return }
+                let transcript = buffer.text()
+                if let line = transcript.split(whereSeparator: \.isNewline).first(where: {
+                    $0.hasPrefix("ROOT_MOUNT_READY=")
+                }) {
+                    let path = String(line.dropFirst("ROOT_MOUNT_READY=".count))
+                    self.rootFilesystemMountPath = path
+                    self.rootFilesystemMountPhase = .mounted
+                    self.statusMessage = self.rootFilesystemMountReadOnly
+                        ? "SRD root mounted read-only in Finder."
+                        : "SRD root mounted read/write in Finder."
+                    await self.environment.logs.append(
+                        category: .service, level: .pass,
+                        message: self.rootFilesystemMountReadOnly
+                            ? "Mounted verified AFC2 root read-only in Finder."
+                            : "Mounted verified AFC2 root read/write in Finder.",
+                        deviceID: device.udid
+                    )
+                    return
+                }
+                if !process.isRunning { return }
+                try? await Task.sleep(for: .milliseconds(100))
+            }
+            guard let self, self.rootFilesystemMountToken == token else { return }
+            if process.isRunning { process.terminate() }
+            self.rootFilesystemMountPhase = .failed
+            self.lastError = "Root filesystem mount timed out before Finder attached the verified AFC2 volume."
+        }
+    }
+
+    private func rootFilesystemMountDidTerminate(token: UUID, status: Int32, output: String) {
+        guard rootFilesystemMountToken == token else { return }
+        let wasStopping = rootFilesystemMountPhase == .unmounting
+        let wasMounted = rootFilesystemMountPhase == .mounted
+        rootFilesystemMountMonitorTask?.cancel()
+        rootFilesystemMountMonitorTask = nil
+        rootFilesystemMountProcess = nil
+        rootFilesystemMountToken = nil
+        rootFilesystemMountPath = nil
+        rootFilesystemMountDeviceID = nil
+        if wasStopping || status == 0 {
+            rootFilesystemMountPhase = .unmounted
+            statusMessage = "SRD root filesystem unmounted."
+            return
+        }
+        rootFilesystemMountPhase = .failed
+        let reported = output.split(whereSeparator: \.isNewline).first(where: {
+            $0.hasPrefix("ROOT_MOUNT_ERROR=")
+        }).map { String($0.dropFirst("ROOT_MOUNT_ERROR=".count)) }
+        let reason = DiagnosticRedactor.redact(
+            reported ?? (wasMounted ? "the device disconnected or the AFC2 service stopped" : "helper exited with status \(status)")
+        )
+        lastError = "Root filesystem mount failed: \(reason)"
+        statusMessage = "SRD root filesystem mount stopped unexpectedly."
     }
 
     func enrollSelectedDevice() {

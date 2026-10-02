@@ -2,6 +2,12 @@
 set -u
 
 SCRIPT_DIR=${0:A:h}
+ONLINE=0
+case ${1:-} in
+  '') ;;
+  --online) ONLINE=1 ;;
+  *) print -u2 "Usage: ${0:t} [--online]"; exit 64 ;;
+esac
 SETUP=""
 KIT=""
 NATIVE=""
@@ -35,26 +41,70 @@ esac
 print "This guided installer adds every required macOS component for 0-Sky."
 print "Required host packages include Python 3.12, dpkg/dpkg-deb, USB tools,"
 print "and the pinned offline 0-Sky Python environment."
-print "Homebrew's official installer remains interactive and shows its changes first."
+if [[ $ONLINE -eq 1 ]]; then
+  print "Online mode: Homebrew's official installer remains interactive."
+else
+  print "Offline mode: no package indexes, Homebrew, curl, or downloads will be used."
+fi
 print
 
-if [[ -z "$NATIVE" && ( -z "$SETUP" || -z "$KIT" ) ]]; then
-  print -u2 "The 0-Sky setup program or bundled kit could not be found."
+if [[ -f "$SCRIPT_DIR/../.0sky-incomplete-build" ]]; then
+  print -u2 "This app bundle was left incomplete by a failed build."
+  print -u2 "Install a complete 0-Sky release before setting up dependencies."
   print "Press Return to close."
   read -r
   exit 2
+fi
+
+if [[ -z "$NATIVE" && ( -z "$SETUP" || -z "$KIT" ) ]]; then
+  print -u2 "This 0-Sky app has no bundled dependency kit. The app build or installer is incomplete."
+  print -u2 "Install a complete release containing Contents/Resources/Kit, then run this installer again."
+  print "Press Return to close."
+  read -r
+  exit 2
+fi
+
+if [[ -z "$NATIVE" ]]; then
+  for required in SHA256SUMS PORTABILITY.json RELEASE_KIT_APPROVAL.json \
+    RELEASE_KIT_MANIFEST.json WHEEL_INVENTORY.json \
+    host-mac/install.py host-mac/pair.py \
+    host-mac/requirements-lock.txt payloads/0-Sky-Link-1.9.0-universal.ipa; do
+    if [[ ! -r "$KIT/$required" ]]; then
+      print -u2 "The bundled dependency kit is incomplete (missing $required)."
+      print -u2 "Install a complete 0-Sky release; this installer cannot repair an incomplete app bundle."
+      print "Press Return to close."
+      read -r
+      exit 2
+    fi
+  done
+  if [[ ! -d "$KIT/host-mac/wheelhouse" ]]; then
+    print -u2 "The bundled offline Python dependencies are missing."
+    print -u2 "Install a complete 0-Sky release and run this installer again."
+    print "Press Return to close."
+    read -r
+    exit 2
+  fi
 fi
 
 PYTHON=""
 if [[ -z "$NATIVE" ]]; then
   for candidate in \
     "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" \
-    "/opt/homebrew/bin/python3.12" "/usr/local/bin/python3.12" \
-    "/opt/homebrew/bin/python3" "/usr/local/bin/python3" "/usr/bin/python3"; do
+    "/opt/homebrew/bin/python3.12" "/usr/local/bin/python3.12"; do
     if [[ -x "$candidate" ]]; then PYTHON="$candidate"; break; fi
   done
+  if [[ -z "$PYTHON" ]] && command -v python3.12 >/dev/null 2>&1; then
+    PYTHON=$(command -v python3.12)
+  fi
 
   if [[ -z "$PYTHON" ]]; then
+    if [[ $ONLINE -eq 0 ]]; then
+      print -u2 "A local Python 3.12 runtime is required for offline installation."
+      print -u2 "Supply a verified Python 3.12 installer or rerun this command with --online."
+      print "Press Return to close."
+      read -r
+      exit 3
+    fi
     print "Python 3.12 is not installed. Bootstrapping the required runtime now."
     if ! /usr/bin/xcrun --find clang >/dev/null 2>&1; then
       print "Apple Command Line Tools must finish installing first."
@@ -114,10 +164,19 @@ if [[ -z "$NATIVE" ]]; then
 fi
 
 if [[ -n "$NATIVE" ]]; then
-  "$NATIVE" --fix-missing --install-homebrew --requirements-only
+  if [[ $ONLINE -eq 1 ]]; then
+    "$NATIVE" --fix-missing --install-homebrew --requirements-only
+  else
+    "$NATIVE" --setup-python --requirements-only
+  fi
 else
-  ZERO_SKY_KIT="$KIT" PYTHONDONTWRITEBYTECODE=1 \
-    "$PYTHON" "$SETUP" --fix-missing --install-homebrew --requirements-only
+  if [[ $ONLINE -eq 1 ]]; then
+    ZERO_SKY_KIT="$KIT" PYTHONDONTWRITEBYTECODE=1 \
+      "$PYTHON" "$SETUP" --fix-missing --install-homebrew --requirements-only
+  else
+    ZERO_SKY_KIT="$KIT" PYTHONDONTWRITEBYTECODE=1 \
+      "$PYTHON" "$SETUP" --setup-python --requirements-only
+  fi
 fi
 result_status=$?
 

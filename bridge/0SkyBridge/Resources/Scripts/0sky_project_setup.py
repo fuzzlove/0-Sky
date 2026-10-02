@@ -63,9 +63,12 @@ IDENTITY_DEFAULT = Path(USER_CONFIG["paths"]["ssh_identity"])
 UDID_RE = re.compile(r"^[A-Za-z0-9-]{20,80}$")
 FILZA_BUNDLE_ID = "com.tigisoftware.Filza"
 FILZA_VERSION = "4.0"
-RUNTIME_MANAGER_VERSION = "2.4.9"
+RUNTIME_MANAGER_VERSION = "2.4.17"
 FILZA_CRYPTEX_ID = "codes.rambo.research.filza.permanent"
 FILZA_CRYPTEX_VERSION = "1.0.1789361256"
+FILZA_APP_NAME = "FilzaFixed.6907.app"
+FILZA_LEGACY_CRYPTEX_ID = "codes.rambo.research.crypstore.7d522d74f4d45382"
+FILZA_LEGACY_EXECUTABLE_SHA256 = "90aa3274f086da7d630ad797cda8279281cb622247958b9c1abdc061fcb840f1"
 APPREGISTRARD_ID = "codes.rambo.research.appregistrard"
 
 
@@ -390,10 +393,11 @@ def ssh_base(target: dict[str, Any], identity: Path) -> list[str]:
     ):
         raise PoCError("an exact-device private SSH host-key pin is required")
     alias = "0sky-device-" + hashlib.sha256(target["udid"].encode()).hexdigest()[:24]
+    known_hosts_value = str(known_hosts).replace("\\", "\\\\").replace(" ", "\\ ")
     return [
         "/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
         "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
-        "-o", f'UserKnownHostsFile="{known_hosts}"',
+        "-o", f"UserKnownHostsFile={known_hosts_value}",
         "-o", "GlobalKnownHostsFile=/dev/null", "-o", f"HostKeyAlias={alias}",
         "-o", "PasswordAuthentication=no", "-o", "KbdInteractiveAuthentication=no",
         "-i", str(identity),
@@ -736,6 +740,33 @@ os.chmod(p,0o640);os.chown(p,0,501);print("bridge-token-ready")'''
            log_file=run_dir / "bootstrap-bridge.log")
 
 
+def ensure_bootsplash_launcher(target: dict[str, Any], identity: Path,
+                               run_dir: Path) -> None:
+    """Stage the bounded UI launcher beside the persistent 0-Sky bridge."""
+    source = KIT / "automation/CrypStoreAutomation/bootsplash-launch.py"
+    if not source.is_file():
+        raise PoCError("verified kit is missing the 0-Sky startup launcher")
+    program = r"""import ast,json,os,pathlib,sys,tempfile
+path=pathlib.Path('/var/jb/usr/local/libexec/bootsplash-launch.py')
+payload=sys.stdin.buffer.read()
+ast.parse(payload.decode('utf-8'))
+if not path.parent.is_dir() or path.is_symlink():raise SystemExit('Unsafe launcher path')
+if path.exists() and path.read_bytes()==payload:
+ print(json.dumps({'changed':False}));raise SystemExit(0)
+fd,temp=tempfile.mkstemp(prefix='.0sky-splash-',dir=path.parent)
+try:
+ with os.fdopen(fd,'wb') as out:out.write(payload);out.flush();os.fsync(out.fileno())
+ os.chmod(temp,0o644);os.chown(temp,0,0);os.replace(temp,path)
+finally:
+ if os.path.exists(temp):os.unlink(temp)
+print(json.dumps({'changed':True,'startup':'persistent-0sky-bridge'}))"""
+    result = remote(target, identity, "/var/jb/usr/bin/python3 -c " + shlex.quote(program),
+                    input_data=source.read_bytes(), capture=True, timeout=30,
+                    log_file=run_dir / "bootsplash-launcher.log")
+    log(f"{target['instance']}: startup launcher "
+        + result.stdout.decode("utf-8", "replace").strip())
+
+
 def setup_companion(python: Path, target: dict[str, Any], identity: Path,
                     run_dir: Path, repair_pairing: bool) -> None:
     ensure_bootstrap_bridge(target, identity, run_dir)
@@ -902,7 +933,7 @@ def direct_components_current(target: dict[str, Any], identity: Path) -> bool:
         package_version(target, identity, "com.catvnc.server") == "0.0.2"
         and app_info(target, identity, "com.liquidsky.CrypStore").get("version") == "3.4.4"
         and link.get("version") == "1.9.0"
-        and link.get("build") == "45"
+        and link.get("build") == "48"
         and link.get("distribution") == "0-Sky Link"
         and link.get("registered") is True
         and link.get("executable") is True
@@ -920,8 +951,59 @@ def bootstrap_components(python: Path, target: dict[str, Any], identity: Path,
     run(command, timeout=3600, log_file=run_dir / "components.log")
 
 
+def filza_payload() -> dict[str, str]:
+    """Read the reviewed sealed-image identity from the verified kit."""
+    manifest = json.loads((KIT / "filza/source-manifest.json").read_text())
+    expected = {
+        "sealed_image_sha256": KIT / "filza/Filza-4.0-permanent.dmg",
+        "sealed_executable_sha256": None,
+        "sealed_info_sha256": None,
+    }
+    for key, path in expected.items():
+        value = manifest.get(key)
+        if not isinstance(value, str) or re.fullmatch(r"[0-9a-f]{64}", value) is None:
+            raise PoCError(f"Filza payload manifest has no valid {key}")
+        if path is not None and sha256(path) != value:
+            raise PoCError(f"Filza payload {key} does not match the sealed image")
+    if (manifest.get("bundle_id") != FILZA_BUNDLE_ID
+            or manifest.get("app_name") != FILZA_APP_NAME
+            or manifest.get("cryptex_id") != FILZA_CRYPTEX_ID):
+        raise PoCError("Filza payload identity differs from the reviewed image")
+    return manifest
+
+
+def legacy_filza_cryptex_state(target: dict[str, Any], identity: Path) -> str:
+    """Identify only the known, dedicated Filza generation that regressed after reboot."""
+    program = r'''import hashlib,os,pathlib,plistlib,sys
+root=pathlib.Path('/private/var/run/com.apple.security.cryptexd/mnt')
+mounts=[p for p in root.glob(sys.argv[1]+'.*') if os.path.ismount(p)]
+if not mounts:print('absent');raise SystemExit(0)
+for mount in mounts:
+ apps=list((mount/'Applications').glob('*.app'))
+ if len(apps)!=1 or apps[0].name!='Filza.app':print('conflict');raise SystemExit(0)
+ try:
+  info=plistlib.loads((apps[0]/'Info.plist').read_bytes())
+  h=hashlib.sha256((apps[0]/'Filza').read_bytes()).hexdigest()
+  if info.get('CFBundleIdentifier')!='com.tigisoftware.Filza' or h!=sys.argv[2]:
+   print('conflict');raise SystemExit(0)
+ except (OSError,ValueError):print('conflict');raise SystemExit(0)
+print('known')'''
+    result = remote(
+        target, identity,
+        "/var/jb/usr/bin/python3 -c " + shlex.quote(program)
+        + " " + shlex.quote(FILZA_LEGACY_CRYPTEX_ID)
+        + " " + shlex.quote(FILZA_LEGACY_EXECUTABLE_SHA256),
+        check=False, capture=True, timeout=30,
+    )
+    state = result.stdout.decode("utf-8", "replace").strip()
+    if result.returncode or state not in {"absent", "known", "conflict"}:
+        raise PoCError("cannot identify the older Filza Cryptex safely")
+    return state
+
+
 def filza_current(target: dict[str, Any], identity: Path) -> dict[str, Any]:
-    """Return metadata for reviewed Filza in either durable registration."""
+    """Return Filza only when LaunchServices resolves to reviewed code bytes."""
+    payload = filza_payload()
     info = app_info(target, identity, FILZA_BUNDLE_ID)
     path = str(info.get("path", ""))
     expected_mount = (
@@ -932,24 +1014,81 @@ def filza_current(target: dict[str, Any], identity: Path) -> dict[str, Any]:
     mcm_prefix = "/private/var/containers/Bundle/Application/"
     if (
         info.get("version") != FILZA_VERSION
+        or info.get("registered") is not True
+        or info.get("executable") is not True
+        or not path.endswith("/" + FILZA_APP_NAME)
         or not (path.startswith(expected_mount) or path.startswith(mcm_prefix))
     ):
         return {}
+    probe_program = r'''import hashlib,json,pathlib,plistlib,sys
+app=pathlib.Path(sys.argv[1]); expected_exe,expected_info=sys.argv[2:]
+def sha(path):
+ h=hashlib.sha256()
+ with path.open('rb') as stream:
+  for block in iter(lambda:stream.read(1048576),b''):h.update(block)
+ return h.hexdigest()
+try:
+ info=plistlib.loads((app/'Info.plist').read_bytes())
+ mounts=list(pathlib.Path('/private/var/run/com.apple.security.cryptexd/mnt').glob('codes.rambo.research.filza.permanent.*/Applications/FilzaFixed.6907.app'))
+ sealed=any(sha(mount/'Info.plist')==expected_info and sha(mount/'Filza')==expected_exe for mount in mounts)
+ ok=(info.get('CFBundleIdentifier')=='com.tigisoftware.Filza' and
+     info.get('CFBundleExecutable')=='Filza' and
+     sha(app/'Info.plist')==expected_info and sha(app/'Filza')==expected_exe and sealed)
+except (OSError,ValueError):ok=False
+print(json.dumps({'reviewed_bytes':ok}))'''
     probe = remote(
         target,
         identity,
-        "test -f " + shlex.quote(path + "/Info.plist")
-        + " && test -x " + shlex.quote(path + "/Filza"),
+        "/var/jb/usr/bin/python3 -c " + shlex.quote(probe_program)
+        + " " + shlex.quote(path)
+        + " " + shlex.quote(payload["sealed_executable_sha256"])
+        + " " + shlex.quote(payload["sealed_info_sha256"]),
         check=False,
         capture=True,
-        timeout=20,
+        timeout=30,
     )
-    return info if probe.returncode == 0 else {}
+    try:
+        matched = probe.returncode == 0 and json.loads(probe.stdout).get("reviewed_bytes") is True
+    except (ValueError, TypeError):
+        matched = False
+    if not matched or legacy_filza_cryptex_state(target, identity) != "absent":
+        return {}
+    return info
+
+
+def verify_filza_launch(target: dict[str, Any], identity: Path) -> None:
+    """Require the reviewed LaunchServices URL to survive a cold start."""
+    program = r'''import pathlib,subprocess,sys,time
+expected=sys.argv[1]+'/Filza'
+paths={expected,expected.removeprefix('/private')}
+opened=subprocess.run(['/var/jb/usr/bin/uiopen','--bundleid','com.tigisoftware.Filza'],capture_output=True,timeout=30)
+if opened.returncode:raise SystemExit('Filza uiopen failed: '+opened.stderr.decode(errors='replace')[-400:])
+seen=False
+for _ in range(16):
+ rows=subprocess.run(['ps','-axo','command='],capture_output=True,text=True,timeout=15,check=True).stdout.splitlines()
+ alive=any(row.strip().split(None,1)[0] in paths for row in rows if row.strip())
+ if seen and not alive:raise SystemExit('Filza exited during launch verification')
+ seen=seen or alive
+ time.sleep(.5)
+if not seen:raise SystemExit('Filza did not reach a running process')
+print('Filza launch PASS')'''
+    info = filza_current(target, identity)
+    if not info:
+        raise PoCError("Filza LaunchServices URL does not contain the reviewed signed code")
+    remote(
+        target, identity,
+        "/var/jb/usr/bin/python3 -c " + shlex.quote(program)
+        + " " + shlex.quote(str(info["path"])),
+        timeout=90,
+    )
 
 
 def install_filza(python: Path, target: dict[str, Any], identity: Path,
                   run_dir: Path) -> dict[str, Any]:
     """Install and register the last post-reboot-validated Filza 4.0 DMG."""
+    payload = filza_payload()
+    if legacy_filza_cryptex_state(target, identity) == "conflict":
+        raise PoCError("the older Filza Cryptex is not the known single-app generation")
     filza = KIT / "filza"
     command = [
         python,
@@ -964,25 +1103,95 @@ def install_filza(python: Path, target: dict[str, Any], identity: Path,
     ]
     run(command, timeout=960, log_file=run_dir / "filza-install.log")
 
-    register = r'''import pathlib,subprocess
+    register = r'''import hashlib,json,os,pathlib,plistlib,subprocess,sys
 root=pathlib.Path("/private/var/run/com.apple.security.cryptexd/mnt")
 prefix="codes.rambo.research.filza.permanent."
+expected_exe,expected_info=sys.argv[1:]
+def sha(path):
+ h=hashlib.sha256()
+ with path.open('rb') as stream:
+  for block in iter(lambda:stream.read(1048576),b''):h.update(block)
+ return h.hexdigest()
+def matches(app):
+ try:
+  i=plistlib.loads((app/'Info.plist').read_bytes())
+  return (i.get('CFBundleIdentifier')=='com.tigisoftware.Filza' and
+          i.get('CFBundleExecutable')=='Filza' and
+          sha(app/'Info.plist')==expected_info and sha(app/'Filza')==expected_exe)
+ except (OSError,ValueError):return False
+def registered():
+ lines=subprocess.check_output(['/var/jb/usr/bin/uicache','-l'],text=True,timeout=30).splitlines()
+ return [line.split(' : ',1)[1].strip() for line in lines if line.startswith('com.tigisoftware.Filza : ')]
+def call(*argv):
+ done=subprocess.run(argv,text=True,capture_output=True,timeout=120)
+ if done.returncode:raise RuntimeError('Filza registration failed: '+(done.stderr or done.stdout)[-800:])
+ return done
 candidates=[]
 for mount in root.glob(prefix+"*"):
  app=mount/"Applications/FilzaFixed.6907.app"
- if (app/"Info.plist").is_file() and (app/"Filza").is_file():
+ if app.is_dir() and os.path.ismount(mount) and matches(app):
   candidates.append(app)
-if not candidates: raise SystemExit("mounted Filza payload not found after Cryptex install")
-app=max(candidates,key=lambda p:p.parent.parent.stat().st_mtime)
-subprocess.run(["/var/jb/usr/bin/uicache","-p",str(app)],check=True)
-print(app)'''
+if len(candidates)!=1:raise SystemExit('expected one mounted reviewed Filza Cryptex; found '+str(len(candidates)))
+app=candidates[0]
+registrars=[p for p in root.glob('codes.rambo.research.appregistrard.*/usr/bin/appregistrard') if p.is_file() and os.path.ismount(p.parent.parent.parent)]
+if len(registrars)>1:raise SystemExit('multiple appregistrard generations are mounted')
+registrar=str(registrars[0]) if registrars else None
+paths=registered()
+if len(paths)>1:raise SystemExit('multiple Filza LaunchServices URLs')
+old=paths[0] if paths else None
+if old and not matches(pathlib.Path(old)):
+ if not old.startswith(('/private/var/containers/Bundle/Application/','/var/containers/Bundle/Application/',str(root)+'/')):
+  raise SystemExit('Filza LaunchServices URL is outside supported roots')
+ if registrar:
+  args=[registrar,'unregister']
+  if not pathlib.Path(old).exists():args.append('--allow-missing')
+  call(*args,old)
+ else:call('/var/jb/usr/bin/uicache','-u',old)
+if registrar:
+ call(registrar,'register','--path',str(app),'--absolute','--no-install-coordination')
+ copies=[]
+ for container in pathlib.Path('/private/var/containers/Bundle/Application').glob('*'):
+  copy=container/'FilzaFixed.6907.app'
+  if not matches(copy):continue
+  meta=container/'.com.apple.mobile_container_manager.metadata.plist'
+  try:
+   if plistlib.loads(meta.read_bytes()).get('MCMMetadataIdentifier')!='com.tigisoftware.Filza':continue
+  except (OSError,ValueError):continue
+  copies.append((container.stat().st_mtime,str(copy)))
+ if not copies:raise SystemExit('appregistrard did not materialize a reviewed Filza MCM copy')
+ destination=max(copies)[1]
+ paths=registered()
+ if paths!=[destination]:
+  if paths:
+   stale=paths[0]
+   args=[registrar,'unregister']
+   if not pathlib.Path(stale).exists():args.append('--allow-missing')
+   call(*args,stale)
+  call(registrar,'register','--path',destination,'--absolute')
+else:
+ destination=str(app)
+ if registered()!=[destination]:call('/var/jb/usr/bin/uicache','-p',destination)
+if registered()!=[destination] or not matches(pathlib.Path(destination)):
+ raise SystemExit('LaunchServices retained a stale Filza URL or stale code')
+print(json.dumps({'registered_path':destination,'reviewed_bytes':True}))'''
     remote(
         target,
         identity,
-        "/var/jb/usr/bin/python3 -c " + shlex.quote(register),
-        timeout=120,
+        "/var/jb/usr/bin/python3 -c " + shlex.quote(register)
+        + " " + shlex.quote(payload["sealed_executable_sha256"])
+        + " " + shlex.quote(payload["sealed_info_sha256"]),
+        timeout=300,
         log_file=run_dir / "filza-registration.log",
     )
+    if legacy_filza_cryptex_state(target, identity) == "known":
+        run([
+            python,
+            KIT / "automation/CrypStoreAutomation/native-install/uninstall_cryptex_native.py",
+            FILZA_LEGACY_CRYPTEX_ID,
+            target["udid"],
+        ], timeout=180, log_file=run_dir / "filza-legacy-retirement.log")
+        if legacy_filza_cryptex_state(target, identity) != "absent":
+            raise PoCError("the older Filza Cryptex remained mounted after retirement")
     info = filza_current(target, identity)
     if not info:
         raise PoCError(
@@ -1139,6 +1348,8 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         else:
             log(f"{target['instance']}: latest CatVNC 0.0.2, 0-Sky Control 3.4.4, and 0-Sky Link 1.9.0 already present; preserving them")
 
+        ensure_bootsplash_launcher(target, args.identity, run_dir)
+
         begin_stage(report, "filza-4.0-cryptex")
         filza = filza_current(target, args.identity)
         if args.force_components or args.force_filza or not filza:
@@ -1148,6 +1359,7 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
                 f"{target['instance']}: reviewed Filza 4.0 Cryptex already "
                 "mounted and registered; preserving it"
             )
+        verify_filza_launch(target, args.identity)
 
         final = {
             "bridge": bridge_status(target, args.identity),
@@ -1171,7 +1383,7 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         passed = (final["catvnc"] == "0.0.2" and
                   final["commissary"].get("version") == "3.4.4" and
                   final["zero_sky"].get("version") == "1.9.0" and
-                  final["zero_sky"].get("build") == "45" and
+                  final["zero_sky"].get("build") == "48" and
                   final["zero_sky"].get("distribution") == "0-Sky Link" and
                   final["zero_sky"].get("registered") is True and
                   final["zero_sky"].get("executable") is True and

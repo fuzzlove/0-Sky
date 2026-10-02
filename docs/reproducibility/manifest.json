@@ -1,0 +1,120 @@
+{
+  "schema_version": 1,
+  "checkpoint": {
+    "name": "0sky-reproducibility-2026-10-02",
+    "date": "2026-10-02",
+    "canonical_origin": "https://github.com/fuzzlove/0-Sky",
+    "base_commit": "7ce2bc2ac29f95543ee5857b15834cfb1ef96f82",
+    "source_commit": "PENDING_SOURCE_COMMIT",
+    "final_commit": "PENDING_FINAL_COMMIT"
+  },
+  "supported_target": {
+    "hardware_model": "iPhone13,2",
+    "marketing_model": "iPhone 12",
+    "architecture": "arm64e",
+    "os_version": "27.0",
+    "build_version": "24A5390f",
+    "device_identifier": "operator-supplied; never persisted"
+  },
+  "host_toolchain": {
+    "macos": "26.5.1 (25F80), arm64",
+    "darwin": "25.5.0",
+    "xcode": "26.6 (17F113)",
+    "iphoneos_sdk": "26.5",
+    "deployment_target": "26.0",
+    "clang": "21.0.0 (clang-2100.1.1.101)",
+    "swift": "6.3.3",
+    "git": "2.50.1",
+    "python_system": "3.14.7",
+    "python_project": "3.12.14",
+    "homebrew": "7.0.7",
+    "make": "GNU Make 3.81",
+    "dpkg_deb": "1.23.11 darwin-arm64",
+    "python_packages": {
+      "pymobiledevice3": "11.3.1",
+      "click": "8.5.0",
+      "construct": "2.10.70",
+      "cryptography": "50.0.1",
+      "pyusb": "1.3.1",
+      "uvicorn": "0.53.0"
+    },
+    "srdtool": "unavailable; acquire from Apple's authorized SRD repository"
+  },
+  "source_roots": [
+    {"path": "bridge", "role": "macOS Bridge, device runtime, host tools, kit scripts and tests", "state": "tracked"},
+    {"path": "control", "role": "0-Sky Control and root helper", "state": "tracked"},
+    {"path": "link", "role": "0-Sky Link app and resources", "state": "tracked"},
+    {"path": "compat", "role": "compatibility runtime source", "state": "tracked"},
+    {"path": "compatibility", "role": "compatibility definitions", "state": "tracked"},
+    {"path": "tools", "role": "build, conversion, validation and test tools", "state": "tracked"},
+    {"path": "scripts", "role": "release and reproducibility entry points", "state": "tracked"},
+    {"path": "manifests", "role": "versioned component manifests", "state": "tracked"},
+    {"path": "docs", "role": "project and reproducibility documentation", "state": "tracked"},
+    {"path": "addons/PoC/appsync-afc2d-srd-port", "role": "AFC2/AppSync sources, patches and preserved variants", "state": "tracked"}
+  ],
+  "repositories": [
+    {"path": ".", "origin": "https://github.com/fuzzlove/0-Sky", "base_revision": "7ce2bc2ac29f95543ee5857b15834cfb1ef96f82", "checkpoint_revision": "PENDING_FINAL_COMMIT", "state": "tracked"},
+    {"path": "addons/PoC/appregistrard", "origin": "https://github.com/insidegui/appregistrard.git", "base_revision": "691d10b59c441782b20a200a6aea94c1b7848084", "checkpoint_revision": "5e3c55eca13271e4746f42e889ab622136b7385f", "state": "external-patched"},
+    {"path": "addons/PoC/srdzsh", "origin": "https://github.com/fuzzlove/srdzsh", "base_revision": "dfb0f1e7d484e5f9783777797c8c969dba1b8656", "checkpoint_revision": "082ee91b95e8cb1701472cbd9c73665faf7df3d0", "state": "external-patched"},
+    {"path": "addons/PoC/liquidskysecurity-website", "origin": "https://github.com/fuzzlove/liquidskysecurity.git", "revision": "337ec36374ee958f89005df417133783c5b004e9", "state": "external-clean-not-required-for-build"},
+    {"path": "artifacts/compatibility/toolchains/theos", "origin": "https://github.com/theos/theos.git", "revision": "dd5c14bb9d91311e221d51b5bfb8c9e5948156db", "state": "downloaded-toolchain"},
+    {"path": ".build/ellekit-source", "origin": "https://github.com/tealbathingsuit/ellekit.git", "revision": "1017a0d09606ea49ba8bc4d6cccc530d372e640e", "state": "generated-cache"},
+    {"path": ".build/evander-inspect", "origin": "https://github.com/elihwyma/Evander", "revision": "0059e74d91e8574bee454e748ea6cc188e8b43db", "state": "generated-cache"},
+    {"path": ".build/opainject-source", "origin": "https://github.com/opa334/opainject.git", "revision": "6308f6006ee1bf548d5b58bd8ab7fb4e5a687eaf", "state": "generated-cache"},
+    {"path": ".build/sileo-patch-base-20260930134339", "origin": "local clone of .build/sileo-source-inspect", "revision": "97eeeacff7ff0adff89f0fc7ace587e1e5c1b21d", "state": "generated-cache"},
+    {"path": ".build/sileo-patched-debug-20260930134225", "origin": "local clone of .build/sileo-source-inspect", "revision": "c9f70158a037dc76b91c450e72af2de0514dd3ee", "state": "generated-cache"},
+    {"path": ".build/sileo-source-inspect", "origin": "https://github.com/fuzzlove/Sileo.git", "revision": "c9f70158a037dc76b91c450e72af2de0514dd3ee", "state": "generated-cache"},
+    {"path": "addons/PoC/appregistrard-swiftpm/checkouts/LaunchKit", "origin": "SwiftPM cache", "revision": "3131e1ed1aad72886684d707aee2eda425a40aa5", "state": "generated-cache"},
+    {"path": "addons/PoC/appregistrard-swiftpm/checkouts/TatsuKit", "origin": "SwiftPM cache", "revision": "5b3906474fedf9a8653d0aa4f2a5ddc06f1ca411", "state": "generated-cache"},
+    {"path": "addons/PoC/appregistrard-swiftpm/checkouts/TrustCache", "origin": "SwiftPM cache", "revision": "7a37c1cfb71d7d64d632c8b416bd08d745886db2", "state": "generated-cache"},
+    {"path": "addons/PoC/appregistrard-swiftpm/checkouts/swift-argument-parser", "origin": "SwiftPM cache", "revision": "41982a3656a71c768319979febd796c6fd111d5c", "state": "generated-cache"},
+    {"path": "artifacts/compatibility/cr4shed/upstream/Cr4shed", "origin": "https://github.com/Muirey03/Cr4shed.git", "revision": "f8f389272946c2da383ff09bebcefb746160dc59", "state": "generated-cache"},
+    {"path": "artifacts/compatibility/cr4shed/upstream/MRYIPC", "origin": "https://github.com/Muirey03/MRYIPC.git", "revision": "77ea5ede76ef7a8b462d9661aeaef7e15f2dfa8c", "state": "generated-cache"},
+    {"path": "artifacts/compatibility/cr4shed/upstream/libcephei", "origin": "https://github.com/hbang/libcephei.git", "revision": "7ad69a903cffa0b8240f8eb1a9afb27c15d8fe57", "state": "generated-cache"},
+    {"path": "artifacts/compatibility/cr4shed/work/theos", "origin": "https://github.com/theos/theos.git", "revision": "dd5c14bb9d91311e221d51b5bfb8c9e5948156db", "state": "generated-cache"}
+  ],
+  "theos_submodules": {
+    "vendor/dm.pl": "d9a3b72e274226dd2823c0a7c1d6d05099f4f51c",
+    "vendor/include": "13c1f17176d7efe6871551cd69a75b71ac4eeaf1",
+    "vendor/lib": "6f2af307568e6b8c52181d26314b0cd69ffaf188",
+    "vendor/logos": "777925d1add4ee3485a2432a6f6d5e3ded59de7b",
+    "vendor/nic": "4e7adcbeac2e4636b91e2f76341adfe4c4d0ceec",
+    "vendor/orion": "762159dc214d5aafa2edfc7554c659fc3c658b5b",
+    "vendor/orion/fishhook": "aadc161ac3b80db07a9908851839a17ba63a9eb1",
+    "vendor/swift-support": "4cf59ff04cdb2ceb27ea2228753e0497297b6182",
+    "vendor/templates": "6c3944e281c4726f1383755d0fbb642840312d28"
+  },
+  "items": [
+    {"path": "docs/reproducibility/patches/appregistrard-691d10b-to-5e3c55e.patch", "origin": "local checkpoint commit", "version": "5e3c55eca13271e4746f42e889ab622136b7385f", "sha256": "986b1eda01f9268c386a971b15efe182f6be8ff41be8dcfe6881eaff609e3503", "kind": "tracked", "verify_in_checkout": true},
+    {"path": "docs/reproducibility/patches/srdzsh-dfb0f1e-to-082ee91.patch", "origin": "local checkpoint commit", "version": "082ee91b95e8cb1701472cbd9c73665faf7df3d0", "sha256": "913ff13b7ab7c35c4220ce472f720ce193f56362c2de7d3afbdf3171363f7a35", "kind": "tracked", "verify_in_checkout": true},
+    {"path": "addons/PoC/appsync-afc2d-srd-port/variants/import-pointer-v1/afc2dService.xm", "origin": "local ignored build snapshot", "version": "import-pointer-v1", "sha256": "18cfdf1a6357283d0f0a13d88eae12a0f9ddcb2c0cbc235de73204a5f72bcc0e", "kind": "tracked", "verify_in_checkout": true},
+    {"path": "addons/PoC/appsync-afc2d-srd-port/variants/import-pointer-v2/afc2dService.xm", "origin": "local ignored build snapshot", "version": "import-pointer-v2", "sha256": "1e772db601b48fbf14e53a54ab6a18755f8b5f65579cf2cde5f02880eb0774ee", "kind": "tracked", "verify_in_checkout": true},
+    {"path": "addons/PoC/appsync-afc2d-srd-port/patches/afc2d/0001-0sky-ios26-system-afcd.patch", "origin": "local research source", "version": "checkpoint", "sha256": "28988e72179140ce3ab7c76c75723f0611b4b25a930b89535ac7ef7e73e07f9e", "kind": "tracked", "verify_in_checkout": true},
+    {"path": "addons/PoC/appsync-afc2d-srd-port/patches/afc2d/afcd-entitlements.plist", "origin": "local research source", "version": "checkpoint", "sha256": "982e0fc481548665e8a67b0b79d1929104e2f8abf869913868a921cc18ee4636", "kind": "tracked", "verify_in_checkout": true},
+    {"path": "addons/PoC/appsync-afc2d-srd-port/patches/afc2d/com.apple.afc2.service-agent.plist", "origin": "local research source", "version": "checkpoint", "sha256": "0d59c68133a16de583754decfcc6111f85beb6b91ab20eeb6b9a07478c1675d8", "kind": "tracked", "verify_in_checkout": true},
+    {"path": "addons/PoC/appsync-afc2d-srd-port/patches/appsync/0001-0sky-ios26-rootless.patch", "origin": "local research source", "version": "checkpoint", "sha256": "b0b7cd0e24e1ace04209af23af9cafc52592b739f58ac9ea9d2a68701147dfb7", "kind": "tracked", "verify_in_checkout": true},
+    {"path": "downloads/appsync-235aca6cddfbdc9fa87fcb5b2aec2df37ed6d65a.tar.gz", "origin": "https://github.com/akemin-dayo/AppSync/archive/235aca6cddfbdc9fa87fcb5b2aec2df37ed6d65a.tar.gz", "version": "235aca6cddfbdc9fa87fcb5b2aec2df37ed6d65a", "sha256": "f816f6e63dc2f8852855f4bce3e047487a2876f92484ae1fc90caf9dd6eea1e7", "kind": "downloaded", "verify_in_checkout": false},
+    {"path": "downloads/afc2d-7587154c9eed60636fe9d8d2ca0b286b59177b0a.tar.gz", "origin": "https://github.com/Cannathea/afc2d-arm64/archive/7587154c9eed60636fe9d8d2ca0b286b59177b0a.tar.gz", "version": "7587154c9eed60636fe9d8d2ca0b286b59177b0a", "sha256": "92b804570960798f82a42beffa430d55cb1271b5e87f68272d3881ad5d33e80a", "kind": "downloaded", "verify_in_checkout": false},
+    {"path": "inputs/afcd-iPhone13,2-24A5390f", "origin": "authorized exact-build SRD /usr/libexec/afcd", "version": "24A5390f", "sha256": "fd53a6c591dedf2b1c30e8d5c542f3df5e80099306607a52eaa4e4f2958c87f8", "kind": "device-derived-unavailable", "verify_in_checkout": false},
+    {"path": "inputs/lockdownd-iPhone13,2-24A5390f", "origin": "authorized exact-build SRD /usr/libexec/lockdownd", "version": "24A5390f", "sha256": "e6844bdf52dd3dfab0558c004f85506ca56892c69f318df88aedfe3306e1ebf7", "kind": "device-derived-unavailable", "verify_in_checkout": false},
+    {"path": "dist/ai.akemi.appsyncunified_116.0+0sky26.1_iphoneos-arm64.deb", "origin": "generated", "version": "116.0+0sky26.1", "sha256": "0aa9de47e00fe58940027d6af3efef56aae5060731d82de64ade6b63e910a597", "kind": "generated-not-bundled", "verify_in_checkout": false},
+    {"path": "dist/com.cannathea.afc2d-arm64_1.2.0+0sky27.5_iphoneos-arm64.deb", "origin": "generated", "version": "1.2.0+0sky27.5", "sha256": "50c2d7dd3fd53ed399c88a0ef748a1553a2cba49780219260624a764f61fe049", "kind": "generated-unverified-not-bundled", "verify_in_checkout": false}
+  ],
+  "excluded_local_state": [
+    {"path": ".build", "reason": "generated caches and cloned build inputs"},
+    {"path": "artifacts", "reason": "generated packages/toolchains; revisions recorded above"},
+    {"path": "converted", "reason": "generated packages and third-party payloads"},
+    {"path": "installer-verification", "reason": "generated/device-derived reports and payloads"},
+    {"path": "reports", "reason": "raw logs may contain unique identifiers and local paths"},
+    {"path": "addons/PoC/appsync-afc2d-srd-port/inputs", "reason": "device-derived Apple binaries"},
+    {"path": "addons/PoC/appsync-afc2d-srd-port/cryptex*", "reason": "generated cryptex roots"},
+    {"path": "pairing-records and known_hosts", "reason": "trust secrets/state"}
+  ],
+  "secrets_required_by_name": [
+    {"name": "SRD_UDID", "acquisition": "select the authorized SRD at restore time"},
+    {"name": "IOS_DEVELOPMENT_IDENTITY", "acquisition": "operator Keychain/Apple developer account"},
+    {"name": "SRD pairing record", "acquisition": "pair the selected SRD on the clean Mac; never export from checkpoint host"},
+    {"name": "SSH host key pin", "acquisition": "verify interactively against the selected SRD"},
+    {"name": "private signing key", "acquisition": "operator-controlled Keychain; never stored in repository"}
+  ]
+}

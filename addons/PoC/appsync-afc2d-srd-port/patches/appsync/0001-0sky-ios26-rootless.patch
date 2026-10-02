@@ -1,0 +1,70 @@
+diff --git a/Makefile b/Makefile
+index 6fb121e..b5b8a4c 100644
+--- a/Makefile
++++ b/Makefile
+@@ -1,5 +1,5 @@
+-export TARGET = iphone:clang:latest:5.0
+-export ARCHS = armv7 armv7s arm64 arm64e
++export TARGET = iphone:clang:26.5:26.0
++export ARCHS = arm64 arm64e
+ export DEBUG = 0
+ 
+ THEOS_PACKAGE_DIR_NAME = debs
+@@ -9,8 +9,6 @@ include $(THEOS)/makefiles/common.mk
+ 
+ SUBPROJECTS += AppSyncUnified-installd
+ SUBPROJECTS += AppSyncUnified-FrontBoard
+-SUBPROJECTS += pkg-actions
+-SUBPROJECTS += asu_inject
+ 
+ include $(THEOS_MAKE_PATH)/aggregate.mk
+ 
+diff --git a/control b/control
+index 3f73145..984e6e5 100644
+--- a/control
++++ b/control
+@@ -1,5 +1,5 @@
+-Conflicts: us.hackulo.appsync50, us.hackulo.appsync50plus, com.hackyouriphone.appsync7, com.teiron.ppsync, appsync50plus2.25pp, com.linusyang.appsync, com.sull.appsyncunified, com.sull.appsyncunifiedbeta, com.xsellize.appsync50, com.xsellize.appsync50plus, appsync50plus.178, appsync50plus2.178, cydia.net.angelxwind.appsyncunified, com.ifucker.appsync, com.sexyphonetech.appsyncunified, appsyncunifiedofficial, org.digbick.asufixed, cn.mingmei.asu623517234615234813, technology.goated.appsync, technology.goated.appsyncunified, vaginalfisting.appsynctool, science.xnu.substitute, akemi.appsink, akemi.appsyncunifed, akemi.appsyncunifed2, akemi.appsyncunifedpatched, appsyncpatched, appsyncrootless, weaponized.autism.technology.appsyncunified, ellekit (< 1.1)
++Conflicts: us.hackulo.appsync50, us.hackulo.appsync50plus, com.hackyouriphone.appsync7, com.teiron.ppsync, appsync50plus2.25pp, com.linusyang.appsync, com.sull.appsyncunified, com.sull.appsyncunifiedbeta, com.xsellize.appsync50, com.xsellize.appsync50plus, appsync50plus.178, appsync50plus2.178, cydia.net.angelxwind.appsyncunified, com.ifucker.appsync, com.sexyphonetech.appsyncunified, appsyncunifiedofficial, org.digbick.asufixed, cn.mingmei.asu623517234615234813, technology.goated.appsync, technology.goated.appsyncunified, vaginalfisting.appsynctool, science.xnu.substitute, akemi.appsink, akemi.appsyncunifed, akemi.appsyncunifed2, akemi.appsyncunifedpatched, appsyncpatched, appsyncrootless, weaponized.autism.technology.appsyncunified, ellekit (<< 1.1)
+-Depends: firmware (>= 5.0), mobilesubstrate (>= 0.9.5100), firmware (<= 18.2)
++Depends: firmware (>= 26.0), ellekit (>= 1.1) | mobilesubstrate (>= 0.9.5100)
+ Depiction: https://cydia.akemi.ai/?page/ai.akemi.appsyncunified
+ Maintainer: Karen/あけみ <karen@akemi.ai>
+ Homepage: https://cydia.akemi.ai/
+@@ -7,8 +7,8 @@ Provides: appsync, net.angelxwind.appsyncunified
+ Replaces: us.hackulo.appsync50, net.angelxwind.appsyncunified
+ Package: ai.akemi.appsyncunified
+ Name: AppSync Unified
+-Version: 116.0
++Version: 116.0+0sky26.1
+ Architecture: iphoneos-arm
+-Description: Enables the ability to install unsigned/fakesigned iOS applications.
++Description: AppSync Unified rebuilt for the 0-Sky iOS 26+ rootless runtime. Runtime compatibility requires device validation.
+ Section: Tweaks
+ Author: Karen/あけみ, Linus Yang <karen@akemi.ai>
+diff --git a/layout/Library/LaunchDaemons/ai.akemi.asu_inject.plist b/layout/Library/LaunchDaemons/ai.akemi.asu_inject.plist
+deleted file mode 100644
+index 3bd17c2..0000000
+--- a/layout/Library/LaunchDaemons/ai.akemi.asu_inject.plist
++++ /dev/null
+@@ -1,20 +0,0 @@
+-<?xml version="1.0" encoding="UTF-8"?>
+-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+-<plist version="1.0">
+-<dict>
+-	<key>RunAtLoad</key>
+-	<true/>
+-	<key>KeepAlive</key>
+-	<false/>
+-	<key>Label</key>
+-	<string>ai.akemi.asu_inject</string>
+-	<key>ProgramArguments</key>
+-	<array>
+-		<string>/usr/bin/asu_inject</string>
+-	</array>
+-	<key>StandardErrorPath</key>
+-	<string>/dev/null</string>
+-	<key>StandardOutPath</key>
+-	<string>/dev/null</string>
+-</dict>
+-</plist>

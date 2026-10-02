@@ -43,3 +43,29 @@ pairing-records/
 known_hosts
 dummy_key
 control/TrollStoreLite/Resources/trollstorehelper
+
+# Local checkpoints and device-derived/rehearsal output.
+/checkpoints/
+/converted/
+/installer-verification/
+/reports/
+/addons/test_folder/
+/link/dist-control-*/
+/link/link-transaction-*.json
+
+# AFC2 research outputs. Only sources, patches, scripts, sanitized evidence,
+# and explicitly versioned variants belong in Git.
+/addons/PoC/appsync-afc2d-srd-port/build/
+/addons/PoC/appsync-afc2d-srd-port/cryptex*/
+/addons/PoC/appsync-afc2d-srd-port/device-validation/
+/addons/PoC/appsync-afc2d-srd-port/downloads/
+/addons/PoC/appsync-afc2d-srd-port/dist/
+/addons/PoC/appsync-afc2d-srd-port/inputs/
+/addons/PoC/appsync-afc2d-srd-port/recovery/
+/addons/PoC/appsync-afc2d-srd-port/rejected/
+/addons/PoC/appsync-afc2d-srd-port/reports/
+
+# Independent repositories restored at pinned revisions by the restore script.
+/addons/PoC/appregistrard/
+/addons/PoC/srdzsh/
+/addons/PoC/liquidskysecurity-website/

@@ -11,7 +11,8 @@ from typing import Any
 
 LEVELS = {"ERROR", "WARN", "INFO", "DEBUG", "TRACE"}
 COMPONENTS = {"CORE", "IPC", "NETWORK", "PRIVACY", "BATTERY", "THERMAL",
-              "PROCESS", "PACKAGE", "SNAPSHOT", "AUTOMATION", "RECOVERY"}
+              "PROCESS", "PACKAGE", "SNAPSHOT", "AUTOMATION", "RECOVERY",
+              "TOOLKIT"}
 SENSITIVE = ("password", "passwd", "secret", "token", "authorization",
              "cookie", "keychain", "clipboard", "notification_content")
 

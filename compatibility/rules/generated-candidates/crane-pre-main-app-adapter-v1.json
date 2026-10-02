@@ -1,0 +1,47 @@
+{
+  "confidence": "HIGH",
+  "derived_from": [
+    "paid-crane-1.3.18-2-ios27-srd-port",
+    "controlled-security-test-app-1.3.2"
+  ],
+  "evidence_fingerprint": "2a31e2141cbc126320d377ab12dff1a9f779ed43bcfc7666d9420f52db61aea7",
+  "id": "crane-pre-main-app-adapter-v1",
+  "match": [
+    "user explicitly selects an app as a paid Crane target",
+    "IPA contains one unencrypted arm64 or arm64e application executable",
+    "application executable has validated zeroed Mach-O load-command padding",
+    "reviewed paid Crane dylib SHA-256 is baae65e3d9122590a5c646aa8de5f8831eecb5f2b22bb1af69cb2b1356215328"
+  ],
+  "maturity": "TESTED",
+  "preconditions": [
+    "operator owns and supplied the paid Crane package",
+    "source IPA passes bounded path and archive validation",
+    "application entitlements can be preserved by the authorized SRD signing backend",
+    "target bundle is explicitly selected in 0-Sky Control"
+  ],
+  "production_eligible": false,
+  "rollback": "restore the prior registered app and private data state; discard the derivative IPA",
+  "schema_version": 1,
+  "title": "Load paid Crane before application main on an iOS 27 SRD",
+  "transformation": {
+    "add_load_command": "@executable_path/Frameworks/0SkyCraneBootstrap.dylib",
+    "embed": [
+      "reviewed Crane.dylib",
+      "0SkyCraneBootstrap.dylib",
+      "lib0SkySubstrateFunctionShim.dylib"
+    ],
+    "state_transport": "private-data-handoff-v1",
+    "type": "structured_macho_and_bundle_adapter"
+  },
+  "validation": [
+    "strict Mach-O parse and signature verification",
+    "application registration and launch",
+    "Crane helper availability",
+    "temporary container creation",
+    "one or more filesystem hooks installed",
+    "controlled marker lands only in selected container",
+    "default-container rollback reports zero hooks",
+    "temporary state and unrelated tweak overrides are restored"
+  ],
+  "version": 1
+}

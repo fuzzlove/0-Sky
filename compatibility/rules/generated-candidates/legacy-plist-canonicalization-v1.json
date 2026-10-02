@@ -1,0 +1,33 @@
+{
+  "confidence": "HIGH",
+  "derived_from": [
+    "doodle-port-package-evolution"
+  ],
+  "evidence_fingerprint": "c218aaa85c5cbc0e145b4f463a285d7694588c877fa760a17d7a42efdd6cbd54",
+  "id": "legacy-plist-canonicalization-v1",
+  "match": [
+    "declared tweak filter is parseable by platform plutil but not strict plistlib"
+  ],
+  "maturity": "EXPERIMENTAL",
+  "preconditions": [
+    "package identity and input version match conversion lock",
+    "semantic plist value is preserved",
+    "filter scope is not widened"
+  ],
+  "production_eligible": false,
+  "rollback": "discard derivative workspace and preserve original artifact",
+  "schema_version": 1,
+  "title": "Canonicalize a parseable legacy tweak filter plist",
+  "transformation": {
+    "format": "XML1",
+    "type": "deb_plist_canonicalization",
+    "version_change": "must be declared in conversion lock"
+  },
+  "validation": [
+    "strict plist parser succeeds",
+    "semantic value unchanged",
+    "all unrelated payload hashes and modes unchanged",
+    "runtime tweak and filter UAT pass"
+  ],
+  "version": 1
+}

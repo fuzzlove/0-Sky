@@ -2,7 +2,12 @@
 #import "TSApplicationsManager.h"
 #import "TSInlinePreferenceTableViewController.h"
 #import "TSCylinderSettingsViewController.h"
+#import "TSCraneSettingsViewController.h"
+#import "TSSecurityToolkitTableViewController.h"
 #import <TSPresentationDelegate.h>
+#import <CommonCrypto/CommonDigest.h>
+#import <sys/sysctl.h>
+#import <sys/stat.h>
 @import UniformTypeIdentifiers;
 
 @interface TSInventoryTableViewController ()
@@ -15,7 +20,293 @@
 
 static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-settings.json";
 
+static NSString* TSDeviceSysctlString(const char* name)
+{
+    size_t size = 0;
+    if(sysctlbyname(name, NULL, &size, NULL, 0) != 0 || size < 2 || size > 256)
+        return nil;
+    char* bytes = calloc(size, 1);
+    if(!bytes) return nil;
+    NSString* value = sysctlbyname(name, bytes, &size, NULL, 0) == 0
+        ? [NSString stringWithUTF8String:bytes] : nil;
+    free(bytes);
+    return value;
+}
+
+static NSString* TSDoodleInstalledHash(NSString* path)
+{
+    static NSString* const expectedPath =
+        @"/var/jb/Library/MobileSubstrate/DynamicLibraries/Doodle.dylib";
+    if(![path isEqualToString:expectedPath]) return nil;
+    struct stat info;
+    if(lstat(path.fileSystemRepresentation, &info) != 0 ||
+       !S_ISREG(info.st_mode) || info.st_size < 1024 || info.st_size > 16 * 1024 * 1024)
+        return nil;
+    NSData* data = [NSData dataWithContentsOfFile:path options:NSDataReadingMappedIfSafe error:nil];
+    if(!data || data.length != (NSUInteger)info.st_size) return nil;
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString* value = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for(NSUInteger index = 0; index < CC_SHA256_DIGEST_LENGTH; index++)
+        [value appendFormat:@"%02x", digest[index]];
+    return value;
+}
+
+static NSString* TSPreferenceMatchKey(NSString* value)
+{
+    NSString* key = value.lowercaseString.stringByDeletingPathExtension;
+    for(NSString* suffix in @[@"preferences", @"preference", @"prefs", @"settings"])
+        if([key hasSuffix:suffix] && key.length > suffix.length)
+            key = [key substringToIndex:key.length - suffix.length];
+    return key;
+}
+
+static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorPath)
+{
+    if(![entry isKindOfClass:NSDictionary.class] || !descriptorPath.length) return nil;
+    NSString* icon = [entry[@"icon"] isKindOfClass:NSString.class] ? entry[@"icon"] : nil;
+    NSString* bundle = [entry[@"bundle"] isKindOfClass:NSString.class] ? entry[@"bundle"] : nil;
+    NSMutableArray<NSString*>* candidates = [NSMutableArray array];
+    if(icon.length && icon.isAbsolutePath) [candidates addObject:icon];
+    NSString* preferenceRoot = @"/var/jb/Library/PreferenceBundles";
+    if(bundle.length && ![bundle containsString:@"/"]) {
+        NSString* bundleName = [bundle.pathExtension isEqualToString:@"bundle"]
+            ? bundle : [bundle stringByAppendingPathExtension:@"bundle"];
+        NSString* bundleRoot = [preferenceRoot stringByAppendingPathComponent:bundleName];
+        if(icon.length && !icon.isAbsolutePath)
+            [candidates addObject:[bundleRoot stringByAppendingPathComponent:icon]];
+        for(NSString* fallback in @[@"Icon@3x.png", @"Icon@2x.png", @"Icon.png",
+                                    @"icon@3x.png", @"icon@2x.png", @"icon.png"])
+            [candidates addObject:[bundleRoot stringByAppendingPathComponent:fallback]];
+    }
+    if(icon.length && !icon.isAbsolutePath)
+        [candidates addObject:[descriptorPath.stringByDeletingLastPathComponent
+            stringByAppendingPathComponent:icon]];
+    NSFileManager* files = NSFileManager.defaultManager;
+    for(NSString* candidate in candidates) {
+        NSString* path = candidate.stringByStandardizingPath;
+        BOOL approved = [path hasPrefix:[preferenceRoot stringByAppendingString:@"/"]] ||
+            [path hasPrefix:@"/var/jb/Library/PreferenceLoader/"];
+        BOOL directory = NO;
+        if(approved && [files fileExistsAtPath:path isDirectory:&directory] && !directory)
+            return path;
+    }
+    return nil;
+}
+
 @implementation TSInventoryTableViewController
+
+- (NSDictionary*)localPackageMetadata
+{
+    NSString* contents = [NSString stringWithContentsOfFile:@"/var/jb/Library/dpkg/status"
+        encoding:NSUTF8StringEncoding error:nil];
+    if(!contents.length) return @{};
+    NSMutableDictionary* result = [NSMutableDictionary dictionary];
+    for(NSString* stanza in [contents componentsSeparatedByString:@"\n\n"]) {
+        NSMutableDictionary* fields = [NSMutableDictionary dictionary];
+        for(NSString* line in [stanza componentsSeparatedByCharactersInSet:
+             NSCharacterSet.newlineCharacterSet]) {
+            NSRange separator = [line rangeOfString:@":"];
+            if(separator.location == NSNotFound) continue;
+            NSString* key = [line substringToIndex:separator.location];
+            NSString* value = [[line substringFromIndex:separator.location + 1]
+                stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+            if(value.length) fields[key] = value;
+        }
+        NSString* package = fields[@"Package"];
+        if(package.length && [fields[@"Status"] isEqualToString:@"install ok installed"])
+            result[package] = fields.copy;
+    }
+    return result;
+}
+
+- (NSDictionary*)localPackageOwners
+{
+    NSString* root = @"/var/jb/Library/dpkg/info";
+    NSArray* files = [[NSFileManager defaultManager] contentsOfDirectoryAtPath:root error:nil];
+    NSMutableDictionary* owners = [NSMutableDictionary dictionary];
+    for(NSString* file in files) {
+        if(![file.pathExtension isEqualToString:@"list"]) continue;
+        NSString* package = file.stringByDeletingPathExtension;
+        package = [package componentsSeparatedByString:@":"].firstObject;
+        NSString* contents = [NSString stringWithContentsOfFile:
+            [root stringByAppendingPathComponent:file] encoding:NSUTF8StringEncoding error:nil];
+        for(NSString* path in [contents componentsSeparatedByCharactersInSet:
+             NSCharacterSet.newlineCharacterSet])
+            if([path hasPrefix:@"/"]) owners[path] = package;
+    }
+    return owners;
+}
+
+- (NSArray*)localTweakInventory
+{
+    NSFileManager* files = NSFileManager.defaultManager;
+    NSDictionary* metadata = [self localPackageMetadata];
+    NSDictionary* owners = [self localPackageOwners];
+    NSMutableDictionary<NSString*, NSMutableArray*>* preferences = [NSMutableDictionary dictionary];
+    NSString* preferenceRoot = @"/var/jb/Library/PreferenceLoader/Preferences";
+    NSDirectoryEnumerator* preferenceFiles = [files enumeratorAtPath:preferenceRoot];
+    for(NSString* relative in preferenceFiles) {
+        if(![relative.pathExtension isEqualToString:@"plist"]) continue;
+        NSString* path = [preferenceRoot stringByAppendingPathComponent:relative];
+        NSDictionary* descriptor = [NSDictionary dictionaryWithContentsOfFile:path];
+        NSDictionary* entry = [descriptor[@"entry"] isKindOfClass:NSDictionary.class]
+            ? descriptor[@"entry"] : nil;
+        NSString* title = [entry[@"label"] isKindOfClass:NSString.class]
+            ? entry[@"label"] : nil;
+        if(!title.length) continue;
+        NSString* package = [owners[path] isKindOfClass:NSString.class] ? owners[path] : nil;
+        NSString* key = package.length ? package : TSPreferenceMatchKey(relative.lastPathComponent);
+        if(!preferences[key]) preferences[key] = [NSMutableArray array];
+        NSMutableDictionary* preference = [@{@"title": title, @"descriptor": path,
+            @"converted": @([path containsString:@"/0-Sky-Auto/"])} mutableCopy];
+        NSString* iconPath = TSPreferenceIconPath(entry, path);
+        if(iconPath.length) preference[@"icon_path"] = iconPath;
+        [preferences[key] addObject:preference.copy];
+    }
+    NSMutableArray* result = [NSMutableArray array];
+    NSMutableSet* packagesWithDylibs = [NSMutableSet set];
+    NSMutableSet* matchedPreferenceKeys = [NSMutableSet set];
+    for(NSString* root in @[@"/var/jb/Library/MobileSubstrate/DynamicLibraries",
+                            @"/var/jb/usr/lib/TweakInject"]) {
+        for(NSString* filename in [files contentsOfDirectoryAtPath:root error:nil]) {
+            if(![filename.pathExtension isEqualToString:@"dylib"]) continue;
+            NSString* path = [root stringByAppendingPathComponent:filename];
+            NSString* canonical = [path stringByReplacingOccurrencesOfString:
+                @"/var/jb/usr/lib/TweakInject/" withString:
+                @"/var/jb/Library/MobileSubstrate/DynamicLibraries/"];
+            NSString* package = [owners[canonical] isKindOfClass:NSString.class]
+                ? owners[canonical] : ([owners[path] isKindOfClass:NSString.class] ? owners[path] : nil);
+            NSString* stem = filename.stringByDeletingPathExtension;
+            if(!package.length) package = [@"local." stringByAppendingString:stem.lowercaseString];
+            NSDictionary* packageInfo = [metadata[package] isKindOfClass:NSDictionary.class]
+                ? metadata[package] : @{};
+            NSDictionary* sidecar = [NSDictionary dictionaryWithContentsOfFile:
+                [[root stringByAppendingPathComponent:stem] stringByAppendingPathExtension:@"plist"]];
+            NSDictionary* filter = [sidecar[@"Filter"] isKindOfClass:NSDictionary.class]
+                ? sidecar[@"Filter"] : ([sidecar isKindOfClass:NSDictionary.class] ? sidecar : @{});
+            NSString* preferenceKey = preferences[package] ? package : TSPreferenceMatchKey(stem);
+            NSArray* entries = preferences[preferenceKey] ?: @[];
+            if(entries.count) [matchedPreferenceKeys addObject:preferenceKey];
+            NSMutableDictionary* row = [@{
+                @"package": package, @"dylib": canonical,
+                @"name": [packageInfo[@"Name"] isKindOfClass:NSString.class]
+                    ? packageInfo[@"Name"] : stem,
+                @"bundles": [filter[@"Bundles"] isKindOfClass:NSArray.class]
+                    ? filter[@"Bundles"] : @[],
+                @"executables": [filter[@"Executables"] isKindOfClass:NSArray.class]
+                    ? filter[@"Executables"] : @[],
+                @"settings_available": @(entries.count > 0),
+                @"preference_entries": entries,
+            } mutableCopy];
+            if([packageInfo[@"Version"] isKindOfClass:NSString.class])
+                row[@"version"] = packageInfo[@"Version"];
+            if([packageInfo[@"Description"] isKindOfClass:NSString.class])
+                row[@"description"] = packageInfo[@"Description"];
+            if(entries.count) row[@"preference_title"] = entries.firstObject[@"title"];
+            NSString* iconPath = [entries.firstObject[@"icon_path"] isKindOfClass:NSString.class]
+                ? entries.firstObject[@"icon_path"] : nil;
+            if(iconPath.length) row[@"icon_path"] = iconPath;
+            [result addObject:row.copy];
+            [packagesWithDylibs addObject:package];
+        }
+    }
+    for(NSString* key in preferences) {
+        if([packagesWithDylibs containsObject:key] || [matchedPreferenceKeys containsObject:key]) continue;
+        NSArray* entries = preferences[key];
+        NSDictionary* packageInfo = [metadata[key] isKindOfClass:NSDictionary.class]
+            ? metadata[key] : @{};
+        [result addObject:@{
+            @"package": key, @"dylib": @"", @"bundles": @[], @"executables": @[],
+            @"name": [packageInfo[@"Name"] isKindOfClass:NSString.class]
+                ? packageInfo[@"Name"] : entries.firstObject[@"title"],
+            @"settings_available": @YES, @"preference_only": @YES,
+            @"preference_title": entries.firstObject[@"title"],
+            @"preference_entries": entries,
+        }];
+    }
+    return [result sortedArrayUsingComparator:^NSComparisonResult(NSDictionary* left,
+                                                                    NSDictionary* right) {
+        NSString* one = [left[@"name"] isKindOfClass:NSString.class] ? left[@"name"] : @"";
+        NSString* two = [right[@"name"] isKindOfClass:NSString.class] ? right[@"name"] : @"";
+        return [one localizedStandardCompare:two];
+    }];
+}
+
+- (NSArray*)aggregateTweakInventoryByPackage:(NSArray*)rows
+{
+    NSMutableDictionary<NSString*, NSMutableDictionary*>* grouped =
+        [NSMutableDictionary dictionary];
+    for(id raw in rows) {
+        if(![raw isKindOfClass:NSDictionary.class]) continue;
+        NSDictionary* row = raw;
+        NSString* package = [row[@"package"] isKindOfClass:NSString.class]
+            ? row[@"package"] : nil;
+        if(!package.length) continue;
+        NSMutableDictionary* merged = grouped[package];
+        if(!merged) {
+            merged = row.mutableCopy;
+            merged[@"bundles"] = [NSMutableOrderedSet orderedSetWithArray:
+                [row[@"bundles"] isKindOfClass:NSArray.class] ? row[@"bundles"] : @[]];
+            merged[@"executables"] = [NSMutableOrderedSet orderedSetWithArray:
+                [row[@"executables"] isKindOfClass:NSArray.class] ? row[@"executables"] : @[]];
+            merged[@"preference_entries"] = [NSMutableArray arrayWithArray:
+                [row[@"preference_entries"] isKindOfClass:NSArray.class]
+                    ? row[@"preference_entries"] : @[]];
+            NSMutableArray* dylibs = [NSMutableArray array];
+            if([row[@"dylib"] isKindOfClass:NSString.class] && [row[@"dylib"] length])
+                [dylibs addObject:row[@"dylib"]];
+            merged[@"dylibs"] = dylibs;
+            grouped[package] = merged;
+            continue;
+        }
+        [(NSMutableOrderedSet*)merged[@"bundles"] addObjectsFromArray:
+            [row[@"bundles"] isKindOfClass:NSArray.class] ? row[@"bundles"] : @[]];
+        [(NSMutableOrderedSet*)merged[@"executables"] addObjectsFromArray:
+            [row[@"executables"] isKindOfClass:NSArray.class] ? row[@"executables"] : @[]];
+        NSString* dylib = [row[@"dylib"] isKindOfClass:NSString.class] ? row[@"dylib"] : nil;
+        if(dylib.length && ![merged[@"dylibs"] containsObject:dylib])
+            [merged[@"dylibs"] addObject:dylib];
+        NSArray* entries = [row[@"preference_entries"] isKindOfClass:NSArray.class]
+            ? row[@"preference_entries"] : @[];
+        NSMutableSet* descriptors = [NSMutableSet set];
+        for(NSDictionary* entry in merged[@"preference_entries"]) {
+            NSString* descriptor = [entry[@"descriptor"] isKindOfClass:NSString.class]
+                ? entry[@"descriptor"] : nil;
+            if(descriptor.length) [descriptors addObject:descriptor];
+        }
+        for(NSDictionary* entry in entries) {
+            NSString* descriptor = [entry[@"descriptor"] isKindOfClass:NSString.class]
+                ? entry[@"descriptor"] : nil;
+            if(!descriptor.length || ![descriptors containsObject:descriptor]) {
+                [merged[@"preference_entries"] addObject:entry];
+                if(descriptor.length) [descriptors addObject:descriptor];
+            }
+        }
+        if([row[@"settings_available"] boolValue]) merged[@"settings_available"] = @YES;
+        for(NSString* key in @[@"name", @"version", @"description", @"preference_title",
+                                @"icon_path"]) {
+            NSString* current = [merged[key] isKindOfClass:NSString.class] ? merged[key] : nil;
+            NSString* candidate = [row[key] isKindOfClass:NSString.class] ? row[key] : nil;
+            if(!current.length && candidate.length) merged[key] = candidate;
+        }
+    }
+    NSMutableArray* result = [NSMutableArray arrayWithCapacity:grouped.count];
+    for(NSMutableDictionary* merged in grouped.allValues) {
+        merged[@"bundles"] = [(NSMutableOrderedSet*)merged[@"bundles"] array];
+        merged[@"executables"] = [(NSMutableOrderedSet*)merged[@"executables"] array];
+        merged[@"component_count"] = @([merged[@"dylibs"] count]);
+        [result addObject:merged.copy];
+    }
+    return [result sortedArrayUsingComparator:^NSComparisonResult(NSDictionary* left,
+                                                                    NSDictionary* right) {
+        NSString* one = [left[@"name"] isKindOfClass:NSString.class]
+            ? left[@"name"] : left[@"package"];
+        NSString* two = [right[@"name"] isKindOfClass:NSString.class]
+            ? right[@"name"] : right[@"package"];
+        return [one localizedStandardCompare:two];
+    }];
+}
 
 - (instancetype)init
 {
@@ -42,18 +333,29 @@ static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-
     // and removal discoverable. The first item is the trailing button.
     self.navigationItem.rightBarButtonItems =
         @[addButton, self.exportButton, self.removeButton];
-    self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc]
+    UIBarButtonItem* fixMenus = [[UIBarButtonItem alloc]
         initWithTitle:@"Fix Menus" style:UIBarButtonItemStylePlain
         target:self action:@selector(repairPreferenceMenus)];
+    UIBarButtonItem* research = [[UIBarButtonItem alloc]
+        initWithTitle:@"Research" style:UIBarButtonItemStylePlain
+        target:self action:@selector(openSecurityResearch)];
+    self.navigationItem.leftBarButtonItems = @[research, fixMenus];
     self.pullRefresh = [UIRefreshControl new];
     [self.pullRefresh addTarget:self action:@selector(refresh) forControlEvents:UIControlEventValueChanged];
     self.refreshControl = self.pullRefresh;
     [self refresh];
 }
 
+- (void)openSecurityResearch
+{
+    [self.navigationController pushViewController:
+        [[TSSecurityToolkitTableViewController alloc]
+            initWithCategory:@"Tweaks/Security Research"] animated:YES];
+}
+
 - (void)repairPreferenceMenus
 {
-    self.navigationItem.leftBarButtonItem.enabled = NO;
+    self.navigationItem.leftBarButtonItems.lastObject.enabled = NO;
     self.navigationItem.prompt = @"Converting and refreshing tweak preference menus…";
     [TSPresentationDelegate startActivity:@"Fixing preference menus"];
     dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
@@ -62,7 +364,7 @@ static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-
             repairPreferenceMenusForPackage:nil log:&log];
         dispatch_async(dispatch_get_main_queue(), ^{
             [TSPresentationDelegate stopActivityWithCompletion:^{
-                self.navigationItem.leftBarButtonItem.enabled = YES;
+                self.navigationItem.leftBarButtonItems.lastObject.enabled = YES;
                 self.navigationItem.prompt = status == 0
                     ? @"Preference conversion complete • Tap for settings is refreshed"
                     : [NSString stringWithFormat:@"Preference repair failed (%d): %@",
@@ -89,6 +391,12 @@ static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-
             if(identifier.length) packageHealth[identifier] = row;
         }
         NSArray* tweaks = [inventory[@"tweaks"] isKindOfClass:NSArray.class] ? inventory[@"tweaks"] : nil;
+        NSArray* localTweaks = [self localTweakInventory];
+        if(tweaks.count && localTweaks.count)
+            tweaks = [tweaks arrayByAddingObjectsFromArray:localTweaks];
+        else if(!tweaks.count)
+            tweaks = localTweaks;
+        tweaks = [self aggregateTweakInventoryByPackage:tweaks ?: @[]];
         dispatch_async(dispatch_get_main_queue(), ^{
             if(tweaks) self.tweaks = tweaks;
             self.packageHealth = packageHealth;
@@ -114,6 +422,37 @@ static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-
         ]];
     });
     return [protectedPackages containsObject:package.lowercaseString];
+}
+
+- (BOOL)isVerifiedDoodlePort:(NSDictionary*)tweak
+{
+    NSString* package = [tweak[@"package"] isKindOfClass:NSString.class]
+        ? tweak[@"package"] : nil;
+    if(![package isEqualToString:@"com.nahtedetihw.doodle"]) return NO;
+    NSDictionary* installed = [self.packageHealth[package] isKindOfClass:NSDictionary.class]
+        ? self.packageHealth[package] : nil;
+    NSString* dylibHash = TSDoodleInstalledHash(tweak[@"dylib"]);
+    if(![installed[@"version"] isEqualToString:@"1:1.1+0sky27.2"] ||
+       [installed[@"quarantinedCount"] integerValue] != 0 ||
+       ![dylibHash isEqualToString:
+           @"64eae513d7a96e691ba177660141fcaa26327d0b3b5f862338584b28f7522086"])
+        return NO;
+    NSUserDefaults* defaults = [[NSUserDefaults alloc]
+        initWithSuiteName:@"com.0sky.doodle-uat"];
+    [defaults synchronize];
+    NSDictionary* receipt = [defaults persistentDomainForName:@"com.0sky.doodle-uat"];
+    if(![receipt isKindOfClass:NSDictionary.class] ||
+       [receipt[@"schema"] integerValue] != 1 ||
+       ![receipt[@"package_version"] isEqualToString:installed[@"version"]] ||
+       ![receipt[@"dylib_sha256"] isEqualToString:dylibHash] ||
+       ![receipt[@"ios_build"] isEqualToString:TSDeviceSysctlString("kern.osversion")] ||
+       ![receipt[@"device_model"] isEqualToString:TSDeviceSysctlString("hw.machine")])
+        return NO;
+    for(NSString* check in @[@"native_authentication", @"pattern_unlock",
+                            @"wrong_pattern_rejected", @"keypad_fallback",
+                            @"repeat_pattern_unlock", @"springboard_stable"])
+        if(![receipt[check] isEqual:@YES]) return NO;
+    return YES;
 }
 
 - (NSString*)displayTitleForTweak:(NSDictionary*)tweak
@@ -373,33 +712,82 @@ static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-
         reuseIdentifier:@"TweakCell"];
     NSDictionary* tweak = self.tweaks[indexPath.row];
     NSString* package = [tweak[@"package"] isKindOfClass:NSString.class] ? tweak[@"package"] : @"Unknown package";
-    NSString* dylib = [tweak[@"dylib"] lastPathComponent] ?: @"Unknown dylib";
+    NSString* dylibPath = [tweak[@"dylib"] isKindOfClass:NSString.class] ? tweak[@"dylib"] : nil;
+    NSString* dylib = dylibPath.lastPathComponent.stringByDeletingPathExtension;
+    if(!dylib.length) dylib = @"Tweak";
+    NSString* packageName = [tweak[@"name"] isKindOfClass:NSString.class] ? tweak[@"name"] : nil;
+    NSString* packageVersion = [tweak[@"version"] isKindOfClass:NSString.class] ? tweak[@"version"] : nil;
+    NSString* packageDescription = [tweak[@"description"] isKindOfClass:NSString.class]
+        ? tweak[@"description"] : nil;
     NSArray* bundles = [tweak[@"bundles"] isKindOfClass:NSArray.class] ? tweak[@"bundles"] : @[];
     NSArray* executables = [tweak[@"executables"] isKindOfClass:NSArray.class] ? tweak[@"executables"] : @[];
+    BOOL doodle = [package isEqualToString:@"com.nahtedetihw.doodle"];
     NSString* preferenceTitle = [tweak[@"preference_title"] isKindOfClass:NSString.class]
         ? tweak[@"preference_title"] : nil;
+    if(doodle) preferenceTitle = @"Doodle";
     BOOL settingsAvailable = [tweak[@"settings_available"] boolValue] && preferenceTitle.length;
     BOOL preferenceOnly = [tweak[@"preference_only"] boolValue];
     NSArray* preferenceEntries = [tweak[@"preference_entries"] isKindOfClass:NSArray.class]
         ? tweak[@"preference_entries"] : @[];
     NSString* descriptor = [preferenceEntries.firstObject[@"descriptor"] isKindOfClass:NSString.class]
         ? preferenceEntries.firstObject[@"descriptor"] : nil;
+    if(doodle) {
+        descriptor = [NSBundle.mainBundle pathForResource:@"DoodleControl" ofType:@"plist"];
+        settingsAvailable = descriptor.length > 0;
+    }
     BOOL inlineSettings = [TSInlinePreferenceTableViewController canOpenDescriptorAtPath:descriptor];
     BOOL cylinderSettings = [TSCylinderSettingsViewController supportsPackage:package
         descriptorPath:descriptor];
     BOOL converted = preferenceEntries.count && [preferenceEntries.firstObject[@"converted"] boolValue];
-    cell.textLabel.text = preferenceTitle.length ? preferenceTitle : dylib;
+    cell.textLabel.text = preferenceTitle.length ? preferenceTitle
+        : (packageName.length ? packageName : dylib);
     NSMutableArray* filters = [NSMutableArray arrayWithArray:bundles];
     [filters addObjectsFromArray:executables];
     NSString* targetDescription = preferenceOnly ? @"preference-only menu" :
         (filters.count ? [filters componentsJoinedByString:@", "] : @"no process filter");
     NSString* health = [self.packageHealth[package][@"health"] isKindOfClass:NSString.class]
         ? self.packageHealth[package][@"health"] : @"Unknown";
-    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ • %@ • %@%@%@", package,
-        health, targetDescription, converted ? @" • converted for iOS 27" : @"",
+    NSString* runtimeState = [self.packageHealth[package][@"runtimeState"] isKindOfClass:NSString.class]
+        ? self.packageHealth[package][@"runtimeState"] : nil;
+    if(doodle && NSProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27)
+        health = [self isVerifiedDoodlePort:tweak]
+            ? @"VERIFIED on this device • pattern and keypad UAT passed"
+            : [self.packageHealth[package][@"version"] isEqualToString:@"1:1.1+0sky27.2"]
+                ? @"UNVERIFIED iOS 27 port • lock-screen test pending"
+                : @"ADAPTATION REQUIRED on iOS 27 • original build";
+    else if([runtimeState isEqualToString:@"PASS"])
+        health = @"READY • required runtime components loaded";
+    else if([runtimeState isEqualToString:@"FAILED"])
+        health = @"RUNTIME FAILED • inspect quarantine evidence";
+    else if([runtimeState isEqualToString:@"DEGRADED"])
+        health = @"DEGRADED • only part of the required runtime is loaded";
+    else if([health isEqualToString:@"Healthy"])
+        health = @"Installed • runtime unverified";
+    NSNumber* recentCrashCount = [self.packageHealth[package][@"recentCrashCount"]
+        isKindOfClass:NSNumber.class] ? self.packageHealth[package][@"recentCrashCount"] : nil;
+    if(recentCrashCount.integerValue > 0)
+        health = [health stringByAppendingFormat:@" • %@ recent crash report%@ retained",
+            recentCrashCount, recentCrashCount.integerValue == 1 ? @"" : @"s"];
+    NSMutableArray<NSString*>* details = [NSMutableArray array];
+    [details addObject:package];
+    if(packageVersion.length) [details addObject:packageVersion];
+    [details addObject:health];
+    [details addObject:targetDescription];
+    if(packageDescription.length) [details addObject:packageDescription];
+    cell.detailTextLabel.text = [NSString stringWithFormat:@"%@%@%@",
+        [details componentsJoinedByString:@" • "], converted ? @" • converted for iOS 27" : @"",
         settingsAvailable ? ((inlineSettings || cylinderSettings)
             ? @" • Settings in 0-Sky Control" : @" • Tap for settings") : @""];
-    cell.detailTextLabel.numberOfLines = 2;
+    cell.detailTextLabel.numberOfLines = 3;
+    NSString* iconPath = [tweak[@"icon_path"] isKindOfClass:NSString.class]
+        ? tweak[@"icon_path"] : nil;
+    UIImage* packageIcon = iconPath.length ? [UIImage imageWithContentsOfFile:iconPath] : nil;
+    NSString* symbol = preferenceOnly ? @"slider.horizontal.3"
+        : (settingsAvailable ? @"gearshape.2.fill" : @"puzzlepiece.extension.fill");
+    cell.imageView.image = packageIcon ?: [UIImage systemImageNamed:symbol];
+    cell.imageView.tintColor = packageIcon ? nil : UIColor.systemBlueColor;
+    cell.imageView.layer.cornerRadius = 8;
+    cell.imageView.layer.masksToBounds = YES;
     cell.accessoryType = settingsAvailable ? UITableViewCellAccessoryDisclosureIndicator
                                            : UITableViewCellAccessoryNone;
     cell.selectionStyle = settingsAvailable ? UITableViewCellSelectionStyleDefault
@@ -426,10 +814,19 @@ static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-
             }
             NSArray* dependencies = [detail[@"dependencies"] isKindOfClass:NSArray.class]
                 ? detail[@"dependencies"] : @[];
+            NSString* packageState = [detail[@"health"] isKindOfClass:NSString.class]
+                ? detail[@"health"] : @"Unknown";
+            if([package isEqualToString:@"com.nahtedetihw.doodle"] &&
+               NSProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27)
+                packageState = [detail[@"version"] isEqualToString:@"1:1.1+0sky27.2"]
+                    ? @"Private iOS 27 port; inspect Doodle settings for local UAT status"
+                    : @"ADAPTATION REQUIRED on iOS 27; original build";
+            else if([packageState isEqualToString:@"Healthy"])
+                packageState = @"No known package fault; runtime unverified";
             NSString* message = [NSString stringWithFormat:
-                @"Version: %@\nArchitecture: %@\nHealth: %@\nFiles: %@%@\nServices: %@\nTweaks: %@\nQuarantined: %@\nDependency groups: %@",
+                @"Version: %@\nArchitecture: %@\nPackage state: %@\nFiles: %@%@\nServices: %@\nTweaks: %@\nQuarantined: %@\nDependency groups: %@",
                 detail[@"version"] ?: @"Unknown", detail[@"architecture"] ?: @"Unknown",
-                detail[@"health"] ?: @"Unknown", detail[@"fileCount"] ?: @0,
+                packageState, detail[@"fileCount"] ?: @0,
                 [detail[@"filesTruncated"] boolValue] ? @"+" : @"",
                 detail[@"serviceCount"] ?: @0, detail[@"tweakCount"] ?: @0,
                 detail[@"quarantinedCount"] ?: @0, @(dependencies.count)];
@@ -442,18 +839,28 @@ static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-
 {
     [tableView deselectRowAtIndexPath:indexPath animated:YES];
     NSDictionary* tweak = self.tweaks[indexPath.row];
+    NSString* package = [tweak[@"package"] isKindOfClass:NSString.class] ? tweak[@"package"] : @"";
+    BOOL doodle = [package isEqualToString:@"com.nahtedetihw.doodle"];
     NSString* title = [tweak[@"preference_title"] isKindOfClass:NSString.class]
         ? tweak[@"preference_title"] : nil;
-    if(![tweak[@"settings_available"] boolValue] || !title.length) {
+    if(doodle) title = @"Doodle";
+    if((![tweak[@"settings_available"] boolValue] && !doodle) || !title.length) {
         self.navigationItem.prompt = @"This package does not publish a PreferenceLoader pane.";
         return;
     }
 
-    NSString* package = [tweak[@"package"] isKindOfClass:NSString.class] ? tweak[@"package"] : @"";
     NSArray* preferenceEntries = [tweak[@"preference_entries"] isKindOfClass:NSArray.class]
         ? tweak[@"preference_entries"] : @[];
     NSString* descriptor = [preferenceEntries.firstObject[@"descriptor"] isKindOfClass:NSString.class]
         ? preferenceEntries.firstObject[@"descriptor"] : nil;
+    if(doodle) descriptor = [NSBundle.mainBundle pathForResource:@"DoodleControl" ofType:@"plist"];
+    if([package isEqualToString:@"com.opa334.crane"]) {
+        [self.navigationController pushViewController:
+            [[TSCraneSettingsViewController alloc] initWithDescriptorPath:descriptor]
+            animated:YES];
+        self.navigationItem.prompt = nil;
+        return;
+    }
     if([TSCylinderSettingsViewController supportsPackage:package descriptorPath:descriptor]) {
         TSCylinderSettingsViewController* controller =
             [[TSCylinderSettingsViewController alloc] initWithTitle:title];
@@ -464,6 +871,7 @@ static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-
     if([TSInlinePreferenceTableViewController canOpenDescriptorAtPath:descriptor]) {
         TSInlinePreferenceTableViewController* controller =
             [[TSInlinePreferenceTableViewController alloc] initWithDescriptorPath:descriptor title:title];
+        if(doodle) controller.doodlePortVerified = [self isVerifiedDoodlePort:tweak];
         [self.navigationController pushViewController:controller animated:YES];
         self.navigationItem.prompt = nil;
         return;

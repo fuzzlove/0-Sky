@@ -4,6 +4,7 @@
 #import <TSPresentationDelegate.h>
 #import "TSInstallationController.h"
 #import "TSUtil.h"
+#import "TSSecurityToolkitTableViewController.h"
 @import UniformTypeIdentifiers;
 
 #define ICON_FORMAT_IPAD 8
@@ -56,14 +57,66 @@ NSString* safeExportFilenameComponent(NSString* value)
 
 - (void)loadAppInfos
 {
-	NSArray* appPaths = [[TSApplicationsManager sharedInstance] installedAppPaths];
+	TSApplicationsManager* manager = [TSApplicationsManager sharedInstance];
+	NSDictionary* inventory = [manager srdInventory];
+	NSArray* applications = [inventory[@"applications"] isKindOfClass:NSArray.class]
+		? inventory[@"applications"] : @[];
+	NSMutableDictionary<NSString*, NSDictionary*>* records = [NSMutableDictionary dictionary];
+	for(id value in applications) {
+		if(![value isKindOfClass:NSDictionary.class]) continue;
+		NSString* bundleID = [value[@"bundle_identifier"] isKindOfClass:NSString.class]
+			? value[@"bundle_identifier"] : nil;
+		NSString* path = [value[@"path"] isKindOfClass:NSString.class] ? value[@"path"] : nil;
+		if(bundleID.length || path.length) records[bundleID.length ? bundleID : path] = value;
+	}
+	for(NSDictionary* registered in [manager registeredApplicationRecords]) {
+		NSString* bundleID = registered[@"bundle_identifier"];
+		NSDictionary* observed = records[bundleID];
+		if(!observed) records[bundleID] = registered;
+		else {
+			NSMutableDictionary* merged = [registered mutableCopy];
+			[merged addEntriesFromDictionary:observed];
+			records[bundleID] = merged.copy;
+		}
+	}
 	NSMutableArray<TSAppInfo*>* appInfos = [NSMutableArray new];
 
-	for(NSString* appPath in appPaths)
+	if(records.count)
 	{
-		TSAppInfo* appInfo = [[TSAppInfo alloc] initWithAppBundlePath:appPath];
-		[appInfo sync_loadBasicInfo];
-		[appInfos addObject:appInfo];
+		for(id value in records.allValues)
+		{
+			if(![value isKindOfClass:NSDictionary.class]) continue;
+			NSDictionary* record = value;
+			NSString* appPath = [record[@"path"] isKindOfClass:NSString.class]
+				? record[@"path"] : nil;
+			if(!appPath.length || [record[@"system"] boolValue] ||
+			   [record[@"removed"] boolValue]) continue;
+			// CraneApplication is intentionally tagged hidden upstream: it hosts
+			// Shortcuts/support code while the paid tweak's actual UI lives under
+			// Control -> Tweaks -> Crane. Keep the explicit identity fallback for
+			// devices whose older inventory worker predates the generic hidden bit.
+			NSString* recordBundleID = [record[@"bundle_identifier"] isKindOfClass:NSString.class]
+				? record[@"bundle_identifier"] : nil;
+			if([record[@"hidden"] boolValue] ||
+			   [recordBundleID isEqualToString:@"com.opa334.CraneApplication"])
+				continue;
+			TSAppInfo* appInfo = [[TSAppInfo alloc] initWithAppBundlePath:appPath];
+			[appInfo sync_loadBasicInfo];
+			[appInfo applyInventoryMetadata:record];
+			if([appInfo isHiddenApplication]) continue;
+			[appInfos addObject:appInfo];
+		}
+	}
+	else
+	{
+		for(NSString* appPath in [manager installedAppPaths])
+		{
+			if(![appPath isKindOfClass:NSString.class] || !appPath.length) continue;
+			TSAppInfo* appInfo = [[TSAppInfo alloc] initWithAppBundlePath:appPath];
+			[appInfo sync_loadBasicInfo];
+			if([appInfo isHiddenApplication]) continue;
+			[appInfos addObject:appInfo];
+		}
 	}
 
 	if(_searchKey && ![_searchKey isEqualToString:@""])
@@ -94,6 +147,8 @@ NSString* safeExportFilenameComponent(NSString* value)
 	{
 		[self loadAppInfos];
 		_placeholderIcon = [UIImage _applicationIconImageForBundleIdentifier:@"com.apple.WebSheet" format:iconFormatToUse() scale:[UIScreen mainScreen].scale];
+		if(!_placeholderIcon)
+			_placeholderIcon = imageWithSize([UIImage systemImageNamed:@"app.fill"], CGSizeMake(29, 29));
 		_cachedIcons = [NSMutableDictionary new];
 		[[LSApplicationWorkspace defaultWorkspace] addObserver:self];
 	}
@@ -212,6 +267,16 @@ NSString* safeExportFilenameComponent(NSString* value)
 	UIBarButtonItem* installBarButtonItem = [[UIBarButtonItem alloc] initWithImage:[UIImage systemImageNamed:@"plus"] menu:installMenu];
 
 	self.navigationItem.rightBarButtonItems = @[installBarButtonItem];
+	self.navigationItem.leftBarButtonItem = [[UIBarButtonItem alloc]
+		initWithTitle:@"Security Research" style:UIBarButtonItemStylePlain
+		target:self action:@selector(openSecurityResearch)];
+}
+
+- (void)openSecurityResearch
+{
+	[self.navigationController pushViewController:
+		[[TSSecurityToolkitTableViewController alloc]
+			initWithCategory:@"Apps/Security Research"] animated:YES];
 }
 
 - (void)_setUpSearchBar
@@ -308,40 +373,24 @@ NSString* safeExportFilenameComponent(NSString* value)
 
 - (void)openAppPressedForRowAtIndexPath:(NSIndexPath*)indexPath enableJIT:(BOOL)enableJIT
 {
-	TSApplicationsManager* appsManager = [TSApplicationsManager sharedInstance];
-
-	TSAppInfo* appInfo = [self appInfoForIndexPath:indexPath];
-	if(!appInfo) return;
-	NSString* appId = [appInfo bundleIdentifier];
-	BOOL didOpen = [appsManager openApplicationWithBundleID:appId];
-
-	// if we failed to open the app, show an alert
-	if(!didOpen)
-	{
-		NSString* failMessage = @"";
-		if([[appInfo registrationState] isEqualToString:@"User"])
-		{
-			failMessage = @"This app was not able to launch because it has a \"User\" registration state, register it as \"System\" and try again.";
-		}
-
-		NSString* failTitle = [NSString stringWithFormat:@"Failed to open %@", appId];
-		UIAlertController* didFailController = [UIAlertController alertControllerWithTitle:failTitle message:failMessage preferredStyle:UIAlertControllerStyleAlert];
-		UIAlertAction* cancelAction = [UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil];
-
-		[didFailController addAction:cancelAction];
-		[TSPresentationDelegate presentViewController:didFailController animated:YES completion:nil];
-	}
-	else if (enableJIT)
-	{
-		int ret = [appsManager enableJITForBundleID:appId];
-		if (ret != 0)
-		{
-			UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:@"Error" message:[NSString stringWithFormat:@"Error enabling JIT: Commissary helper returned %d", ret] preferredStyle:UIAlertControllerStyleAlert];
-			UIAlertAction* closeAction = [UIAlertAction actionWithTitle:@"Close" style:UIAlertActionStyleDefault handler:nil];
-			[errorAlert addAction:closeAction];
-			[TSPresentationDelegate presentViewController:errorAlert animated:YES completion:nil];
-		}
-	}
+    TSAppInfo* appInfo = [self appInfoForIndexPath:indexPath];
+    if(!appInfo) return;
+    NSString* appId = [appInfo bundleIdentifier];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        TSApplicationsManager* manager = [TSApplicationsManager sharedInstance];
+        BOOL opened = [manager openApplicationWithBundleID:appId];
+        int jitStatus = opened && enableJIT ? [manager enableJITForBundleID:appId] : 0;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if(opened && !jitStatus) return;
+            NSString* message = opened
+                ? [NSString stringWithFormat:@"JIT operation failed: %d", jitStatus]
+                : @"This component has no current functional compatibility approval. Open Compatibility to inspect its diagnostics.";
+            UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Compatibility"
+                message:message preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"Close" style:UIAlertActionStyleCancel handler:nil]];
+            [TSPresentationDelegate presentViewController:alert animated:YES completion:nil];
+        });
+    });
 }
 
 - (void)showDetailsPressedForRowAtIndexPath:(NSIndexPath*)indexPath
@@ -550,9 +599,13 @@ NSString* safeExportFilenameComponent(NSString* value)
 	if(!appInfo) return cell;
 	NSString* appId = [appInfo bundleIdentifier];
 	NSString* appVersion = [appInfo versionString];
+	NSString* appName = [appInfo displayName];
+	if(!appName.length) appName = appId.length ? appId : @"Application";
+	if(!appVersion.length) appVersion = @"Unknown version";
+	if(!appId.length) appId = @"Unregistered application";
 
 	// Configure the cell...
-	cell.textLabel.text = [appInfo displayName];
+	cell.textLabel.text = appName;
 	cell.detailTextLabel.text = [NSString stringWithFormat:@"%@ • %@", appVersion, appId];
 	cell.imageView.layer.borderWidth = 1;
 	cell.imageView.layer.borderColor = [UIColor.labelColor colorWithAlphaComponent:0.1].CGColor;
@@ -560,7 +613,7 @@ NSString* safeExportFilenameComponent(NSString* value)
 	cell.imageView.layer.masksToBounds = YES;
 	cell.imageView.layer.cornerCurve = kCACornerCurveContinuous;
 
-	if(appId)
+	if([appInfo bundleIdentifier].length)
 	{
 		UIImage* cachedIcon = _cachedIcons[appId];
 		if(cachedIcon)
@@ -572,9 +625,17 @@ NSString* safeExportFilenameComponent(NSString* value)
 			cell.imageView.image = _placeholderIcon;
 			dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^
 			{
-				UIImage* iconImage = imageWithSize([UIImage _applicationIconImageForBundleIdentifier:appId format:iconFormatToUse() scale:[UIScreen mainScreen].scale], _placeholderIcon.size);
-			_cachedIcons[appId] = iconImage;
+				// iOS 27 can return LaunchServices' generic application glyph for
+				// Cryptex-registered apps. Prefer the bundle's declared icon bytes,
+				// then use LaunchServices for asset-catalog-only applications.
+				UIImage* sourceIcon = [appInfo iconForSize:CGSizeMake(29, 29)];
+				if(!sourceIcon) sourceIcon =
+					[UIImage _applicationIconImageForBundleIdentifier:appId
+						format:iconFormatToUse() scale:[UIScreen mainScreen].scale];
+				UIImage* iconImage = sourceIcon
+					? imageWithSize(sourceIcon, _placeholderIcon.size) : _placeholderIcon;
 			dispatch_async(dispatch_get_main_queue(), ^{
+				if(iconImage) _cachedIcons[appId] = iconImage;
 				NSUInteger row = [_cachedAppInfos indexOfObject:appInfo];
 				if(row == NSNotFound) return;
 				NSIndexPath *curIndexPath = [NSIndexPath indexPathForRow:row inSection:0];

@@ -1,0 +1,157 @@
+diff --git a/Sileo/Backend/APT Wrapper/APTWrapper.swift b/Sileo/Backend/APT Wrapper/APTWrapper.swift
+index ce83bb1..771d8f5 100644
+--- a/Sileo/Backend/APT Wrapper/APTWrapper.swift	
++++ b/Sileo/Backend/APT Wrapper/APTWrapper.swift	
+@@ -177,9 +177,11 @@ class APTWrapper {
+                 let requested = (removing ? removals : Array(Set(installs + installDeps)))
+                     .sorted { $0.package.packageID < $1.package.packageID }
+                 if !removing {
+-                    let packageIDs = requested.map { $0.package.packageID }
+-                    guard DownloadManager.shared.verifiedBridgeArchivesComplete(
+-                            packageIDs: packageIDs) else {
++                    guard requested.allSatisfy({ item in
++                        DownloadManager.shared.verifiedBridgeArchive(
++                            packageID: item.package.packageID,
++                            version: item.package.version) != nil
++                    }) else {
+                         outputCallback("Verified package archive is missing; installation was not started.\n",
+                                        Int(STDERR_FILENO))
+                         completionCallback(194, .back, false)
+@@ -190,8 +192,9 @@ class APTWrapper {
+                     var value = ["id": $0.package.packageID,
+                                  "version": $0.package.version]
+                     if !removing,
+-                       let archive = DownloadManager.shared.verifiedBridgeArchives[
+-                            $0.package.packageID] {
++                       let archive = DownloadManager.shared.verifiedBridgeArchive(
++                            packageID: $0.package.packageID,
++                            version: $0.package.version) {
+                         value["archive"] = archive.lastPathComponent
+                     }
+                     return value
+@@ -207,11 +210,11 @@ class APTWrapper {
+                         "Package installed; runtime smoke test is still required before READY.\n",
+                         Int(STDOUT_FILENO))
+                 }
+-                if !removing {
+-                    for archive in DownloadManager.shared.verifiedBridgeArchives.values {
+-                        try? FileManager.default.removeItem(at: archive)
+-                    }
+-                    DownloadManager.shared.verifiedBridgeArchives.removeAll()
++                // Preserve a failed transaction's exact verified archives so
++                // Retry can diagnose or resubmit the same bytes. Explicit
++                // cancellation and successful commit discard them.
++                if !removing && result.0 == 0 {
++                    DownloadManager.shared.discardVerifiedBridgeArchives()
+                 }
+                 completionCallback(result.0, .back, false)
+             }
+diff --git a/Sileo/Backend/Download Manager/DownloadManager.swift b/Sileo/Backend/Download Manager/DownloadManager.swift
+index 2fc2b80..88b0d86 100644
+--- a/Sileo/Backend/Download Manager/DownloadManager.swift	
++++ b/Sileo/Backend/Download Manager/DownloadManager.swift	
+@@ -78,6 +78,9 @@ final class DownloadManager {
+     public var queueStarted = false
+     var downloads: [String: Download] = [:]
+     var cachedFiles: [URL] = []
++    // Keyed by package ID, exact version, and signed repository hash. A paid
++    // provider may authorize an older release, so an archive must never be
++    // reused for another version of the same package.
+     var verifiedBridgeArchives: [String: URL] = [:]
+         
+     var repoDownloadOverrideProviders: [String: Set<AnyHashable>] = [:]
+@@ -351,25 +354,50 @@ final class DownloadManager {
+     // A completed Sileo queue is not sufficient for the SRD Bridge. Every
+     // selected package must have an exact, hash-named archive staged in the
+     // app container before the privileged transaction may begin.
+-    public func verifiedBridgeArchivesComplete(packageIDs: [String]) -> Bool {
+-        let uniquePackageIDs = Set(packageIDs)
+-        guard !uniquePackageIDs.isEmpty else { return false }
++    private func verifiedBridgeArchiveKey(package: Package) -> String? {
++        guard let sha256 = package.rawControl["sha256"]?.lowercased(),
++              sha256.range(of: "^[0-9a-f]{64}$",
++                           options: .regularExpression) != nil else { return nil }
++        return package.packageID + "\u{1f}" + package.version + "\u{1f}" + sha256
++    }
++
++    public func verifiedBridgeArchive(packageID: String, version: String) -> URL? {
++        guard let download = downloads[packageID],
++              download.package.version == version,
++              let key = verifiedBridgeArchiveKey(package: download.package),
++              let archive = verifiedBridgeArchives[key]?.standardizedFileURL else {
++            return nil
++        }
+         let directory = FileManager.default.documentDirectory
+             .appendingPathComponent("0sky-authorized-packages", isDirectory: true)
+             .standardizedFileURL
+-        for packageID in uniquePackageIDs {
+-            guard let archive = verifiedBridgeArchives[packageID]?.standardizedFileURL,
+-                  archive.deletingLastPathComponent() == directory,
+-                  archive.pathExtension == "deb",
+-                  archive.deletingPathExtension().lastPathComponent.range(
+-                    of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
+-                return false
+-            }
+-            var archiveStat = stat()
+-            guard lstat(archive.path, &archiveStat) == 0,
+-                  (archiveStat.st_mode & S_IFMT) == S_IFREG else { return false }
++        guard archive.deletingLastPathComponent() == directory,
++              archive.pathExtension == "deb",
++              archive.deletingPathExtension().lastPathComponent.range(
++                of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
++            return nil
++        }
++        var archiveStat = stat()
++        guard lstat(archive.path, &archiveStat) == 0,
++              (archiveStat.st_mode & S_IFMT) == S_IFREG else { return nil }
++        return archive
++    }
++
++    public func verifiedBridgeArchivesComplete(packageIDs: [String]) -> Bool {
++        let uniquePackageIDs = Set(packageIDs)
++        guard !uniquePackageIDs.isEmpty else { return false }
++        return uniquePackageIDs.allSatisfy { packageID in
++            guard let download = downloads[packageID] else { return false }
++            return verifiedBridgeArchive(packageID: packageID,
++                                         version: download.package.version) != nil
+         }
+-        return true
++    }
++
++    public func discardVerifiedBridgeArchives() {
++        for archive in Set(verifiedBridgeArchives.values) {
++            try? FileManager.default.removeItem(at: archive)
++        }
++        verifiedBridgeArchives.removeAll()
+     }
+ 
+     public func verifiedDownloadDiagnostic(packageIDs: [String]) -> String {
+@@ -527,7 +555,11 @@ final class DownloadManager {
+             try? FileManager.default.removeItem(at: destination)
+             throw Error.hashMismatch(packageHash: sha256, refHash: "staged-copy")
+         }
+-        verifiedBridgeArchives[package.packageID] = destination
++        guard let key = verifiedBridgeArchiveKey(package: package) else {
++            try? FileManager.default.removeItem(at: destination)
++            throw Error.untrustedPackage(packageID: package.package)
++        }
++        verifiedBridgeArchives[key] = destination
+     }
+     
+     private func recheckTotalOps() throws {
+@@ -667,6 +699,7 @@ final class DownloadManager {
+     }
+     
+     public func cancelDownloads() {
++        discardVerifiedBridgeArchives()
+         for download in downloads.values {
+             download.task?.cancel()
+             if let backgroundTaskIdentifier = download.backgroundTask {
+@@ -678,6 +711,7 @@ final class DownloadManager {
+     }
+     
+     public func removeAllItems() {
++        discardVerifiedBridgeArchives()
+         upgrades.removeAll()
+         installdeps.removeAll()
+         installations.removeAll()

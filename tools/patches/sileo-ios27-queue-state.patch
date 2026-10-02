@@ -1,0 +1,85 @@
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index 905b7cf..cb1efd7 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -39,6 +39,7 @@ class DownloadsTableViewController: SileoViewController {
+     private var actions = [InstallOperation]()
+     private var isFired = false
+     private var isInstalling = false
++    private var isPlanning = false
+     public var isDownloading = false
+     private var isFinishedInstalling = false
+     private var returnButtonAction: APTWrapper.FINISH = .back
+@@ -231,7 +232,15 @@ class DownloadsTableViewController: SileoViewController {
+             completeLaterButton?.isHidden = true
+         }
+         let manager = DownloadManager.shared
+-        if manager.operationCount() > 0 && !manager.queueStarted && manager.errors.isEmpty {
++        // Sileo's local APT parser can retain stale dependency errors on an
++        // SRD. The authenticated Bridge plan is authoritative for iOS 27.
++        let bridgeQueue = ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 &&
++            !(installations + upgrades + installdeps).isEmpty &&
++            uninstallations.isEmpty && uninstalldeps.isEmpty
++        let bridgeInstallQueue = bridgeQueue &&
++            !isInstalling && !isDownloading
++        if manager.operationCount() > 0 && !manager.queueStarted &&
++           (manager.errors.isEmpty || bridgeInstallQueue) {
+             FRUIView.animate(withDuration: 0.25) {
+                 self.footerViewHeight?.constant = 128
+                 self.footerView?.alpha = 1
+@@ -245,8 +254,8 @@ class DownloadsTableViewController: SileoViewController {
+                 self.footerViewHeight?.constant = 0
+                 self.footerView?.alpha = 0
+             }
+         }
+-        if manager.operationCount() > 0 && manager.verifyComplete() && manager.queueStarted && manager.errors.isEmpty {
++        if manager.operationCount() > 0 && manager.verifyComplete() && manager.queueStarted && (manager.errors.isEmpty || bridgeQueue) {
+             manager.lockedForInstallation = true
+             isDownloading = false
+             cancelDownload?.isHidden = true
+@@ -263,12 +272,12 @@ class DownloadsTableViewController: SileoViewController {
+             transferToInstall()
+             TabBarController.singleton?.presentPopupController()
+         }
+-        if manager.errors.isEmpty {
+-            self.confirmButton?.isEnabled = true
+-            self.confirmButton?.alpha = 1
+-        } else {
+-            self.confirmButton?.isEnabled = false
+-            self.confirmButton?.alpha = 0.5
++        let canConfirm = !isPlanning && (manager.errors.isEmpty || bridgeInstallQueue)
++        self.confirmButton?.isEnabled = canConfirm
++        self.confirmButton?.alpha = canConfirm ? 1 : 0.5
++        if ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 {
++            self.confirmButton?.backgroundColor = canConfirm ?
++                UINavigationBar.appearance().tintColor : .systemGray
+         }
+     }
+     
+@@ -367,21 +375,23 @@ class DownloadsTableViewController: SileoViewController {
+             let manager = DownloadManager.shared
+             let selected = installations + upgrades + installdeps
+             let removalCount = uninstallations.count + uninstalldeps.count
+-            guard !isInstalling, !isDownloading, !selected.isEmpty,
+-                  removalCount == 0, manager.errors.isEmpty else {
+-                presentConfirmFailure("Queue preflight stopped: \(selected.count) install items, \(removalCount) removals, \(manager.errors.count) dependency errors. Refresh the queue and try again.")
++            guard !isPlanning, !isInstalling, !isDownloading, !selected.isEmpty,
++                  removalCount == 0 else {
++                presentConfirmFailure("Queue preflight stopped: \(selected.count) install items and \(removalCount) removals. Refresh the queue and try again.")
+                 return
+             }
+             let packages = selected.map { ["id": $0.package.packageID,
+                                            "version": $0.package.version] }
+                 .sorted { ($0["id"] ?? "", $0["version"] ?? "") <
+                           ($1["id"] ?? "", $1["version"] ?? "") }
++            isPlanning = true
+             confirmButton?.isEnabled = false
+             confirmButton?.alpha = 0.5
+             confirmButton?.setTitle("Planning…", for: .normal)
+             DispatchQueue.global(qos: .userInitiated).async {
+                 let plan = SileoBridgeAPT.request(operation: "plan", packages: packages)
+                 DispatchQueue.main.async {
++                    self.isPlanning = false
+                     let current = (self.installations + self.upgrades + self.installdeps).map {
+                         ["id": $0.package.packageID, "version": $0.package.version]
+                     }.sorted { ($0["id"] ?? "", $0["version"] ?? "") <

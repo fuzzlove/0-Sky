@@ -1,0 +1,103 @@
+{
+  "schema": 1,
+  "package": "com.nahtedetihw.doodle",
+  "version": "1.2",
+  "target": "ios27",
+  "architecture": [
+    "arm64",
+    "arm64e"
+  ],
+  "rootless": true,
+  "original_sha256": "4725c0170e89413308b8434e4f1e80fc7357880e628d87af76c9e45920aa656a",
+  "upstream_project": "https://github.com/nahtedetihw/Doodle",
+  "package_repository": "https://havoc.app/",
+  "source_commit": "a364b0cdcae3198336eee16e62ca56b3f540cc18",
+  "source_version": "1.1",
+  "source_matches_package": false,
+  "license": null,
+  "patches": [
+    {
+      "path": "tools/patches/doodle-ios27-source-probe.patch",
+      "sha256": "42387e4778e7cdb89d418b54c0094e45f3ea4bc8b8c1473c0134b21685dbe43d"
+    },
+    {
+      "path": "tools/patches/doodle-ios27-source-port.patch",
+      "sha256": "e82810a108649a670c5bb02ca5a74b20ae56a42d0cb1d4de9cd30c6d72d6eec4"
+    }
+  ],
+  "conversion_method": "private-source-port",
+  "probe_binary_sha256": "01bf6d6093e3a4a5e9a04ed7dad5963674ad2b46e4e2b045485885271849738b",
+  "probe_hooks_enabled_ios27": false,
+  "resulting_artifact_sha256": "64eae513d7a96e691ba177660141fcaa26327d0b3b5f862338584b28f7522086",
+  "toolchain_version": "Xcode iPhoneOS 26.5 SDK",
+  "dependencies": [
+    "ElleKit or equivalent verified injection runtime"
+  ],
+  "status": "OSKY_PORTED",
+  "repo_admission": "BLOCKED",
+  "tests": {
+    "inventory": "PASS",
+    "dependency": "PASS",
+    "architecture": "PASS",
+    "pii_secrets": "PASS",
+    "build": "PASS",
+    "package": "PASS",
+    "installation": "PASS",
+    "registration": "SKIP",
+    "runtime": "PASS",
+    "smoke": "PASS",
+    "uat": "UNVERIFIED",
+    "license_provenance": "BLOCKED"
+  },
+  "evidence": {
+    "control_settings_ios27": "0-Sky Control build 3.5.0.6 installed and registered on iPhone13,2 and iPhone12,8. iPhone 12 Tweaks list shows Doodle VERIFIED, and its in-app Enable and Disable actions both saved their requested values and restarted SpringBoard. Researcher confirmed the SE Doodle page shows verified status with an available Enable switch.",
+    "preferences_crash": "iOS 27 Preferences SIGABRT: unrecognized viewControllers selector with doodleprefs loaded",
+    "original_binary_signature": "codesign --verify reports arm64e is not signed",
+    "probe_build": "arm64 and arm64e dylib compiled; no preference bundle or installable package built",
+    "probe_reproducibility": "Two clean private-source 1.1 builds matched SHA-256 01bf6d6093e3a4a5e9a04ed7dad5963674ad2b46e4e2b045485885271849738b; original host codesign verification failed both times; temporary ad hoc signed copies matched SHA-256 240feac833d749add73f234f9ffc0d0fb43dbf605ebeb73b96c42b6f4b23a650 and passed strict host verification; device signature acceptance untested",
+    "core_api_probe": "Core class, selector, ivar, and type encodings matched on iPhone13,2 build 24A5390f and iPhone12,8 build 24A437; hook execution untested",
+    "legacy_hook_probe": "Both iOS 27 devices lack SBIconController.viewDidAppear:, SBLockScreenManager._handleBacklightLevelWillChange:, and SBDeviceApplicationSceneHandle.translucent; 16 other legacy method signatures were present but remain unverified",
+    "private_source_port": "Pinned public 1.1 source port rebuilt reproducibly as signed arm64/arm64e dylib SHA-256 64eae513d7a96e691ba177660141fcaa26327d0b3b5f862338584b28f7522086. Private DEB version 1:1.1+0sky27.2 SHA-256 3bd29448716730774e20583f1b634b44cf7c2879a8cd949742ff9835c591c24f installed transactionally on both iOS 27 test devices.",
+    "isolated_device_load": "Exact signed candidate loaded through isolated research Cryptex on iPhone13,2 build 24A5390f and iPhone12,8 build 24A437; both probe Cryptexes were removed.",
+    "temporary_file_load": "A copy under /var/jb/var/tmp was rejected by AMFI as code signature invalid before the candidate was admitted to a device trust cache.",
+    "springboard_runtime": "On iPhone13,2 build 24A5390f, runtime registry admitted exact SHA-256 and injection-state recorded the dylib loaded into SpringBoard PID 34134 with no Doodle quarantine. PID stayed stable through controlled lock-screen trial.",
+    "lockscreen_uat": "Researcher reported native passcode enrollment, direct pattern unlock, wrong-pattern rejection, keypad fallback, and repeat pattern unlock. Device evidence shows three saved paths and removal of the legacy weak credential after successful Keychain write/readback. Local UAT receipt issued; gesture actions are researcher-observed, not automated.",
+    "uat_report": "artifacts/compatibility/doodle/runtime-uat-0152601e-finalize.json",
+    "se_transaction": "artifacts/compatibility/doodle/transaction-private-port-2e03402e-v3.json: exact reviewed package installed after two earlier environmental failures each rolled back; runtime registry admitted one Doodle dylib with exact SHA and no quarantine/rejection. Three valid paths were saved on-device, then Doodle was enabled and SpringBoard restarted.",
+    "se_lockscreen_uat": "Researcher reported native keypad unlock, direct pattern unlock, wrong-pattern rejection, keypad fallback, and repeat pattern unlock. Device evidence shows three saved paths, no legacy weak credential, stable SpringBoard PID 49312, and an exact-version/hash/model/build local UAT receipt. Gesture actions are researcher-observed, not automated.",
+    "se_uat_report": "artifacts/compatibility/doodle/runtime-uat-2e03402e-finalize.json",
+    "se_reboot_persistence": "artifacts/compatibility/doodle/runtime-uat-2e03402e-persistence.json: after a full reboot, exact package version/dylib hash, enabled preference, three valid paths, local receipt, live SpringBoard injection-state, and no quarantine all passed. Researcher then reported direct unlock with the saved pattern after one native passcode unlock; see runtime-uat-2e03402e-post-reboot-observations.json.",
+    "iphone12_control_toggle": "Control displayed explicit Apply and Restart alerts for both Disable and Enable. During the final UI cycle, the off action saved enabled=false and restarted SpringBoard to PID 18690; the on action saved enabled=true and restarted to PID 20321. All three paths remained intact, the reviewed dylib loaded in the final process, no Doodle quarantine occurred, and the researcher reported a direct pattern unlock. Evidence: runtime-uat-0152601e-control-cycle-off.json, runtime-uat-0152601e-control-cycle-on.json, runtime-uat-0152601e-control-cycle-loaded.json, and runtime-uat-0152601e-control-cycle-observations.json.",
+    "iphone12_reboot_persistence": "artifacts/compatibility/doodle/runtime-uat-0152601e-persistence.json: after a full reboot, exact package version/dylib hash, enabled preference, three valid paths, local receipt, live SpringBoard injection-state, and no quarantine all passed. Researcher reported direct unlock with the saved pattern and Control showed Enable Tweak on; see runtime-uat-0152601e-post-reboot-observations.json."
+  },
+  "blocking_reason": [
+    "Public 1.1 source predates the supplied 1.2 package; no exact 1.2 source was available.",
+    "No upstream license was found permitting redistribution of this derivative build; repository admission remains blocked.",
+    "Automated physical gesture UAT is unavailable; researcher-observed gestures are recorded separately from device evidence."
+  ],
+  "private_device_uat": "PASS_WITH_WARNINGS",
+  "private_package_sha256": "3bd29448716730774e20583f1b634b44cf7c2879a8cd949742ff9835c591c24f",
+  "private_package_version": "1:1.1+0sky27.2",
+  "verified_targets": [
+    {
+      "model": "iPhone13,2",
+      "ios": "27.0",
+      "build": "24A5390f",
+      "runtime": "PASS",
+      "gesture_uat": "RESEARCHER_OBSERVED_PASS",
+      "reboot_persistence": "PASS",
+      "control_switch": "PASS"
+    },
+    {
+      "model": "iPhone12,8",
+      "ios": "27.0",
+      "build": "24A437",
+      "runtime": "PASS",
+      "gesture_uat": "RESEARCHER_OBSERVED_PASS",
+      "reboot_persistence": "PASS",
+      "isolated_dylib_load": "PASS",
+      "installation": "PASS",
+      "registry_admission": "PASS"
+    }
+  ]
+}

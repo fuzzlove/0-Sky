@@ -129,10 +129,16 @@ class PairingBindingTests(unittest.TestCase):
                              host_alias="0sky-device-test")
         joined = " ".join(map(str, args))
         self.assertIn("StrictHostKeyChecking=yes", joined)
-        self.assertIn('UserKnownHostsFile="/pins/device"', joined)
+        self.assertIn("UserKnownHostsFile=/pins/device", joined)
         self.assertIn("HostKeyAlias=0sky-device-test", joined)
         self.assertNotIn("StrictHostKeyChecking=no", joined)
         self.assertNotIn("UserKnownHostsFile=/dev/null", joined)
+
+    def test_ssh_base_escapes_spaces_for_openssh_option_parser(self):
+        args = pair.ssh_base("127.0.0.1", "22", pathlib.Path("/key"),
+                             known_hosts=pathlib.Path("/Library/Application Support/pin"),
+                             host_alias="0sky-device-test")
+        self.assertIn("UserKnownHostsFile=/Library/Application\\ Support/pin", args)
 
     def test_pairing_marker_migrates_and_preserves_multiple_macs(self):
         root = pathlib.Path(tempfile.mkdtemp(prefix="0sky-multi-mac-marker-"))

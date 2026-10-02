@@ -1,0 +1,42 @@
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index 54ebfb7..7d4255e 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -491,6 +491,7 @@ class DownloadsTableViewController: SileoViewController {
+                     self.confirmButton?.setTitle("Downloading…", for: .normal)
+                     manager.startMoreDownloads()
+                     manager.reloadData(recheckPackages: false)
++                    self.awaitVerifiedBridgeInstall(remaining: 240)
+                 }
+             }
+             return
+@@ -512,6 +513,29 @@ class DownloadsTableViewController: SileoViewController {
+         alert.addAction(UIAlertAction(title: "OK", style: .default))
+         present(alert, animated: true)
+     }
++
++    private func awaitVerifiedBridgeInstall(remaining: Int) {
++        guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27,
++              isDownloading, !isInstalling else { return }
++        let manager = DownloadManager.shared
++        if manager.verifyComplete() {
++            manager.lockedForInstallation = true
++            isDownloading = false
++            cancelDownload?.isHidden = true
++            transferToInstall()
++            TabBarController.singleton?.presentPopupController()
++            return
++        }
++        guard remaining > 0 else {
++            isDownloading = false
++            manager.queueStarted = false
++            presentConfirmFailure("Package download verification timed out. Refresh the source and retry.")
++            return
++        }
++        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in
++            self?.awaitVerifiedBridgeInstall(remaining: remaining - 1)
++        }
++    }
+     
+     override func accessibilityPerformEscape() -> Bool {
+         TabBarController.singleton?.dismissPopupController()

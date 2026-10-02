@@ -19,11 +19,14 @@ import signal
 import shlex
 import shutil
 import socket
+import stat
 import subprocess
 import sys
 import threading
 import time
 import traceback
+import tarfile
+import io
 import unicodedata
 import zipfile
 
@@ -41,6 +44,7 @@ LOCK = INSTANCE / "worker.lock"
 DEVICE_HOST = os.environ.get("CRYPSTORE_DEVICE_HOST", "")
 DEVICE_USER = os.environ.get("CRYPSTORE_DEVICE_USER", "root")
 DEVICE_PORT = os.environ.get("CRYPSTORE_DEVICE_PORT")
+DEVICE_REMOTE_PORT = os.environ.get("CRYPSTORE_DEVICE_REMOTE_PORT", "22")
 DEVICE_UDID = os.environ.get("CRYPSTORE_DEVICE_UDID", "")
 HOST_KEY_FINGERPRINT = os.environ.get("CRYPSTORE_HOST_KEY_FINGERPRINT", "")
 DEVICE_KEY = pathlib.Path(os.environ.get("CRYPSTORE_DEVICE_KEY", "")).expanduser()
@@ -55,7 +59,6 @@ REMOTE_SPOOL = "/var/jb/var/spool/crypstore/jobs"
 REMOTE_APPREGISTRARD = "/var/jb/usr/local/libexec/appregistrard-srd"
 REMOTE_HEARTBEAT = "/var/jb/var/run/crypstore-worker.json"
 MOUNT_ROOT = "/private/var/run/com.apple.security.cryptexd/mnt"
-LDID = pathlib.Path(os.environ.get("CRYPSTORE_LDID") or shutil.which("ldid") or "ldid")
 BUILDER = NATIVE / "build_and_install.sh"
 MANIFEST = NATIVE / "BuildManifest.plist"
 RUNTIME_SYNC = BASE.parent / "tools/srd-runtime-manager/sync_runtime_cryptex.py"
@@ -76,6 +79,10 @@ MAX_IPA_ENTRIES = 100_000
 # floor for the 0-Sky recovery IPA; the expansion-based term can raise it for
 # larger applications.
 MIN_WORKSPACE_HEADROOM = 1792 * 1024 * 1024
+# A Cryptex update temporarily needs the new APFS image, its personalized
+# derivative, and enough free space for cryptexd/database bookkeeping. Keep a
+# fixed floor so even small apps cannot fill /private/var late in a transaction.
+MIN_DEVICE_INSTALL_HEADROOM = 1024 * 1024 * 1024
 
 # Do not share or wildcard-remove OpenSSH control sockets across SRDs.  An
 # earlier recovery path unlinked every /tmp/crypstore-* socket.  The associated
@@ -95,20 +102,26 @@ CONTROL_PATH = control_path("configured")
 
 def ssh_base_for(host: str, port: str, transport: str) -> list[str]:
     """Build a host-key-pinned command for one verified transport endpoint."""
-    if '"' in str(DEVICE_KNOWN_HOSTS) or "\n" in str(DEVICE_KNOWN_HOSTS):
+    if any(value in str(DEVICE_KNOWN_HOSTS) for value in ('"', "\n", "\r", "\t")):
         raise RuntimeError("device SSH known-hosts path contains unsupported characters")
+    known_hosts_value = str(DEVICE_KNOWN_HOSTS).replace("\\", "\\\\").replace(" ", "\\ ")
     return [
-        "/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+        "/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=20",
+        # Dropbear's NIST P-256 exchange can stall for minutes on the iOS 27
+        # SRD runtime while Curve25519 completes reliably.  Pin the mutually
+        # supported KEX so health probes cannot exhaust the daemon with stuck
+        # unauthenticated children.
+        "-o", "KexAlgorithms=curve25519-sha256",
         "-o", "StrictHostKeyChecking=yes",
-        "-o", f'UserKnownHostsFile="{DEVICE_KNOWN_HOSTS}"',
+        "-o", f"UserKnownHostsFile={known_hosts_value}",
         "-o", "GlobalKnownHostsFile=/dev/null",
         "-o", f"HostKeyAlias={DEVICE_HOST_ALIAS}",
         "-o", "IdentitiesOnly=yes", "-o", "PasswordAuthentication=no",
         "-o", "KbdInteractiveAuthentication=no",
-        # The configured route may be a CoreDevice forward whose tunnel address
-        # rotates after Apple-session refresh. Avoid retaining a multiplexed
-        # master across that authenticated transport transition.
-        "-o", "ControlMaster=no", "-o", "ControlPersist=no",
+        # iOS 27 SRD key exchange and public-key verification can take tens of
+        # seconds. Reuse one pinned connection for the serialized worker calls;
+        # ssh() discards this socket whenever the authenticated route changes.
+        "-o", "ControlMaster=auto", "-o", "ControlPersist=120",
         "-o", f"ControlPath={control_path(transport)}", "-i", str(DEVICE_KEY),
         "-p", str(port), f"{DEVICE_USER}@{host}",
     ]
@@ -119,6 +132,12 @@ SSH_BASE = ssh_base_for(DEVICE_HOST, DEVICE_PORT or "22", "configured")
 STATUS_LOCK = threading.Lock()
 SSH_LOCK = threading.RLock()
 STATUS = {"stage": "Ready", "job_id": None, "detail": "Waiting for an IPA"}
+
+
+class ControlInstallFailed(RuntimeError):
+    def __init__(self, message: str, rollback: str):
+        super().__init__(message)
+        self.rollback = rollback
 STOP_HEARTBEAT = threading.Event()
 PAIRING_LIVE = INSTANCE / "pairing-live.json"
 PAIRING_CHECK_LOCK = threading.Lock()
@@ -284,9 +303,9 @@ def ssh_candidates() -> list[tuple[list[str], pathlib.Path, str]]:
         # central transport manager.
         bonjour = _paired_device_bonjour_host()
         if bonjour:
-            result.append((ssh_base_for(bonjour, "22", "bonjour"),
+            result.append((ssh_base_for(bonjour, DEVICE_REMOTE_PORT, "bonjour"),
                            control_path("bonjour"), "bonjour"))
-        result.append((ssh_base_for(f"{DEVICE_UDID}.coredevice.local", "22", "wireless"),
+        result.append((ssh_base_for(f"{DEVICE_UDID}.coredevice.local", DEVICE_REMOTE_PORT, "wireless"),
                        control_path("wireless"), "wireless"))
     # The Bluetooth tunnel is an application data-plane fallback. Its helper
     # authenticates the device with the bridge token provisioned only after
@@ -390,6 +409,139 @@ def set_status(stage: str, job_id: str | None = None, detail: str = "") -> None:
         STATUS.update({"stage": stage, "job_id": job_id, "detail": detail})
 
 
+_HOST_TOOLS_CACHE: tuple[float, dict] = (0.0, {})
+SSH_UAT_RECEIPT = INSTANCE / "uat" / "ssh.json"
+FRIDA_UAT_RECEIPT = INSTANCE / "uat" / "frida.json"
+
+
+def host_ssh_uat_status() -> dict:
+    """Forward only a fresh, device-bound result from the paired Mac UAT."""
+    try:
+        if SSH_UAT_RECEIPT.parent.is_symlink():
+            return {"result": "UNVERIFIED"}
+        descriptor = os.open(SSH_UAT_RECEIPT, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(descriptor, "rb") as stream:
+            metadata = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 8192 or
+                    metadata.st_mode & 0o077 or metadata.st_uid != os.getuid()):
+                return {"result": "UNVERIFIED"}
+            contents = stream.read(8193)
+        if len(contents) > 8192:
+            return {"result": "UNVERIFIED"}
+        value = json.loads(contents)
+        checked_at = int(value["timestamp"])
+        checks = value["checks"]
+        required = {"usb_identity", "pinned_public_key", "root_shell",
+                    "server_process", "localhost_listener", "file_round_trip",
+                    "cleanup", "reconnect"}
+        if (value.get("schema") != 1 or value.get("result") != "PASS" or
+                value.get("device_digest") != hashlib.sha256(DEVICE_UDID.encode()).hexdigest() or
+                not HOST_KEY_FINGERPRINT or
+                value.get("host_key_fingerprint") != HOST_KEY_FINGERPRINT or
+                not isinstance(checks, dict) or
+                any(checks.get(name) is not True for name in required) or
+                not 0 <= time.time() - checked_at <= 3600):
+            return {"result": "UNVERIFIED"}
+        transport = value.get("transport")
+        if transport not in {"configured", "bonjour", "wireless", "bluetooth"}:
+            return {"result": "UNVERIFIED"}
+        return {"result": "PASS", "checked_at": checked_at,
+                "transport": transport, "checks": sorted(required)}
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return {"result": "UNVERIFIED"}
+
+
+def host_frida_uat_status() -> dict:
+    """Forward only a fresh, pinned, exact-USB process-enumeration result."""
+    try:
+        if FRIDA_UAT_RECEIPT.parent.is_symlink():
+            return {"result": "UNVERIFIED"}
+        descriptor = os.open(FRIDA_UAT_RECEIPT, os.O_RDONLY | os.O_NOFOLLOW)
+        with os.fdopen(descriptor, "rb") as stream:
+            metadata = os.fstat(stream.fileno())
+            if (not stat.S_ISREG(metadata.st_mode) or metadata.st_size > 8192 or
+                    metadata.st_mode & 0o077 or metadata.st_uid != os.getuid()):
+                return {"result": "UNVERIFIED"}
+            contents = stream.read(8193)
+        if len(contents) > 8192:
+            return {"result": "UNVERIFIED"}
+        value = json.loads(contents)
+        checked_at = int(value["timestamp"])
+        checks = value["checks"]
+        required = {"usb_identity", "artifact_hash", "server_process",
+                    "localhost_listener", "host_version", "process_enumeration"}
+        if (value.get("schema") != 1 or value.get("result") != "PASS" or
+                value.get("device_digest") != hashlib.sha256(DEVICE_UDID.encode()).hexdigest() or
+                not HOST_KEY_FINGERPRINT or
+                value.get("host_key_fingerprint") != HOST_KEY_FINGERPRINT or
+                value.get("scope") != "read_only_process_enumeration" or
+                value.get("host_version") != "17.18.0" or
+                value.get("device_version") != "17.18.0" or
+                value.get("transport") != "exact_usb_iproxy" or
+                not isinstance(checks, dict) or
+                any(checks.get(name) is not True for name in required) or
+                not 0 <= time.time() - checked_at <= 3600):
+            return {"result": "UNVERIFIED"}
+        return {"result": "PASS", "checked_at": checked_at,
+                "host_version": "17.18.0", "device_version": "17.18.0",
+                "transport": "exact_usb_iproxy", "checks": sorted(required),
+                "scope": "read_only_process_enumeration"}
+    except (OSError, ValueError, TypeError, KeyError, json.JSONDecodeError):
+        return {"result": "UNVERIFIED"}
+
+
+def host_tool_inventory() -> dict:
+    """Bounded, read-only host probes; the heartbeat never includes paths."""
+    global _HOST_TOOLS_CACHE
+    if time.monotonic() - _HOST_TOOLS_CACHE[0] < 60:
+        return _HOST_TOOLS_CACHE[1]
+    managed_frida = INSTANCE.parent.parent / "tools/frida-current/bin/frida"
+    managed_objection = INSTANCE.parent.parent / "tools/objection-current/bin/objection"
+    managed_mitmproxy = INSTANCE.parent.parent / "tools/mitmproxy-current/bin/mitmproxy"
+    commands = {
+        "frida_cli": (str(managed_frida) if managed_frida.is_file() else "frida", "--version"),
+        "objection": (str(managed_objection) if managed_objection.is_file() else "objection", "version"),
+        "lldb": ("lldb", "--version"),
+        "mitmproxy": (str(managed_mitmproxy) if managed_mitmproxy.is_file() else "mitmproxy", "--version"),
+        "wireshark": ("tshark", "--version"),
+        "libimobiledevice": ("ideviceinfo", "--version"),
+    }
+    applications = {
+        "burp_suite": ("Burp Suite.app",),
+        "wireshark": ("Wireshark.app",),
+        "hopper": ("Hopper Disassembler.app", "Hopper.app"),
+        "ida": ("IDA Pro.app", "IDA.app"),
+    }
+    roots = (pathlib.Path("/Applications"), pathlib.Path.home() / "Applications")
+    result: dict[str, dict] = {}
+    for key, (name, argument) in commands.items():
+        executable = name if pathlib.Path(name).is_file() else shutil.which(name)
+        if not executable:
+            result[key] = {"detected": False, "probe": "SKIP", "version": None}
+            continue
+        try:
+            completed = subprocess.run([str(executable), argument],
+                                       stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                       stderr=subprocess.PIPE, timeout=8, check=False)
+            combined = (completed.stdout + b"\n" + completed.stderr).decode("utf-8", "replace")
+            version = re.search(r"\b\d+(?:\.\d+){1,3}\b", combined)
+            result[key] = {"detected": True,
+                           "probe": "PASS" if completed.returncode == 0 else "DEGRADED",
+                           "version": version.group(0) if version else None}
+        except (OSError, subprocess.TimeoutExpired):
+            result[key] = {"detected": True, "probe": "DEGRADED", "version": None}
+    for key, names in applications.items():
+        detected = any((root / name / "Contents/Info.plist").is_file()
+                       for root in roots for name in names)
+        previous = result.get(key, {"detected": False, "probe": "SKIP", "version": None})
+        if detected and not previous["detected"]:
+            result[key] = {"detected": True, "probe": "UNTESTED", "version": None}
+    result["ghidra"] = {"detected": shutil.which("ghidraRun") is not None,
+                         "probe": "UNTESTED", "version": None}
+    _HOST_TOOLS_CACHE = (time.monotonic(), result)
+    return result
+
+
 def send_heartbeat() -> None:
     if not PAIRING_OPERATION_ACTIVE.is_set():
         refresh_apple_pairing(allow_pair=False, minimum_interval=60)
@@ -415,6 +567,10 @@ def send_heartbeat() -> None:
                     "device_udid": DEVICE_UDID,
                     "host_name": socket.gethostname(),
                     "device_backend": "PymobiledeviceBackend",
+                    "control_installer_backend": "paired-srd-worker-v1",
+                    "host_tools": host_tool_inventory(),
+                    "ssh_uat": host_ssh_uat_status(),
+                    "frida_uat": host_frida_uat_status(),
                     "bridge_version": live.get("bridgeVersion", "1.0.0"),
                     "protocol_version": live.get("protocolVersion", 1),
                     "host_key_fingerprint": HOST_KEY_FINGERPRINT,
@@ -458,7 +614,7 @@ def send_heartbeat() -> None:
     data = (json.dumps(payload, separators=(",", ":")) + "\n").encode()
     temporary = REMOTE_HEARTBEAT + ".tmp"
     remote_write(temporary, data)
-    ssh(f"mv {shlex.quote(temporary)} {shlex.quote(REMOTE_HEARTBEAT)}", timeout=30)
+    ssh(f"mv {shlex.quote(temporary)} {shlex.quote(REMOTE_HEARTBEAT)}", timeout=60)
 
 
 def heartbeat_loop() -> None:
@@ -574,6 +730,37 @@ def remote_result(job_id: str, value: dict) -> None:
     ssh(f"mv {shlex.quote(temporary)} {shlex.quote(path)}", timeout=30)
 
 
+def pending_result_path(job_id: str) -> pathlib.Path:
+    """Return the host-side durable result used when the device is unwritable."""
+    if not JOB_RE.fullmatch(job_id):
+        raise ValueError("invalid job identifier")
+    return JOBS / job_id / "pending-result.json"
+
+
+def defer_remote_result(job_id: str, value: dict) -> None:
+    """Persist one terminal result without ever rerunning its device mutation."""
+    path = pending_result_path(job_id)
+    atomic_json(path, value)
+
+
+def flush_deferred_result(job_id: str) -> bool:
+    """Try to publish a deferred terminal result; return False while blocked."""
+    path = pending_result_path(job_id)
+    if not path.is_file():
+        return True
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+        if not isinstance(value, dict) or not isinstance(value.get("status"), int):
+            raise RuntimeError("invalid deferred worker result")
+        remote_result(job_id, value)
+    except Exception as error:
+        log(f"{job_id}: deferred result is still pending: {error}")
+        return False
+    path.unlink(missing_ok=True)
+    cleanup_job_artifacts(JOBS / job_id)
+    return True
+
+
 def list_jobs() -> list[str]:
     command = (
         f"mkdir -p {shlex.quote(REMOTE_SPOOL)}; "
@@ -582,7 +769,7 @@ def list_jobs() -> list[str]:
         "if [ -f \"$d/request.json\" ] || [ -f \"$d/processing.json\" ]; "
         "then echo \"$d/request.json\"; fi; done 2>/dev/null"
     )
-    result = ssh(command, timeout=30, check=False)
+    result = ssh(command, timeout=60, check=False)
     jobs = []
     for line in result.stdout.decode("utf-8", "replace").splitlines():
         job_id = pathlib.PurePosixPath(line).parent.name
@@ -600,12 +787,14 @@ def claim_job(job_id: str) -> dict | None:
         f"[ ! -f {shlex.quote(root + '/result.json')} ]; then "
         f"cat {shlex.quote(root + '/processing.json')}; fi"
     )
-    result = ssh(command, timeout=30, check=False)
+    result = ssh(command, timeout=60, check=False)
     if not result.stdout.strip():
         return None
     request = json.loads(result.stdout)
     if (request.get("job_id") != job_id or request.get("operation") not in
-            ("install", "runtime-sync", "uninstall-cryptex", "pair-verify")):
+            ("install", "control-install", "link-install", "runtime-sync",
+             "uninstall-cryptex", "pair-verify", "crane-container-cleanup",
+             "crane-target-handoff")):
         raise RuntimeError("invalid queued request")
     return request
 
@@ -616,6 +805,87 @@ def fetch_ipa(job_id: str, destination: pathlib.Path) -> None:
     destination.write_bytes(result.stdout)
     if destination.stat().st_size < 256:
         raise RuntimeError("queued IPA is empty")
+
+
+def verify_requested_ipa_sha256(ipa: pathlib.Path, expected: str | None) -> str:
+    observed = file_sha256(ipa)
+    if expected is not None and (not isinstance(expected, str) or
+                                 not re.fullmatch(r"[0-9a-f]{64}", expected) or
+                                 observed != expected):
+        raise RuntimeError("queued IPA SHA-256 differs from the requested artifact")
+    return observed
+
+
+def normalize_zip_compression(path):
+    """Rewrite supported ZIP methods that macOS ditto cannot extract."""
+    import copy
+    import struct
+    import tempfile
+
+    def strip_zip64(extra):
+        result = bytearray()
+        offset = 0
+        while offset < len(extra):
+            if offset + 4 > len(extra):
+                raise RuntimeError("IPA has malformed ZIP metadata")
+            tag, size = struct.unpack_from("<HH", extra, offset)
+            end = offset + 4 + size
+            if end > len(extra):
+                raise RuntimeError("IPA has truncated ZIP metadata")
+            if tag != 1:
+                result.extend(extra[offset:end])
+            offset = end
+        return bytes(result)
+
+    temporary = None
+    try:
+        with zipfile.ZipFile(path) as source:
+            entries = source.infolist()
+            if len(entries) > MAX_IPA_ENTRIES:
+                raise RuntimeError("IPA contains too many archive entries")
+            expanded = sum(item.file_size for item in entries)
+            if expanded > 16 * 1024 * 1024 * 1024:
+                raise RuntimeError("IPA expansion exceeds the 16 GiB safety limit")
+            methods = {item.compress_type for item in entries}
+            if methods <= {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED}:
+                return False
+            if not methods <= {zipfile.ZIP_STORED, zipfile.ZIP_DEFLATED,
+                               zipfile.ZIP_BZIP2, zipfile.ZIP_LZMA}:
+                raise RuntimeError("IPA uses an unsupported ZIP compression method")
+            if shutil.disk_usage(path.parent).free < expanded + MIN_WORKSPACE_HEADROOM:
+                raise RuntimeError("Insufficient host space to normalize IPA compression")
+            with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".ipa-compression-",
+                                             suffix=".zip", delete=False) as handle:
+                temporary = pathlib.Path(handle.name)
+            total = 0
+            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED,
+                                 allowZip64=True) as destination:
+                destination.comment = source.comment
+                for item in entries:
+                    clone = copy.copy(item)
+                    clone.compress_type = (zipfile.ZIP_STORED if item.is_dir()
+                                           else zipfile.ZIP_DEFLATED)
+                    clone.extra = strip_zip64(item.extra)
+                    # Copy bytes unchanged, including symlink targets. Preserve
+                    # Unix modes, names, dates, comments and non-ZIP64 metadata.
+                    written = 0
+                    with source.open(item) as incoming, destination.open(clone, "w") as outgoing:
+                        while True:
+                            chunk = incoming.read(1024 * 1024)
+                            if not chunk:
+                                break
+                            written += len(chunk)
+                            total += len(chunk)
+                            if written > item.file_size or total > expanded:
+                                raise RuntimeError("IPA expands beyond its declared size")
+                            outgoing.write(chunk)
+                    if written != item.file_size:
+                        raise RuntimeError("IPA member size mismatch")
+        temporary.replace(path)
+        return True
+    finally:
+        if temporary is not None:
+            temporary.unlink(missing_ok=True)
 
 
 def normalize_ipa_archive(path: pathlib.Path) -> bool:
@@ -645,6 +915,7 @@ def normalize_ipa_archive(path: pathlib.Path) -> bool:
         magic = handle.read(4)
     if magic not in (b"PK\x03\x04", b"PK\x05\x06", b"PK\x07\x08"):
         raise RuntimeError("selected file is not an IPA ZIP archive")
+    recompressed = normalize_zip_compression(path)
     try:
         with zipfile.ZipFile(path) as archive:
             if len(archive.infolist()) > MAX_IPA_ENTRIES:
@@ -653,7 +924,7 @@ def normalize_ipa_archive(path: pathlib.Path) -> bool:
                 raise RuntimeError("IPA ZIP data is damaged")
     except zipfile.BadZipFile as error:
         raise RuntimeError(f"selected IPA ZIP is invalid: {error}") from error
-    return unwrapped
+    return unwrapped or recompressed
 
 
 def cleanup_job_artifacts(job_dir: pathlib.Path) -> None:
@@ -710,6 +981,57 @@ def preflight_workspace(ipa: pathlib.Path) -> None:
             f"{free // (1024*1024)} MiB free, "
             f"{required // (1024*1024)} MiB required; clear reproducible build "
             "staging/output or choose a larger CRYPSTORE workspace and retry"
+        )
+
+
+def device_free_space_bytes() -> int:
+    """Measure the filesystem that stores Cryptex images on the selected SRD."""
+    script = (
+        "import os\n"
+        "value=os.statvfs('/private/var')\n"
+        "print(value.f_bavail*value.f_frsize)\n"
+    )
+    encoded = base64.b64encode(script.encode()).decode()
+    completed = ssh(
+        f"echo {shlex.quote(encoded)} | /var/jb/usr/bin/base64 -d | "
+        "/var/jb/usr/bin/python3 -",
+        timeout=30,
+    )
+    output = completed.stdout.decode("utf-8", "strict").strip()
+    if not re.fullmatch(r"[0-9]+", output):
+        raise RuntimeError("device free-space probe returned an invalid value")
+    return int(output)
+
+
+def required_device_install_bytes(app: pathlib.Path) -> tuple[int, int, int]:
+    """Return required free bytes, payload bytes and planned image bytes."""
+    payload_bytes, image_mebibytes = cryptex_image_mebibytes(app)
+    image_bytes = image_mebibytes * 1024 * 1024
+    required = max(
+        MIN_DEVICE_INSTALL_HEADROOM,
+        image_bytes * 2 + payload_bytes * 2 + 256 * 1024 * 1024,
+    )
+    return required, payload_bytes, image_bytes
+
+
+def preflight_device_workspace(app: pathlib.Path) -> None:
+    """Fail before unregistering or replacing an app when the SRD is full."""
+    required, payload_bytes, image_bytes = required_device_install_bytes(app)
+    free = device_free_space_bytes()
+    log(
+        "device workspace preflight: "
+        f"free={free // (1024*1024)} MiB, "
+        f"required={required // (1024*1024)} MiB, "
+        f"payload={payload_bytes // (1024*1024)} MiB, "
+        f"image={image_bytes // (1024*1024)} MiB"
+    )
+    if free < required:
+        raise RuntimeError(
+            "device has insufficient free space for a transactional Cryptex "
+            f"install: {free // (1024*1024)} MiB free, "
+            f"{required // (1024*1024)} MiB required; remove obsolete 0-Sky "
+            "Cryptex generations through the supported cleanup operation or "
+            "free device storage, then retry"
         )
 
 
@@ -809,7 +1131,10 @@ def bundle_executable(bundle: pathlib.Path) -> pathlib.Path | None:
 
 
 def capture_entitlements(binary: pathlib.Path, ent_dir: pathlib.Path) -> pathlib.Path | None:
-    completed = run([LDID, "-e", binary], timeout=30, check=False)
+    completed = run(["/usr/bin/codesign", "--display", "--entitlements", ":-", binary],
+                    timeout=30, check=False)
+    if completed.returncode:
+        return None
     data = completed.stdout.strip()
     if not data:
         return None
@@ -822,15 +1147,70 @@ def capture_entitlements(binary: pathlib.Path, ent_dir: pathlib.Path) -> pathlib
     return output
 
 
-def codesign(target: pathlib.Path, entitlements: pathlib.Path | None = None) -> None:
+def codesign(
+    target: pathlib.Path,
+    entitlements: pathlib.Path | None = None,
+    identifier: str | None = None,
+) -> None:
     argv = [
         "/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none",
         "--generate-entitlement-der",
     ]
+    if identifier is not None:
+        if not BUNDLE_RE.fullmatch(identifier):
+            raise RuntimeError("refusing to sign with an invalid bundle identifier")
+        argv += ["--identifier", identifier]
+    else:
+        argv.append("--preserve-metadata=identifier")
     if entitlements:
         argv += ["--entitlements", entitlements]
     argv.append(target)
     run(argv, timeout=120)
+
+
+def signing_identifier(bundle: pathlib.Path, *, required: bool = False) -> str | None:
+    """Return the validated identifier that must bind a code bundle signature."""
+    try:
+        with (bundle / "Info.plist").open("rb") as handle:
+            identifier = plistlib.load(handle).get("CFBundleIdentifier")
+    except (FileNotFoundError, OSError, plistlib.InvalidFileException):
+        identifier = None
+    if isinstance(identifier, str) and BUNDLE_RE.fullmatch(identifier):
+        return identifier
+    if required:
+        raise RuntimeError(f"{bundle.name} has no valid CFBundleIdentifier")
+    return None
+
+
+def requested_launch_validation(request: dict, app: pathlib.Path) -> str | None:
+    """Validate a device-supplied, root-protected companion lifecycle contract."""
+    contract = request.get("launch_validation")
+    if contract is None:
+        return None
+    required = {
+        "path", "bundle_identifier", "role", "launch_validation",
+        "original_executable_sha256",
+    }
+    if not isinstance(contract, dict) or set(contract) != required:
+        raise RuntimeError("application lifecycle contract is malformed")
+    if (contract.get("role") != "hidden-companion" or
+            contract.get("launch_validation") != "controlled-exit-v1"):
+        raise RuntimeError("application lifecycle contract is unsupported")
+    with (app / "Info.plist").open("rb") as handle:
+        info = plistlib.load(handle)
+    bundle_id = info.get("CFBundleIdentifier")
+    executable = info.get("CFBundleExecutable")
+    tags = info.get("SBAppTags")
+    if (bundle_id != contract.get("bundle_identifier") or
+            not isinstance(executable, str) or
+            not isinstance(tags, list) or "hidden" not in tags):
+        raise RuntimeError("hidden companion metadata differs from its lifecycle contract")
+    expected_hash = contract.get("original_executable_sha256")
+    if (not isinstance(expected_hash, str) or
+            not re.fullmatch(r"[0-9a-f]{64}", expected_hash) or
+            file_sha256(app / executable) != expected_hash):
+        raise RuntimeError("hidden companion executable differs from its lifecycle contract")
+    return "controlled-exit-v1"
 
 
 def fairplay_encrypted(binary: pathlib.Path) -> bool:
@@ -925,18 +1305,370 @@ def sign_app(app: pathlib.Path, work: pathlib.Path) -> tuple[str, str, str, dict
     ent_dir.mkdir(parents=True, exist_ok=True)
     entitlement_map = {binary: capture_entitlements(binary, ent_dir) for binary in binaries}
 
+    # Bind executable CodeDirectories to the same identifier LaunchServices
+    # publishes for their containing application/extension/XPC bundle. Keeping
+    # a vendor's stale executable identifier can pass host verification yet be
+    # killed by AMFI at first launch on the SRD.
+    binary_identifiers = {main: bundle_id}
+    bundle_identifiers: dict[pathlib.Path, str | None] = {}
+    for bundle in bundles:
+        required_identifier = bundle.suffix.lower() in {".app", ".appex", ".xpc"}
+        identifier = signing_identifier(bundle, required=required_identifier)
+        bundle_identifiers[bundle] = identifier
+        executable = bundle_executable(bundle)
+        if executable is not None and identifier is not None:
+            binary_identifiers[executable] = identifier
+
     # Sign every bare Mach-O first, then nested code bundles from the inside out,
     # and finally the outer app so its CodeResources seals the finished tree.
     for binary in sorted(binaries, key=lambda value: len(value.parts), reverse=True):
-        codesign(binary, entitlement_map[binary])
+        codesign(binary, entitlement_map[binary], binary_identifiers.get(binary))
 
     for bundle in sorted(bundles, key=lambda value: len(value.parts), reverse=True):
         executable = bundle_executable(bundle)
-        codesign(bundle, entitlement_map.get(executable) if executable else None)
-    codesign(app, entitlement_map.get(main))
+        codesign(
+            bundle,
+            entitlement_map.get(executable) if executable else None,
+            bundle_identifiers[bundle],
+        )
+    codesign(app, entitlement_map.get(main), bundle_id)
     run(["/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", app], timeout=120)
     assert_no_transient_markers(app)
     return bundle_id, executable_name, app.name, components
+
+
+NATIVE_FIRST_PARTY = {
+    "com.liquidsky.CrypStore": ("CrypStore.app", "CrypStore"),
+    "codes.liquidsky.research.zerosky": ("ZeroSky.app", "ZeroSky"),
+}
+
+
+def prepare_native_control(app: pathlib.Path, bundle_id: str) -> None:
+    """Seal the registrar marker into one reviewed 0-Sky application."""
+    expected = NATIVE_FIRST_PARTY.get(bundle_id)
+    if expected is None or app.name != expected[0]:
+        raise RuntimeError("native first-party preparation received another application")
+    marker = app / ".appregistrard"
+    marker.touch(exist_ok=False)
+    run(["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none",
+         "--generate-entitlement-der", "--preserve-metadata=entitlements",
+         "--identifier", bundle_id, app], timeout=120)
+    run(["/usr/bin/codesign", "--verify", "--deep", "--strict", app], timeout=120)
+
+
+def stop_running_control(bundle_id: str = "com.liquidsky.CrypStore") -> None:
+    """Let native registration replace one first-party app after its snapshot."""
+    expected = NATIVE_FIRST_PARTY.get(bundle_id)
+    if expected is None:
+        raise RuntimeError("unknown first-party process")
+    suffix = "/" + expected[0] + "/" + expected[1]
+    script = '''import json,os,signal,subprocess,time
+suffix=''' + repr(suffix) + '''
+def running():
+ rows=subprocess.check_output(['/bin/ps','-axo','pid=,command='],text=True).splitlines()
+ matches=[]
+ for row in rows:
+  parts=row.strip().split(None,1)
+  if len(parts)==2 and parts[1].startswith(('/var/containers/Bundle/Application/', '/private/var/containers/Bundle/Application/')) and parts[1].endswith(suffix):
+   matches.append(int(parts[0]))
+ return matches
+pids=running()
+if len(pids)>1: raise RuntimeError('ambiguous first-party foreground processes')
+for pid in pids: os.kill(pid,signal.SIGTERM)
+deadline=time.monotonic()+8
+while running() and time.monotonic()<deadline: time.sleep(.2)
+if running(): raise RuntimeError('first-party foreground process did not exit')
+print(json.dumps({'stopped':len(pids)}))'''
+    observed = ssh("/var/jb/usr/bin/python3 -c " + shlex.quote(script), timeout=20)
+    result = json.loads(observed.stdout)
+    if result.get("stopped") not in (0, 1):
+        raise RuntimeError("first-party foreground stop result is invalid")
+
+
+def install_native_control(app: pathlib.Path, bundle_id: str,
+                           executable: str, job_dir: pathlib.Path) -> str:
+    """Register reviewed 0-Sky code with Apple's native service and launch it."""
+    expected = NATIVE_FIRST_PARTY.get(bundle_id)
+    if expected is None or (app.name, executable) != expected:
+        raise RuntimeError("native first-party installer received another application")
+    stop_running_control(bundle_id)
+    payload = job_dir / "native" / "Payload"
+    payload.mkdir(parents=True)
+    shutil.copytree(app, payload / app.name, symlinks=True)
+    ipa = job_dir / "native-control.ipa"
+    run(["/usr/bin/ditto", "-c", "-k", "--keepParent", payload, ipa], timeout=300)
+    run([PYMOBILE, "-m", "pymobiledevice3", "apps", "install", ipa,
+         "--native", "--udid", DEVICE_UDID], timeout=900)
+    listing = ssh("/var/jb/usr/bin/uicache -i " + shlex.quote(bundle_id), timeout=30).stdout.decode("utf-8", "replace")
+    paths = [line.partition(": ")[2].strip() for line in listing.splitlines()
+             if line.startswith("Path: ")]
+    if (f"Executable Name: {executable}\n" not in listing or len(paths) != 1
+            or not paths[0].endswith("/" + app.name)):
+        raise RuntimeError("native first-party registration lacks its executable or exact path")
+    remote = ssh("/var/jb/usr/bin/sha256sum " + shlex.quote(paths[0] + "/Info.plist") +
+                 " " + shlex.quote(paths[0] + "/" + executable), timeout=30).stdout.decode("utf-8", "replace")
+    observed = [line.split()[0] for line in remote.splitlines()]
+    expected = [file_sha256(app / "Info.plist"), file_sha256(app / executable)]
+    if observed != expected:
+        raise RuntimeError("native first-party code differs from the signed Cryptex payload")
+    verify_foreground_launch(bundle_id, paths[0], executable)
+    return paths[0]
+
+
+def verify_control_entitlements(app: pathlib.Path, required: dict) -> None:
+    if not isinstance(required, dict) or not required:
+        raise RuntimeError("Control permission contract is missing")
+    shown = run(["/usr/bin/codesign", "-d", "--entitlements", ":-", app],
+                timeout=30, check=False)
+    if shown.returncode:
+        raise RuntimeError("signed Control entitlements cannot be read")
+    try:
+        effective = plistlib.loads(shown.stdout)
+    except (ValueError, plistlib.InvalidFileException) as error:
+        raise RuntimeError("signed Control entitlement plist is invalid") from error
+    for key, value in required.items():
+        if effective.get(key) != value:
+            raise RuntimeError("required Control entitlement differs: " + key)
+
+
+def evaluate_control_compatibility(staged: pathlib.Path) -> dict:
+    """Apply the project filter to signed code before changing the SRD.
+
+    Dyld shared-cache entries cannot be proven by a filesystem scan. Those
+    unknowns are carried into the transactional launch check and rollback.
+    """
+    if (BASE / "zero_sky_compat").is_dir():
+        sys.path.insert(0, str(BASE))
+    source_runtime = BASE.parents[2] / "DeviceRuntime"
+    if source_runtime.is_dir():
+        sys.path.insert(0, str(source_runtime))
+    from zero_sky_compat import Environment
+    from zero_sky_compat.engine import Engine
+    detected = ssh("/var/jb/usr/bin/python3 -c 'import sys; "
+                   "sys.path.insert(0, \"/var/jb/usr/local/libexec\"); "
+                   "import json; from dataclasses import asdict; "
+                   "from zero_sky_compat.environment import detect; print(json.dumps(asdict(detect())))'",
+                   timeout=120)
+    environment = Environment(**json.loads(detected.stdout))
+    report, _, _ = Engine(INSTANCE / "compatibility", environment).evaluate(staged)
+    blocking = [item for item in report.issues if item["severity"] == "mandatory"]
+    if blocking:
+        issue = blocking[0]
+        raise RuntimeError("Control compatibility BLOCKED: " + issue["code"] +
+                           " " + issue["path"] + " " + issue["detail"])
+    unknown = [item for item in report.issues if item["severity"] == "unknown"]
+    # This transaction supplies the reviewed registration adapter itself and
+    # proves registration, discovery, foreground launch, and rollback below.
+    # A dormant `uicache` reference in Control is therefore adaptation
+    # evidence, not evidence that the signed payload is incompatible.
+    allowed_unknown = {"DEPENDENCY_MISSING", "DEPENDENCY_UNKNOWN",
+                       "ENTITLEMENT_UNVERIFIED",
+                       "OBSOLETE_REGISTRATION_COMMAND"}
+    unsupported = [item for item in unknown if item["code"] not in allowed_unknown]
+    if unsupported:
+        issue = unsupported[0]
+        raise RuntimeError("Control compatibility BLOCKED: " + issue["code"] +
+                           " " + issue["path"] + " " + issue["detail"])
+    return {"result": "COMPATIBLE_WITH_ADAPTATION" if unknown else "COMPATIBLE",
+            "issues": unknown, "registry_key": report.key}
+
+
+def snapshot_native_control(job_dir: pathlib.Path,
+                            bundle_id: str = "com.liquidsky.CrypStore") -> pathlib.Path | None:
+    """Retain only signed application code; MCM user data stays on the device."""
+    expected = NATIVE_FIRST_PARTY.get(bundle_id)
+    if expected is None:
+        raise RuntimeError("unknown first-party snapshot identity")
+    script = r'''import json,subprocess,sys
+prefix=sys.argv[1]+' : '
+rows=subprocess.check_output(['/var/jb/usr/bin/uicache','-l'],text=True).splitlines()
+paths=[line[len(prefix):].strip() for line in rows if line.startswith(prefix)]
+print(json.dumps(paths))'''
+    result = ssh("/var/jb/usr/bin/python3 -c " + shlex.quote(script) + " " +
+                 shlex.quote(bundle_id), timeout=30)
+    paths = json.loads(result.stdout)
+    if not paths:
+        return None
+    if len(paths) != 1 or not paths[0].endswith("/" + expected[0]):
+        raise RuntimeError("existing first-party registration is ambiguous")
+    existing = pathlib.PurePosixPath(paths[0])
+    if not str(existing).startswith("/private/var/containers/Bundle/Application/"):
+        raise RuntimeError("existing first-party app is outside its MCM container")
+    archive = ssh("/var/jb/usr/bin/tar -C " + shlex.quote(str(existing.parent)) +
+                  " -cf - " + shlex.quote(existing.name), timeout=300).stdout
+    destination = job_dir / "rollback" / "Payload"
+    destination.mkdir(parents=True)
+    with tarfile.open(fileobj=io.BytesIO(archive)) as source:
+        names = source.getnames()
+        if not names or any(name != existing.name and not name.startswith(existing.name + "/")
+                            for name in names):
+            raise RuntimeError("existing first-party snapshot contains an unsafe path")
+        source.extractall(destination, filter="data")
+    app = destination / existing.name
+    info = plistlib.loads((app / "Info.plist").read_bytes())
+    if (info.get("CFBundleIdentifier") != bundle_id or
+            info.get("CFBundleExecutable") != expected[1]):
+        raise RuntimeError("existing first-party snapshot identity differs")
+    marker = app / ".appregistrard"
+    if not marker.exists() and not marker.is_symlink():
+        # The registrar consumes its empty marker while copying into MCM. A
+        # signature made before that copy still seals the marker. Recreate it
+        # only when the existing resource envelope proves its exact bytes.
+        resources = plistlib.loads((app / "_CodeSignature/CodeResources").read_bytes())
+        legacy = resources.get("files", {}).get(".appregistrard")
+        modern = resources.get("files2", {}).get(".appregistrard", {}).get("hash2")
+        if (legacy == hashlib.sha1(b"").digest() and
+                modern == hashlib.sha256(b"").digest()):
+            marker.touch(exist_ok=False)
+        else:
+            raise RuntimeError("existing Control registrar marker missing without signed empty-file evidence")
+    run(["/usr/bin/codesign", "--verify", "--deep", "--strict", app], timeout=120)
+    return app
+
+
+def rollback_native_control(previous: pathlib.Path | None, job_dir: pathlib.Path,
+                            bundle_id: str = "com.liquidsky.CrypStore") -> str:
+    expected = NATIVE_FIRST_PARTY.get(bundle_id)
+    if expected is None:
+        raise RuntimeError("unknown first-party rollback identity")
+    if previous is not None:
+        marker = previous / ".appregistrard"
+        if not marker.is_file():
+            prepare_native_control(previous, bundle_id)
+        build_install_cryptex(previous, bundle_id, job_dir / "rollback-restore")
+        install_native_control(previous, bundle_id, expected[1], job_dir / "rollback-restore")
+        return "VERIFIED"
+    run([PYMOBILE, "-m", "pymobiledevice3", "apps", "uninstall", bundle_id,
+         "--native", "--udid", DEVICE_UDID], timeout=300, check=False)
+    run([PYMOBILE, CRYPTEX_UNINSTALLER, cryptex_identifier(bundle_id), DEVICE_UDID],
+        timeout=180, check=False)
+    result = ssh("/var/jb/usr/bin/uicache -l", timeout=30, check=False)
+    if any(line.startswith(bundle_id + " : ") for line in result.stdout.decode("utf-8", "replace").splitlines()):
+        raise RuntimeError("fresh first-party rollback left a registered app")
+    return "VERIFIED"
+
+
+def process_control_install(job_id: str, request: dict) -> None:
+    """Use the pinned Mac backend with a preserved-code rollback source."""
+    job_dir = JOBS / job_id
+    if job_dir.exists():
+        shutil.rmtree(job_dir)
+    job_dir.mkdir(parents=True)
+    expected_hash = request.get("source_sha256")
+    if not isinstance(expected_hash, str) or not re.fullmatch("[0-9a-f]{64}", expected_hash):
+        raise RuntimeError("Control request lacks its verified payload hash")
+    ipa = job_dir / "input.ipa"
+    set_status("Receiving verified Control IPA", job_id)
+    fetch_ipa(job_id, ipa)
+    if file_sha256(ipa) != expected_hash:
+        raise RuntimeError("Control payload changed in transit")
+    normalize_ipa_archive(ipa)
+    preflight_workspace(ipa)
+    extract = job_dir / "extract"
+    extract.mkdir()
+    run(["/usr/bin/ditto", "-x", "-k", ipa, extract], timeout=300)
+    app = extract / "Payload/CrypStore.app"
+    if not app.is_dir():
+        raise RuntimeError("Control IPA lacks its canonical app")
+    bundle_id, executable, _, components = sign_app(app, job_dir)
+    if bundle_id != "com.liquidsky.CrypStore" or executable != "CrypStore":
+        raise RuntimeError("Control IPA identity differs")
+    prepare_native_control(app, bundle_id)
+    verify_control_entitlements(app, request.get("required_entitlements"))
+    set_status("Checking Control compatibility", job_id)
+    compatibility = evaluate_control_compatibility(extract)
+    set_status("Checking device workspace", job_id)
+    preflight_device_workspace(app)
+    previous = snapshot_native_control(job_dir)
+    mutated = False
+    try:
+        set_status("Installing Control Cryptex", job_id)
+        mutated = True
+        identifier, _ = build_install_cryptex(app, bundle_id, job_dir)
+        set_status("Registering Control natively", job_id)
+        registered = install_native_control(app, bundle_id, executable, job_dir)
+        state = {"bundle_id": bundle_id, "cryptex_identifier": identifier,
+                 "registered_path": registered, "installed_at": int(time.time()),
+                 "embedded_components": components, **signed_identity_policy(app, bundle_id, identifier)}
+        update_state(bundle_id, state)
+        remote_result(job_id, {"status": 0, "bundle_id": bundle_id,
+                               "registered_path": registered, "rollback": "NOT_NEEDED",
+                               "evidence": {"installation": True, "registration": True,
+                                            "launch": True, "compatibility": compatibility},
+                               "stdout": "Control installed and launched",
+                               "stderr": ""})
+        set_status("Control verified", job_id)
+        cleanup_job_artifacts(job_dir)
+    except Exception as error:
+        rollback = "NOT_NEEDED"
+        if mutated:
+            try:
+                rollback = rollback_native_control(previous, job_dir)
+            except Exception as restore_error:
+                rollback = "FAILED:" + type(restore_error).__name__
+        raise ControlInstallFailed(f"Control install failed ({type(error).__name__})", rollback) from error
+
+
+def process_link_install(job_id: str, request: dict) -> None:
+    """Update Link with an exact-code snapshot and verified rollback path."""
+    bundle_id = "codes.liquidsky.research.zerosky"
+    job_dir = JOBS / job_id
+    if job_dir.exists():
+        shutil.rmtree(job_dir)
+    job_dir.mkdir(parents=True)
+    expected_hash = request.get("source_sha256")
+    if not isinstance(expected_hash, str) or not re.fullmatch("[0-9a-f]{64}", expected_hash):
+        raise RuntimeError("Link request lacks its verified payload hash")
+    ipa = job_dir / "input.ipa"
+    set_status("Receiving verified Link IPA", job_id)
+    fetch_ipa(job_id, ipa)
+    if file_sha256(ipa) != expected_hash:
+        raise RuntimeError("Link payload changed in transit")
+    normalize_ipa_archive(ipa)
+    preflight_workspace(ipa)
+    extract = job_dir / "extract"
+    extract.mkdir()
+    run(["/usr/bin/ditto", "-x", "-k", ipa, extract], timeout=300)
+    app = extract / "Payload/ZeroSky.app"
+    if not app.is_dir():
+        raise RuntimeError("Link IPA lacks its canonical app")
+    observed_id, executable, _, components = sign_app(app, job_dir)
+    if observed_id != bundle_id or executable != "ZeroSky":
+        raise RuntimeError("Link IPA identity differs")
+    prepare_native_control(app, bundle_id)
+    verify_control_entitlements(app, request.get("required_entitlements"))
+    set_status("Checking Link compatibility", job_id)
+    compatibility = evaluate_control_compatibility(extract)
+    set_status("Checking device workspace", job_id)
+    preflight_device_workspace(app)
+    previous = snapshot_native_control(job_dir, bundle_id)
+    mutated = False
+    try:
+        set_status("Installing Link Cryptex", job_id)
+        mutated = True
+        identifier, _ = build_install_cryptex(app, bundle_id, job_dir)
+        set_status("Registering Link natively", job_id)
+        registered = install_native_control(app, bundle_id, executable, job_dir)
+        state = {"bundle_id": bundle_id, "cryptex_identifier": identifier,
+                 "registered_path": registered, "installed_at": int(time.time()),
+                 "embedded_components": components,
+                 **signed_identity_policy(app, bundle_id, identifier)}
+        update_state(bundle_id, state)
+        remote_result(job_id, {"status": 0, "bundle_id": bundle_id,
+                               "registered_path": registered, "rollback": "NOT_NEEDED",
+                               "evidence": {"installation": True, "registration": True,
+                                            "launch": True, "compatibility": compatibility},
+                               "stdout": "Link installed and launched", "stderr": ""})
+        set_status("Link verified", job_id)
+        cleanup_job_artifacts(job_dir)
+    except Exception as error:
+        rollback = "NOT_NEEDED"
+        if mutated:
+            try:
+                rollback = rollback_native_control(previous, job_dir, bundle_id)
+            except Exception as restore_error:
+                rollback = "FAILED:" + type(restore_error).__name__
+        raise ControlInstallFailed(f"Link install failed ({type(error).__name__})", rollback) from error
 
 
 def cryptex_identifier(bundle_id: str) -> str:
@@ -968,7 +1700,12 @@ def committed_cryptex_matches(mount: str, app: pathlib.Path,
 
 
 def build_install_cryptex(app: pathlib.Path, bundle_id: str, job_dir: pathlib.Path) -> tuple[str, pathlib.Path]:
-    assert_no_transient_markers(app)
+    if bundle_id in NATIVE_FIRST_PARTY:
+        marker = app / ".appregistrard"
+        if marker.is_symlink() or not marker.is_file() or marker.stat().st_size:
+            raise RuntimeError("native first-party registrar marker is invalid")
+    else:
+        assert_no_transient_markers(app)
     with (app / "Info.plist").open("rb") as handle:
         signed_executable = app / plistlib.load(handle)["CFBundleExecutable"]
     apple_signed_payload = fairplay_encrypted(signed_executable)
@@ -1098,6 +1835,96 @@ def app_registration_command(registrar: str | None, cryptex_app: str,
     )
 
 
+def mcm_matches_cryptex(registered_app: str, cryptex_app: str,
+                        executable: str) -> bool:
+    """Require both identity metadata and executable bytes from this generation."""
+    match = ssh(
+        f"cmp -s {shlex.quote(registered_app + '/' + executable)} "
+        f"{shlex.quote(cryptex_app + '/' + executable)} && "
+        f"cmp -s {shlex.quote(registered_app + '/Info.plist')} "
+        f"{shlex.quote(cryptex_app + '/Info.plist')}",
+        timeout=30, check=False,
+    )
+    return match.returncode == 0
+
+
+def launch_services_path(bundle_id: str) -> str | None:
+    """Return the exact bundle URL that uiopen will launch for this identity."""
+    listing = ssh("/var/jb/usr/bin/uicache -l 2>/dev/null", timeout=30,
+                  check=False)
+    prefix = bundle_id + " : "
+    paths = [line[len(prefix):].strip() for line in
+             listing.stdout.decode("utf-8", "replace").splitlines()
+             if line.startswith(prefix)]
+    if len(paths) > 1:
+        raise RuntimeError("multiple LaunchServices records for " + bundle_id)
+    return paths[0] if paths else None
+
+
+def reconcile_launch_services_url(bundle_id: str, registered_app: str,
+                                  cryptex_app: str, executable: str,
+                                  registrar: str, timeout: int) -> str:
+    """Require uiopen's exact URL to carry the reviewed Cryptex generation."""
+    published = launch_services_path(bundle_id)
+    if published == registered_app:
+        return registered_app
+    if published and mcm_matches_cryptex(published, cryptex_app, executable):
+        log("adopted existing LaunchServices URL with exact Cryptex bytes")
+        return published
+    if published:
+        retired = ssh(
+            f"{shlex.quote(registrar)} unregister {shlex.quote(published)}",
+            timeout=60, check=False)
+        if retired.returncode:
+            detail = (retired.stderr or retired.stdout).decode(
+                "utf-8", "replace").strip()
+            raise RuntimeError("stale LaunchServices URL could not be retired: " + detail)
+    published_result = ssh(
+        f"{shlex.quote(registrar)} register --path "
+        f"{shlex.quote(registered_app)} --absolute",
+        timeout=timeout, check=False)
+    if published_result.returncode:
+        detail = (published_result.stderr or published_result.stdout).decode(
+            "utf-8", "replace").strip()
+        raise RuntimeError("MCM bundle was copied but icon registration failed: " + detail)
+    actual = launch_services_path(bundle_id)
+    if actual != registered_app:
+        raise RuntimeError("MCM publication retained stale LaunchServices URL: "
+                           + str(actual))
+    log("published exact MCM bundle URL to LaunchServices")
+    return registered_app
+
+
+def repair_stale_mcm_copy(registered_app: str, cryptex_app: str,
+                          executable: str, registrar: str | None,
+                          kernel_major: int, finder_command: str,
+                          register_timeout: int, fallback_used: bool) -> tuple[str, bool]:
+    """Retry one bounded MCM copy when coordination retained older signed code.
+
+    appregistrard replaces only the bundle in its MCM bundle container. The
+    separate application data container is preserved. A copy or publication
+    return code alone is never accepted as proof of the new app generation.
+    """
+    if mcm_matches_cryptex(registered_app, cryptex_app, executable):
+        return registered_app, fallback_used
+    if registrar is None or fallback_used:
+        raise RuntimeError("registered MCM bundle differs from authorized Cryptex")
+    fallback = app_registration_command(
+        registrar, cryptex_app, kernel_major, fallback=True)
+    copied = ssh(fallback, timeout=register_timeout, check=False)
+    found = ssh(finder_command, timeout=60)
+    refreshed = found.stdout.decode("utf-8", "replace").strip().splitlines()
+    if not refreshed or not mcm_matches_cryptex(
+            refreshed[-1], cryptex_app, executable):
+        detail = (copied.stderr or copied.stdout).decode(
+            "utf-8", "replace").strip()[-500:]
+        raise RuntimeError(
+            "bounded MCM repair did not materialize the authorized Cryptex bundle"
+            + (": " + detail if copied.returncode and detail else ""))
+    log("replaced stale MCM bundle with byte-identical authorized Cryptex copy")
+    return refreshed[-1], True
+
+
 def recent_launch_crash(bundle_id: str, started_at: int) -> str:
     """Return a bounded crash reason for this launch without copying reports."""
     inspector = r'''import glob,json,os,sys
@@ -1115,6 +1942,7 @@ for path in sorted(glob.glob('/var/mobile/Library/Logs/CrashReporter/*.ips'),
   term=body.get('termination') or {}
   parts=[]
   if exc.get('type'): parts.append(str(exc['type']))
+  if exc.get('signal'): parts.append(str(exc['signal']))
   if exc.get('subtype'): parts.append(str(exc['subtype']))
   if exc.get('message'): parts.append(str(exc['message']))
   if term.get('namespace'): parts.append('termination='+str(term['namespace']))
@@ -1132,7 +1960,8 @@ for path in sorted(glob.glob('/var/mobile/Library/Logs/CrashReporter/*.ips'),
 
 
 def verify_foreground_launch(bundle_id: str, registered_app: str,
-                             executable: str, *, observation_seconds: float = 8.0) -> None:
+                             executable: str, *, observation_seconds: float = 8.0,
+                             launch_validation: str | None = None) -> None:
     """Require an imported foreground app to survive its startup window.
 
     Registration is not a launch postcondition.  The former three-second
@@ -1149,6 +1978,25 @@ def verify_foreground_launch(bundle_id: str, registered_app: str,
         detail = (opened.stderr or opened.stdout).decode(
             "utf-8", "replace").strip()
         raise RuntimeError("installed app could not be launched: " + detail)
+
+    if launch_validation == "controlled-exit-v1":
+        time.sleep(1.0)
+        reason = recent_launch_crash(bundle_id, started_at)
+        if reason:
+            raise RuntimeError("hidden companion launch crashed (" + reason + ")")
+        probe = ssh("ps -axo command=", timeout=30, check=False)
+        expected = f"{registered_app}/{executable}"
+        expected_paths = {expected}
+        if expected.startswith("/private/var/"):
+            expected_paths.add(expected[len("/private"):])
+        if any(line.strip().split(None, 1)[0] in expected_paths
+               for line in probe.stdout.decode("utf-8", "replace").splitlines()
+               if line.strip()):
+            raise RuntimeError("hidden companion did not complete its controlled exit")
+        log(f"controlled hidden-companion launch verified for {bundle_id}")
+        return
+    if launch_validation is not None:
+        raise RuntimeError("unknown application launch validation contract")
 
     expected = f"{registered_app}/{executable}"
     # MCM reports canonical /private/var URLs while proc_pidpath/ps presents
@@ -1183,8 +2031,99 @@ def verify_foreground_launch(bundle_id: str, registered_app: str,
     log(f"launch verified for {bundle_id} over {observation_seconds:.1f}s")
 
 
+def foreground_launch_policy(app: pathlib.Path,
+                             launch_validation: str | None = None) -> str:
+    """Return the evidence required for this app's declared presentation.
+
+    A package can contain an ``SBAppTags=hidden`` companion solely to expose
+    intents or extensions. LaunchServices intentionally does not foreground
+    those bundles, so waiting for a process is a false failure. They still
+    pass the same signed Cryptex, byte identity, MCM, LaunchServices, and
+    PluginKit checks. Visible apps retain the strict launch and survival test.
+    """
+    try:
+        info = plistlib.loads((app / "Info.plist").read_bytes())
+    except (OSError, ValueError, TypeError) as error:
+        raise RuntimeError("app presentation metadata is invalid") from error
+    tags = info.get("SBAppTags", [])
+    if not isinstance(tags, list) or not all(isinstance(value, str) for value in tags):
+        raise RuntimeError("app presentation tags are invalid")
+    if "hidden" in tags:
+        if launch_validation != "controlled-exit-v1":
+            raise RuntimeError("hidden app lacks a reviewed lifecycle contract")
+        return "CONTROLLED_EXIT"
+    if launch_validation is not None:
+        raise RuntimeError("visible app received a hidden companion lifecycle contract")
+    return "REQUIRED"
+
+
+def mark_trollstore_owned_mcm(bundle_id: str, registered_app: str,
+                             cryptex_app: str, executable: str) -> None:
+    """Mark only a verified, byte-identical MCM copy; never alter signed code."""
+    verifier = r'''import hashlib,os,pathlib,plistlib,stat,sys
+bundle_id,registered_app,cryptex_app,executable=sys.argv[1:]
+app=pathlib.Path(registered_app);container=app.parent
+if app.is_symlink() or container.is_symlink() or container.parent!=pathlib.Path('/private/var/containers/Bundle/Application'):
+ raise SystemExit('Unexpected MCM app path')
+if not app.is_dir():raise SystemExit('MCM app is missing')
+with (app/'Info.plist').open('rb') as f:info=plistlib.load(f)
+with (container/'.com.apple.mobile_container_manager.metadata.plist').open('rb') as f:metadata=plistlib.load(f)
+if info.get('CFBundleIdentifier')!=bundle_id or metadata.get('MCMMetadataIdentifier')!=bundle_id:
+ raise SystemExit('MCM bundle identity mismatch')
+def sha(path):
+ h=hashlib.sha256()
+ with open(path,'rb') as f:
+  for block in iter(lambda:f.read(1024*1024),b''):h.update(block)
+ return h.digest()
+if sha(app/executable)!=sha(pathlib.Path(cryptex_app)/executable):
+ raise SystemExit('MCM executable differs from authorized Cryptex')
+marker=container/'_TrollStore'
+if marker.is_symlink():raise SystemExit('Unsafe ownership marker')
+if marker.exists():
+ metadata=os.stat(marker,follow_symlinks=False)
+ if not stat.S_ISREG(metadata.st_mode) or metadata.st_size!=0:raise SystemExit('Unexpected ownership marker')
+else:
+ owner=container.stat()
+ fd=os.open(marker,os.O_WRONLY|os.O_CREAT|os.O_EXCL|os.O_NOFOLLOW,0o644)
+ try:os.fchown(fd,owner.st_uid,owner.st_gid)
+ finally:os.close(fd)
+print(str(marker))
+'''
+    command = (
+        '/var/jb/usr/bin/python3 -c ' + shlex.quote(verifier) + ' '
+        + ' '.join(shlex.quote(value) for value in
+                   (bundle_id, registered_app, cryptex_app, executable))
+    )
+    result = ssh(command, timeout=60)
+    marker = result.stdout.decode('utf-8', 'replace').strip()
+    if marker != str(pathlib.Path(registered_app).parent / '_TrollStore'):
+        raise RuntimeError('MCM ownership marker verification failed')
+    log('verified TrollStore ownership marker in MCM container')
+
+
+def ensure_trollrecorder_srd_service(bundle_id: str, registered_app: str,
+                                    cryptex_app: str) -> None:
+    """Install or refresh the verified vendor daemon after MCM registration."""
+    if bundle_id != 'wiki.qaq.trapp':
+        return
+    program = "import glob,hashlib,json,os,pathlib,plistlib,re,subprocess,sys,time\nbundle_id,registered_app,cryptex_app=sys.argv[1:]\nif bundle_id!='wiki.qaq.trapp':raise SystemExit('Unexpected bundle')\nlabel='wiki.qaq.trservices';service='wiki.qaq.trapp.xpc'\napp=pathlib.Path(registered_app);container=app.parent\nif app.is_symlink() or container.is_symlink() or container.parent!=pathlib.Path('/private/var/containers/Bundle/Application'):\n raise SystemExit('Unsafe MCM app path')\nwith (app/'Info.plist').open('rb') as f:info=plistlib.load(f)\nwith (container/'.com.apple.mobile_container_manager.metadata.plist').open('rb') as f:metadata=plistlib.load(f)\nmarker=container/'_TrollStore'\nif info.get('CFBundleIdentifier')!=bundle_id or info.get('CFBundleExecutable')!='TRApp' or metadata.get('MCMMetadataIdentifier')!=bundle_id or marker.is_symlink() or not marker.is_file() or marker.stat().st_size!=0:\n raise SystemExit('TrollRecorder MCM ownership verification failed')\ndef sha(path):\n h=hashlib.sha256()\n with open(path,'rb') as f:\n  for chunk in iter(lambda:f.read(1024*1024),b''):h.update(chunk)\n return h.hexdigest()\nbinary=app/'TRCallMonitor';mounted=pathlib.Path(cryptex_app)/'TRCallMonitor'\nif not binary.is_file() or sha(binary)!=sha(mounted):raise SystemExit('Daemon differs from authorized Cryptex')\nexpected_helper='a2d095b681cd4bf1ac819a7052b5b376516ed663bd989edc60d25297fa1e9bbc'\nhelpers=glob.glob('/private/var/run/com.apple.security.cryptexd/mnt/com.emp0ry.localfence.srd-repair2.*/usr/bin/launchctl-srd')+glob.glob('/private/var/run/com.apple.security.cryptexd/mnt/com.liquidsky.launch-helper.recovery-*/usr/bin/launchctl-srd')\ntrusted=[p for p in helpers if sha(p)==expected_helper]\nif len(trusted)==1:ctl=trusted[0]\nelse:\n ctl='/var/jb/usr/bin/launchctl'\n if sha(ctl)!=expected_helper:raise SystemExit('No trusted SRD launchctl helper')\nversion=subprocess.run([ctl,'version'],capture_output=True,timeout=8)\nif version.returncode:raise SystemExit('SRD launchctl helper cannot start')\nplist=pathlib.Path('/var/jb/Library/LaunchDaemons/'+label+'.plist')\ndata={'Label':label,'ProgramArguments':[str(binary)],'UserName':'root','RunAtLoad':True,'KeepAlive':False,'MachServices':{service:True},'0SkyManaged':True}\ndef job():\n result=subprocess.run([ctl,'print','system/'+label],capture_output=True,timeout=8)\n text=result.stdout.decode(errors='replace')\n path=re.search(r'^\\s*program = (.+)$',text,re.M)\n pid=re.search(r'^\\s*pid = ([0-9]+)$',text,re.M)\n return {'loaded':result.returncode==0,'program':path.group(1).strip() if path else None,'pid':int(pid.group(1)) if pid else None}\ndef save(payload):\n temporary=plist.with_name(plist.name+'.0sky-'+str(os.getpid()))\n fd=os.open(temporary,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o644)\n try:\n  with os.fdopen(fd,'wb') as f:f.write(payload);f.flush();os.fsync(f.fileno())\n  os.replace(temporary,plist)\n finally:\n  if temporary.exists():temporary.unlink()\nold=plist.read_bytes() if plist.exists() else None\nold_data=plistlib.loads(old) if old else None\nif old_data and (old_data.get('Label')!=label or not (old_data.get('0SkyManaged') is True or old_data.get('0SkyTest') is True)):\n if old_data.get('ProgramArguments')==[str(binary)] and job()['pid']:\n  print(json.dumps({'vendor_job_healthy':True,'job':job()}));raise SystemExit(0)\n raise SystemExit('Existing vendor daemon job is not managed by 0-Sky')\nbefore=job()\nif before['program']==str(binary) and before['pid']:\n if old_data!=data:save(plistlib.dumps(data))\n print(json.dumps({'action':'promoted' if old_data!=data else 'unchanged','job':job(),'plist':str(plist)}));raise SystemExit(0)\nchanged=False\ntry:\n if before['loaded']:\n  stopped=subprocess.run([ctl,'bootout','system/'+label],capture_output=True,timeout=12)\n  if stopped.returncode:raise RuntimeError('Could not retire prior TrollRecorder job: '+stopped.stderr.decode(errors='replace')[-350:])\n save(plistlib.dumps(data));changed=True\n started=subprocess.run([ctl,'bootstrap','system',str(plist)],capture_output=True,timeout=12)\n if started.returncode:raise RuntimeError('Could not bootstrap TrollRecorder: '+started.stderr.decode(errors='replace')[-350:])\n current={}\n for _ in range(16):\n  time.sleep(.5);current=job()\n  if current['program']==str(binary) and current['pid']:break\n if current.get('program')!=str(binary) or not current.get('pid'):raise RuntimeError('TrollRecorder daemon did not stay running')\n print(json.dumps({'action':'created' if old is None else 'replaced','job':current,'plist':str(plist)}))\nexcept BaseException:\n if changed:\n  subprocess.run([ctl,'bootout','system/'+label],capture_output=True,timeout=12)\n  if old is None:\n   if plist.exists():plist.unlink()\n  else:\n   save(old)\n   if before['loaded']:subprocess.run([ctl,'bootstrap','system',str(plist)],capture_output=True,timeout=12)\n raise\n"
+    command = (
+        '/var/jb/usr/bin/python3 -c ' + shlex.quote(program) + ' '
+        + ' '.join(shlex.quote(value) for value in
+                   (bundle_id, registered_app, cryptex_app))
+    )
+    result = ssh(command, timeout=100)
+    report = json.loads(result.stdout)
+    job = report.get('job', {})
+    if not (job.get('pid') and
+            job.get('program') == str(pathlib.Path(registered_app) / 'TRCallMonitor')):
+        raise RuntimeError('TrollRecorder launchd service did not stay running')
+    log('verified TrollRecorder launchd service pid ' + str(job['pid']))
+
+
 def register_and_link(bundle_id: str, executable: str, app_name: str, mount: str,
-                      payload_bytes: int = 0) -> str:
+                      payload_bytes: int = 0,
+                      launch_policy: str = "REQUIRED") -> str:
     cryptex_app = f"{mount}/Applications/{app_name}"
     # The Procursus backup is intentionally only a recovery copy.  After a
     # reboot its ad-hoc CDHash may no longer be covered by any active loadable
@@ -1291,7 +2230,7 @@ def register_and_link(bundle_id: str, executable: str, app_name: str, mount: str
         log("bounded MCM registration succeeded")
 
     finder = r'''import glob, os, plistlib, sys
-bundle_id, app_name=sys.argv[1:3]
+bundle_id, app_name, executable=sys.argv[1:4]
 found=[]
 for container in glob.glob('/private/var/containers/Bundle/Application/*'):
     # InstallCoordination can leave the registered app as a dead symlink when
@@ -1303,6 +2242,8 @@ for container in glob.glob('/private/var/containers/Bundle/Application/*'):
         with open(metadata,'rb') as f: value=plistlib.load(f).get('MCMMetadataIdentifier')
         if value==bundle_id:
             expected=os.path.join(container,app_name)
+            # InstallCoordination may leave an icon-only placeholder here.
+            if not os.path.isfile(os.path.join(expected,executable)): continue
             # MCM metadata timestamps can be preserved from an older duplicate
             # container. The directory itself changes when appregistrard copies
             # the currently registered bundle, so it is a better authority.
@@ -1313,14 +2254,16 @@ for container in glob.glob('/private/var/containers/Bundle/Application/*'):
     for info in glob.glob(os.path.join(container,'*.app','Info.plist')):
         try:
             with open(info,'rb') as f: value=plistlib.load(f).get('CFBundleIdentifier')
-            if value==bundle_id: found.append((os.path.getmtime(info),os.path.dirname(info)))
+            if value==bundle_id and os.path.isfile(os.path.join(os.path.dirname(info),executable)):
+                found.append((os.path.getmtime(info),os.path.dirname(info)))
         except Exception: pass
 if found: print(max(found)[1])
 '''
     encoded = __import__("base64").b64encode(finder.encode()).decode()
     command = (
         f"echo {shlex.quote(encoded)} | /var/jb/usr/bin/base64 -d | "
-        f"/var/jb/usr/bin/python3 - {shlex.quote(bundle_id)} {shlex.quote(app_name)}"
+        f"/var/jb/usr/bin/python3 - {shlex.quote(bundle_id)} "
+        f"{shlex.quote(app_name)} {shlex.quote(executable)}"
     )
     result = ssh(command, timeout=60)
     registered_app = result.stdout.decode().strip().splitlines()
@@ -1332,6 +2275,7 @@ if found: print(max(found)[1])
         # registrar's bounded MCM-copy path before retiring the new Cryptex.
         # This is safe to repeat because the fallback is keyed by the exact
         # bundle identifier and copies the currently mounted, verified app.
+        fallback_used = True
         fallback = app_registration_command(
             registrar, cryptex_app, kernel_major, fallback=True
         )
@@ -1355,57 +2299,48 @@ if found: print(max(found)[1])
             )
         # A non-containerized system app is valid, although most imports opt
         # into a bundle/data container through ResearchApp.plist defaults.
-        verify_foreground_launch(bundle_id, cryptex_app, executable)
+        if launch_policy == "REQUIRED":
+            verify_foreground_launch(bundle_id, cryptex_app, executable)
+        elif launch_policy == "CONTROLLED_EXIT":
+            verify_foreground_launch(
+                bundle_id, cryptex_app, executable,
+                launch_validation="controlled-exit-v1")
+        else:
+            raise RuntimeError("unknown foreground launch policy")
         return cryptex_app
-    registered_app = registered_app[-1]
-    if fallback_used and registrar is not None:
+    registered_app, repaired_stale_copy = repair_stale_mcm_copy(
+        registered_app[-1], cryptex_app, executable, registrar, kernel_major,
+        command, register_timeout, fallback_used)
+    if repaired_stale_copy and not fallback_used:
+        # A non-zero coordination result is superseded only by the exact
+        # executable and Info.plist proof from the bounded MCM repair.
+        coordination_error = None
+    fallback_used = repaired_stale_copy
+    if registrar is not None:
         # The bounded copier deliberately materializes a complete MCM bundle,
-        # but on current iOS 27 it does not always publish that final URL to
-        # LaunchServices.  Complete the transaction from the already copied
-        # MCM path; unlike starting from the Cryptex URL, this phase does not
-        # race a second long copy and preserves the full app icon/identity.
-        listing = ssh("/var/jb/usr/bin/uicache -l 2>/dev/null", timeout=30,
-                      check=False).stdout.decode("utf-8", "replace")
-        expected = bundle_id + " : "
-        if not any(line.startswith(expected) for line in listing.splitlines()):
-            publish = ssh(
-                f"{shlex.quote(registrar)} register --path "
-                f"{shlex.quote(registered_app)} --absolute",
-                timeout=register_timeout, check=False,
-            )
-            if publish.returncode != 0:
-                detail = (publish.stderr or publish.stdout).decode(
-                    "utf-8", "replace").strip()
-                raise RuntimeError("MCM bundle was copied but icon registration failed: " + detail)
-            result = ssh(command, timeout=60)
-            refreshed = result.stdout.decode().strip().splitlines()
-            if refreshed:
-                registered_app = refreshed[-1]
-            listing = ssh("/var/jb/usr/bin/uicache -l 2>/dev/null", timeout=30,
-                          check=False).stdout.decode("utf-8", "replace")
-            if not any(line.startswith(expected) for line in listing.splitlines()):
-                raise RuntimeError("MCM publication completed without an exact LaunchServices record")
-            log("published large MCM bundle to LaunchServices")
+        # but on current iOS 27 it can retain an older URL for the same bundle
+        # identifier. That old URL may launch stale code even when the new MCM
+        # copy is byte-identical to the Cryptex. Check the *path and bytes*.
+        registered_app = reconcile_launch_services_url(
+            bundle_id, registered_app, cryptex_app, executable, registrar,
+            register_timeout)
     if coordination_error:
-        match = ssh(
-            f"cmp -s {shlex.quote(registered_app + '/' + executable)} "
-            f"{shlex.quote(cryptex_app + '/' + executable)} && "
-            f"cmp -s {shlex.quote(registered_app + '/Info.plist')} "
-            f"{shlex.quote(cryptex_app + '/Info.plist')}",
-            timeout=30, check=False,
-        )
-        if match.returncode != 0:
-            raise RuntimeError(
-                "InstallCoordination registration failed and the materialized bundle "
-                "does not match the newly installed Cryptex: " + coordination_error
-            )
         log("InstallCoordination update was committed despite its non-zero status")
     # Keep InstallCoordination's materialized bundle in its MCM container.
     # Replacing it with a symlink into the read-only cryptex causes some apps to
     # abort when they compare their resolved bundle URL with the LS record.
     # The matching cryptex remains mounted and its trust cache authorizes the
     # identical executable bytes in this container.
-    verify_foreground_launch(bundle_id, registered_app, executable)
+    mark_trollstore_owned_mcm(bundle_id, registered_app, cryptex_app, executable)
+    ensure_trollrecorder_srd_service(bundle_id, registered_app, cryptex_app)
+    if launch_policy == "REQUIRED":
+        verify_foreground_launch(bundle_id, registered_app, executable)
+    elif launch_policy == "CONTROLLED_EXIT":
+        verify_foreground_launch(
+            bundle_id, registered_app, executable,
+            launch_validation="controlled-exit-v1")
+    else:
+        raise RuntimeError("unknown foreground launch policy")
     return registered_app
 
 
@@ -1587,7 +2522,28 @@ finally:
     log("published complete entitlement-aware PluginKit registration")
 
 
+def compatibility_intake(source: pathlib.Path, operation: str) -> None:
+    # Release staging supplies the exact same engine next to this worker.
+    # Source-tree runs resolve the canonical DeviceRuntime package.
+    source_runtime = BASE.parents[2] / "DeviceRuntime"
+    if source_runtime.is_dir():
+        sys.path.insert(0, str(source_runtime))
+    from zero_sky_compat import Environment
+    from zero_sky_compat.integration import require_install_adapter
+    result = ssh("/var/jb/usr/bin/python3 -c 'import sys; "
+                 "sys.path.insert(0, \"/var/jb/usr/local/libexec\"); "
+                 "import json; from dataclasses import asdict; "
+                 "from zero_sky_compat.environment import detect; print(json.dumps(asdict(detect())))'",
+                 timeout=120)
+    environment = Environment(**json.loads(result.stdout))
+    require_install_adapter(source, operation, INSTANCE / "compatibility", environment)
+
+
 def process(job_id: str, request: dict) -> None:
+    if request.get("operation") == "control-install":
+        return process_control_install(job_id, request)
+    if request.get("operation") == "link-install":
+        return process_link_install(job_id, request)
     started = time.monotonic()
     timings: list[str] = []
 
@@ -1607,8 +2563,9 @@ def process(job_id: str, request: dict) -> None:
     ipa = job_dir / "input.ipa"
     stage("Receiving IPA", request.get("original_name", "IPA"))
     fetch_ipa(job_id, ipa)
+    source_sha256 = verify_requested_ipa_sha256(ipa, request.get("source_sha256"))
     if normalize_ipa_archive(ipa):
-        stage("Unwrapping package", "Removed gzip transport wrapper")
+        stage("Unwrapping package", "Normalized IPA transport/compression")
     stage("Checking host workspace", "Sizing IPA expansion and Cryptex staging")
     preflight_workspace(ipa)
     stage("Extracting package", "Validating the IPA payload")
@@ -1619,8 +2576,17 @@ def process(job_id: str, request: dict) -> None:
     if len(apps) != 1:
         raise RuntimeError(f"IPA must contain exactly one app, found {len(apps)}")
     app = apps[0]
+    launch_validation = requested_launch_validation(request, app)
     stage("Signing app", app.name)
     bundle_id, executable, app_name, components = sign_app(app, job_dir)
+    launch_policy = foreground_launch_policy(app, launch_validation)
+    # Generic install requests are also used by the Link-only host workflow.
+    # Every reviewed first-party bundle needs the empty registrar marker
+    # sealed into its signature before build_install_cryptex() admits it.
+    if bundle_id in NATIVE_FIRST_PARTY:
+        prepare_native_control(app, bundle_id)
+    stage("Checking device workspace", "Sizing transactional Cryptex storage")
+    preflight_device_workspace(app)
     stage("Retiring prior registration", bundle_id)
     retired_path = retire_live_registration(bundle_id)
     stage("Building & installing Cryptex", bundle_id)
@@ -1645,9 +2611,11 @@ def process(job_id: str, request: dict) -> None:
     )
     staged_tombstone = suspend_removal_tombstone(bundle_id, job_id)
     try:
-        registered = register_and_link(
-            bundle_id, executable, app_name, mount, registration_bytes
-        )
+        registered = (install_native_control(app, bundle_id, executable, job_dir)
+                      if bundle_id in NATIVE_FIRST_PARTY else
+                      register_and_link(bundle_id, executable, app_name, mount,
+                                        registration_bytes,
+                                        launch_policy=launch_policy))
         if components["extensions"]:
             stage("Refreshing app extensions",
                   f"{components['extensions']} PluginKit registration(s)")
@@ -1656,7 +2624,9 @@ def process(job_id: str, request: dict) -> None:
             "bundle_id": bundle_id, "cryptex_identifier": identifier,
             "mount": mount, "registered_path": registered,
             "installed_at": int(time.time()), "source_name": request.get("original_name", ""),
+            "source_sha256": source_sha256,
             "embedded_components": components,
+            "foreground_launch": launch_policy,
             **identity_policy,
         }
         update_state(bundle_id, state)
@@ -1691,6 +2661,7 @@ def process(job_id: str, request: dict) -> None:
                f"{components['frameworks']} framework(s), "
                f"{components['xpc_services']} XPC service(s), "
                f"{components['embedded_apps']} embedded app(s).\n")
+            + f"Foreground launch verification: {launch_policy}.\n"
             + vpn_profile_notice),
         "stderr": "", "bundle_id": bundle_id,
         "embedded_components": components,
@@ -1708,6 +2679,13 @@ def process_runtime_sync(job_id: str, request: dict) -> None:
             "--port", DEVICE_PORT or "0", "--key", DEVICE_KEY,
             "--udid", DEVICE_UDID, "--known-hosts", DEVICE_KNOWN_HOSTS,
             "--host-alias", DEVICE_HOST_ALIAS]
+    package_names = [value.strip() for value in str(package).split(",") if value.strip()]
+    if (not package_names or any(not re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9.+-]{0,254}", value)
+            for value in package_names)):
+        raise RuntimeError("runtime sync request has an invalid package name")
+    for value in sorted(set(package_names), key=str.casefold):
+        argv.extend(["--package", value])
     completed = run(argv, timeout=1800, cwd=BASE, check=False)
     output = (completed.stdout + completed.stderr).decode("utf-8", "replace")
     elapsed = time.monotonic() - started
@@ -1854,7 +2832,7 @@ def process_pair_verify(job_id: str, request: dict) -> None:
                 port=DEVICE_PORT or "22", instance_name=INSTANCE.name,
                 support=INSTANCE.parent.parent, pairing=live,
                 write_device_marker=True, require_worker=False,
-                provision_wireless=True)
+                provision_wireless=True, remote_port=DEVICE_REMOTE_PORT)
         finally:
             PAIRING_OPERATION_ACTIVE.clear()
     wireless = bound.get("wireless", {})
@@ -1932,10 +2910,152 @@ def process_pair_verify(job_id: str, request: dict) -> None:
                            "pairing": live})
 
 
+def process_crane_container_cleanup(job_id: str, request: dict) -> None:
+    """Delete one verified orphan directory after Crane removed its metadata."""
+    package = request.get("package")
+    bundle_id = request.get("bundle_id")
+    container_id = request.get("container_id")
+    data_root = request.get("data_root")
+    if package != "com.opa334.crane":
+        raise RuntimeError("unsupported Crane cleanup package")
+    if not isinstance(bundle_id, str) or not BUNDLE_RE.fullmatch(bundle_id):
+        raise RuntimeError("invalid Crane cleanup application")
+    if (not isinstance(container_id, str) or not re.fullmatch(
+            r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}", container_id)):
+        raise RuntimeError("invalid Crane cleanup container")
+    if (not isinstance(data_root, str) or not re.fullmatch(
+            r"/(?:private/)?var/mobile/Containers/Data/Application/"
+            r"[0-9A-Fa-f-]{36}", data_root)):
+        raise RuntimeError("invalid Crane cleanup data root")
+    payload = {
+        "bundle_id": bundle_id,
+        "container_id": container_id,
+        "data_root": data_root,
+    }
+    program = r'''import json,os,pathlib,plistlib,shutil,stat,sys,time
+c=json.loads(sys.argv[1]);bundle=c["bundle_id"];identifier=c["container_id"]
+root=pathlib.Path(c["data_root"]);base=pathlib.Path("/private/var/mobile/Containers/Data/Application")
+resolved=pathlib.Path(os.path.realpath(root))
+if resolved.parent!=base or root.is_symlink() or not root.is_dir():raise SystemExit("unsafe MCM data root")
+metadata=root/".com.apple.mobile_container_manager.metadata.plist"
+if metadata.is_symlink() or not metadata.is_file():raise SystemExit("MCM ownership metadata missing")
+if plistlib.loads(metadata.read_bytes()).get("MCMMetadataIdentifier")!=bundle:raise SystemExit("MCM ownership mismatch")
+prefs=pathlib.Path("/var/mobile/Library/Preferences/com.opa334.craneprefs.plist")
+value=plistlib.loads(prefs.read_bytes()) if prefs.is_file() and not prefs.is_symlink() else {}
+settings=value.get("appSettings_"+bundle,{}) if isinstance(value,dict) else {}
+active=settings.get("activeContainer","DEFAULT") if isinstance(settings,dict) else "DEFAULT"
+if not isinstance(active,str) or active.upper()==identifier:raise SystemExit("Crane container is still active")
+target=root/"Library/___Crane_Containers"/identifier
+if target.parent!=root/"Library/___Crane_Containers":raise SystemExit("unsafe Crane target")
+if target.exists() or target.is_symlink():
+ info=target.lstat()
+ if stat.S_ISLNK(info.st_mode) or not stat.S_ISDIR(info.st_mode):raise SystemExit("unsafe Crane container type")
+ shutil.rmtree(target)
+if target.exists() or target.is_symlink():raise SystemExit("Crane container remains")
+print(json.dumps({"bundle_id":bundle,"container_id":identifier,"removed":True,"path":str(target)},sort_keys=True))
+'''
+    completed = ssh(
+        "/var/jb/usr/bin/python3 -c " + shlex.quote(program) + " " +
+        shlex.quote(json.dumps(payload, sort_keys=True)), timeout=30, check=False)
+    if completed.returncode:
+        raise RuntimeError("paired Crane cleanup failed: " +
+                           completed.stderr.decode("utf-8", "replace")[-500:])
+    try:
+        evidence = json.loads(completed.stdout.decode("utf-8", "replace").splitlines()[-1])
+    except (IndexError, ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError("paired Crane cleanup returned invalid evidence") from error
+    set_status("Ready", None, "Crane container cleanup complete")
+    remote_result(job_id, {"status": 0, "result": "PASS", "stage": "CLEANUP",
+                           "stdout": "Crane container files removed", "stderr": "",
+                           "evidence": evidence, "rollback": "NOT_NEEDED"})
+
+
+def process_crane_target_handoff(job_id: str, request: dict) -> None:
+    """Atomically update bounded pre-main handoffs in verified MCM roots."""
+    if request.get("package") != "com.opa334.crane":
+        raise RuntimeError("unsupported Crane handoff package")
+    handoffs = request.get("handoffs")
+    if not isinstance(handoffs, list) or not handoffs or len(handoffs) > 64:
+        raise RuntimeError("invalid Crane handoff transaction")
+    seen = set()
+    for item in handoffs:
+        if not isinstance(item, dict) or set(item) != {"bundle_id", "data_root", "active"}:
+            raise RuntimeError("invalid Crane handoff entry")
+        bundle = item["bundle_id"]
+        root = item["data_root"]
+        active = item["active"]
+        if (not isinstance(bundle, str) or not BUNDLE_RE.fullmatch(bundle) or bundle in seen or
+                not isinstance(root, str) or not re.fullmatch(
+                    r"/private/var/mobile/Containers/Data/Application/"
+                    r"[0-9A-Fa-f]{8}(?:-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}", root) or
+                (active != "DEFAULT" and (not isinstance(active, str) or not re.fullmatch(
+                    r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}", active)))):
+            raise RuntimeError("unsafe Crane handoff entry")
+        seen.add(bundle)
+    program = r'''import json,os,pathlib,plistlib,stat,sys
+items=json.loads(sys.argv[1]);base=pathlib.Path("/private/var/mobile/Containers/Data/Application")
+states=[]
+def write_value(target,value,uid,gid):
+ target.parent.mkdir(parents=True,exist_ok=True);os.chmod(target.parent,0o700);os.chown(target.parent,uid,gid)
+ if value is None:
+  target.unlink(missing_ok=True);return
+ tmp=target.with_name(target.name+".%d.tmp"%os.getpid())
+ fd=os.open(tmp,os.O_WRONLY|os.O_CREAT|os.O_EXCL|getattr(os,"O_NOFOLLOW",0),0o600)
+ try:
+  os.write(fd,value);os.fsync(fd);os.fchmod(fd,0o600);os.fchown(fd,uid,gid)
+ finally:os.close(fd)
+ os.replace(tmp,target)
+ dfd=os.open(target.parent,os.O_RDONLY|getattr(os,"O_DIRECTORY",0));os.fsync(dfd);os.close(dfd)
+try:
+ for item in items:
+  root=pathlib.Path(item["data_root"]);resolved=pathlib.Path(os.path.realpath(root))
+  if resolved.parent!=base or root.is_symlink() or not root.is_dir():raise RuntimeError("unsafe MCM data root")
+  metadata=root/".com.apple.mobile_container_manager.metadata.plist"
+  if metadata.is_symlink() or not metadata.is_file():raise RuntimeError("MCM ownership metadata missing")
+  if plistlib.loads(metadata.read_bytes()).get("MCMMetadataIdentifier")!=item["bundle_id"]:raise RuntimeError("MCM ownership mismatch")
+  target=root/"Library/0Sky/Crane/active-container"
+  if target.exists() and (target.is_symlink() or not target.is_file() or target.stat().st_size>128):raise RuntimeError("unsafe prior Crane handoff")
+  prior=target.read_bytes() if target.is_file() else None
+  if prior is not None:
+   text=prior.decode("ascii").strip()
+   import re
+   if not re.fullmatch(r"[0-9A-F]{8}(?:-[0-9A-F]{4}){3}-[0-9A-F]{12}",text):raise RuntimeError("invalid prior Crane handoff")
+  info=root.stat();states.append((target,prior,info.st_uid,info.st_gid,item))
+ for target,prior,uid,gid,item in states:
+  value=None if item["active"]=="DEFAULT" else (item["active"]+"\n").encode("ascii")
+  write_value(target,value,uid,gid)
+except Exception:
+ for target,prior,uid,gid,item in reversed(states):
+  try:write_value(target,prior,uid,gid)
+  except Exception:pass
+ raise
+print(json.dumps([{"bundle_id":item["bundle_id"],"state":"default" if item["active"]=="DEFAULT" else "isolated"} for target,prior,uid,gid,item in states],sort_keys=True))
+'''
+    completed = ssh(
+        "/var/jb/usr/bin/python3 -c " + shlex.quote(program) + " " +
+        shlex.quote(json.dumps(handoffs, sort_keys=True)), timeout=45, check=False)
+    if completed.returncode:
+        raise RuntimeError("paired Crane handoff failed: " +
+                           completed.stderr.decode("utf-8", "replace")[-500:])
+    try:
+        evidence = json.loads(completed.stdout.decode("utf-8", "replace").splitlines()[-1])
+    except (IndexError, ValueError, json.JSONDecodeError) as error:
+        raise RuntimeError("paired Crane handoff returned invalid evidence") from error
+    set_status("Ready", None, "Crane application targets updated")
+    remote_result(job_id, {"status": 0, "result": "PASS", "stage": "HANDOFF",
+                           "stdout": "Crane target handoffs committed", "stderr": "",
+                           "evidence": evidence, "rollback": "NOT_NEEDED"})
+
+
 def process_one() -> bool:
     for job_id in list_jobs():
         request = None
         try:
+            # A device at ENOSPC may reject even the tiny result.json write.
+            # Never reclaim and execute that already-finished job again.  Keep
+            # its terminal result on the Mac and retry only the result write.
+            if pending_result_path(job_id).is_file():
+                return flush_deferred_result(job_id)
             request = claim_job(job_id)
             if request is None:
                 continue
@@ -1951,6 +3071,10 @@ def process_one() -> bool:
                 process_cryptex_uninstall(job_id, request)
             elif request.get("operation") == "pair-verify":
                 process_pair_verify(job_id, request)
+            elif request.get("operation") == "crane-container-cleanup":
+                process_crane_container_cleanup(job_id, request)
+            elif request.get("operation") == "crane-target-handoff":
+                process_crane_target_handoff(job_id, request)
             else:
                 process(job_id, request)
         except Exception as error:
@@ -1960,13 +3084,16 @@ def process_one() -> bool:
             set_status("Failed", job_id, str(error))
             (JOBS / job_id).mkdir(parents=True, exist_ok=True)
             (JOBS / job_id / "error.log").write_text(detail, encoding="utf-8")
+            failure = {
+                "status": 125, "stdout": "",
+                "stderr": f"0-Sky Mac worker failed: {error}",
+                "rollback": error.rollback if isinstance(error, ControlInstallFailed) else "UNKNOWN",
+            }
             try:
-                remote_result(job_id, {
-                    "status": 125, "stdout": "",
-                    "stderr": f"0-Sky Control Mac worker failed: {error}",
-                })
+                remote_result(job_id, failure)
             except Exception as report_error:
                 log(f"{job_id}: could not report failure: {report_error}")
+                defer_remote_result(job_id, failure)
             cleanup_job_artifacts(JOBS / job_id)
         return True
     return False

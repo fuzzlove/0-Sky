@@ -194,13 +194,14 @@ def ensure_device_host_key_pin(*, host: str, port: str, udid: str,
 
 def ssh_base(host: str, port: str, key: Path, *, known_hosts: Path,
              host_alias: str) -> list[str]:
-    if '"' in str(known_hosts) or "\n" in str(known_hosts):
+    if any(value in str(known_hosts) for value in ('"', "\n", "\r", "\t")):
         raise RuntimeError("device SSH known-hosts path contains unsupported characters")
+    known_hosts_value = str(known_hosts).replace("\\", "\\\\").replace(" ", "\\ ")
     return ["/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
             "-o", "StrictHostKeyChecking=yes",
-            # ssh tokenizes each -o value internally; quote paths containing
-            # spaces even though subprocess already passes one argv element.
-            "-o", f'UserKnownHostsFile="{known_hosts}"',
+            # subprocess already preserves this complete -o value as one argv
+            # element. Literal quotes would become part of OpenSSH's filename.
+            "-o", f"UserKnownHostsFile={known_hosts_value}",
             "-o", "GlobalKnownHostsFile=/dev/null",
             "-o", f"HostKeyAlias={host_alias}",
             "-o", "IdentitiesOnly=yes", "-o", "PasswordAuthentication=no",
@@ -221,34 +222,40 @@ def tcp_open(host: str, port: str) -> bool:
         return False
 
 
-def exact_iproxy_present(udid: str, port: str) -> bool:
+def exact_iproxy_present(udid: str, port: str, remote_port: str = "22") -> bool:
     processes = run(["/bin/ps", "-axo", "command="], check=False).stdout.decode()
     for line in processes.splitlines():
         if udid not in line:
             continue
-        if "iproxy" in line and f"{port}:22" in line:
+        try:
+            fields = shlex.split(line)
+        except ValueError:
+            continue
+        if ("iproxy" in line and f"{port}:{remote_port}" in fields
+                and any(fields[i:i+2] == ["-u", udid] for i in range(len(fields)))):
             return True
         if ("pymobiledevice3" in line and "usbmux" in line
                 and "forward" in line and "--serial" in line
-                and f"forward {port} 22" in line):
+                and f"forward {port} {remote_port}" in line):
             return True
         # iOS 27 CoreDevice may expose the authenticated developer SSH
         # endpoint through the installed per-connection forwarder rather than
         # usbmuxd.  The listener remains loopback-only and its wrapper receives
         # one exact UDID, preserving the same binding required above.
         fields = line.split()
-        if ("ncat" in line and "coredevice_ssh_forward.sh" in line
+        if (remote_port == "22" and "ncat" in line and "coredevice_ssh_forward.sh" in line
                 and "127.0.0.1" in fields and str(port) in fields
                 and udid in fields):
             return True
     return False
 
 
-def prepare_loopback_tunnel(host: str, port: str, udid: str) -> subprocess.Popen | None:
+def prepare_loopback_tunnel(host: str, port: str, udid: str,
+                            remote_port: str = "22") -> subprocess.Popen | None:
     if host not in ("127.0.0.1", "localhost", "::1"):
         return None
     if tcp_open(host, port):
-        if not exact_iproxy_present(udid, port):
+        if not exact_iproxy_present(udid, port, remote_port):
             raise RuntimeError(f"loopback port {port} is occupied by a tunnel that is not "
                                f"visibly bound to the requested UDID {udid}")
         return None
@@ -259,7 +266,7 @@ def prepare_loopback_tunnel(host: str, port: str, udid: str) -> subprocess.Popen
     # libusbmuxd iproxy otherwise listens on every interface.  This channel is
     # an implementation detail of the local bridge and must never be exposed
     # to untrusted LAN clients.
-    process = subprocess.Popen([iproxy, "-s", "127.0.0.1", "-u", udid, f"{port}:22"],
+    process = subprocess.Popen([iproxy, "-s", "127.0.0.1", "-u", udid, f"{port}:{remote_port}"],
                                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     for _ in range(20):
         if process.poll() is not None:
@@ -402,7 +409,8 @@ def bind_verified_relationship(*, udid: str, ssh_key: Path, host: str,
                                write_device_marker: bool = True,
                                require_worker: bool = False,
                                provision_wireless: bool = True,
-                               repair_device_host_key: bool = False) -> dict:
+                               repair_device_host_key: bool = False,
+                               remote_port: str = "22") -> dict:
     """Bind a coordinator-verified Apple session to the 0-Sky device bridge.
 
     This callable lets the persistent Mac worker complete enrollment without
@@ -447,7 +455,7 @@ def bind_verified_relationship(*, udid: str, ssh_key: Path, host: str,
             pass
     os.chmod(state_dir, 0o700)
     known_hosts = state_dir / "device-known-hosts"
-    temporary_iproxy = prepare_loopback_tunnel(host, port, udid)
+    temporary_iproxy = prepare_loopback_tunnel(host, port, udid, remote_port)
     try:
         device_host_key_fingerprints = ensure_device_host_key_pin(
             host=host, port=port, udid=udid, known_hosts=known_hosts,
@@ -467,7 +475,7 @@ def bind_verified_relationship(*, udid: str, ssh_key: Path, host: str,
         "host_key_fingerprint": fingerprint,
         "device_host_key_fingerprints": device_host_key_fingerprints,
         "mac_identity_fingerprint": mac_identity_fingerprint,
-        "ssh_port": str(port), "paired_at": int(time.time()),
+        "ssh_port": str(port), "ssh_remote_port": str(remote_port), "paired_at": int(time.time()),
         "pairing_method": "apple-lockdown+root-ssh+device-token-hmac",
     }
     try:
@@ -518,6 +526,7 @@ def main() -> int:
     parser.add_argument("--ssh-key", type=Path, required=True)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", default="2222")
+    parser.add_argument("--remote-port", default=os.environ.get("CRYPSTORE_DEVICE_REMOTE_PORT", "22"))
     parser.add_argument("--instance-name")
     parser.add_argument("--support", type=Path,
                         default=Path.home() / "Library/Application Support/0-Sky")
@@ -563,7 +572,8 @@ def main() -> int:
                              args.repair_device_host_key),
         require_worker=args.require_worker,
         provision_wireless=not args.skip_wireless and args.confirm_host_enrollment,
-        repair_device_host_key=args.repair_device_host_key)
+        repair_device_host_key=args.repair_device_host_key,
+        remote_port=args.remote_port)
     return 0
 
 

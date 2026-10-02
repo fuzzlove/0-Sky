@@ -49,8 +49,11 @@ exec /usr/bin/ssh \
        /var/jb/usr/bin/chown root:mobile /var/jb/etc/trollstorelite-srd-bridge.token
        /var/jb/usr/bin/chmod 0640 /var/jb/etc/trollstorelite-srd-bridge.token
      fi
-     if /var/jb/usr/bin/wget -qO- http://127.0.0.1:48654/v1/status >/dev/null 2>&1; then
-       while /var/jb/usr/bin/wget -qO- http://127.0.0.1:48654/v1/status >/dev/null 2>&1; do
+     bridge_health() {
+       /var/jb/usr/bin/python3 -c "import urllib.request; urllib.request.urlopen(\"http://127.0.0.1:48654/health\", timeout=3).read()" >/dev/null 2>&1
+     }
+     if bridge_health; then
+       while bridge_health; do
          /var/jb/usr/bin/sleep 5
        done
      fi

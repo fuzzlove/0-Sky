@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "rule": "legacy-plist-canonicalization-v1",
+  "package": "com.nahtedetihw.doodle",
+  "from_version": "1:1.1+0sky27.1",
+  "to_version": "1:1.1+0sky27.2",
+  "plist_path": "var/jb/Library/MobileSubstrate/DynamicLibraries/Doodle.plist",
+  "source_date_epoch": 1700000000,
+  "expected_original_sha256": "0a1c5442bc5933ff0b3f6a58279e615951546981d28fbfcab006ce3ad5bbd6a6",
+  "expected_converted_sha256": "3bd29448716730774e20583f1b634b44cf7c2879a8cd949742ff9835c591c24f"
+}

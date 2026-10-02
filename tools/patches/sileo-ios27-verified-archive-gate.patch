@@ -1,0 +1,97 @@
+diff --git a/Sileo/Backend/APT Wrapper/APTWrapper.swift b/Sileo/Backend/APT Wrapper/APTWrapper.swift
+index 38760a2..ce83bb1 100644
+--- a/Sileo/Backend/APT Wrapper/APTWrapper.swift	
++++ b/Sileo/Backend/APT Wrapper/APTWrapper.swift	
+@@ -176,6 +176,16 @@ class APTWrapper {
+                 let removing = !removals.isEmpty
+                 let requested = (removing ? removals : Array(Set(installs + installDeps)))
+                     .sorted { $0.package.packageID < $1.package.packageID }
++                if !removing {
++                    let packageIDs = requested.map { $0.package.packageID }
++                    guard DownloadManager.shared.verifiedBridgeArchivesComplete(
++                            packageIDs: packageIDs) else {
++                        outputCallback("Verified package archive is missing; installation was not started.\n",
++                                       Int(STDERR_FILENO))
++                        completionCallback(194, .back, false)
++                        return
++                    }
++                }
+                 let selected = requested.map {
+                     var value = ["id": $0.package.packageID,
+                                  "version": $0.package.version]
+diff --git a/Sileo/Backend/Download Manager/DownloadManager.swift b/Sileo/Backend/Download Manager/DownloadManager.swift
+index ef392bd..2fc2b80 100644
+--- a/Sileo/Backend/Download Manager/DownloadManager.swift	
++++ b/Sileo/Backend/Download Manager/DownloadManager.swift	
+@@ -310,7 +310,7 @@ final class DownloadManager {
+                 complete = false
+                 continue
+             }
+-            if download.success { continue }
++            if verifiedBridgeArchivesComplete(packageIDs: [packageID]) { continue }
+             guard download.progress == 1, download.failureReason == nil,
+                   let expectedSizeText = download.package.size,
+                   let expectedSize = Int(expectedSizeText) else {
+@@ -345,7 +345,31 @@ final class DownloadManager {
+             }
+             if !recovered { complete = false }
+         }
+-        return complete
++        return complete && verifiedBridgeArchivesComplete(packageIDs: packageIDs)
++    }
++
++    // A completed Sileo queue is not sufficient for the SRD Bridge. Every
++    // selected package must have an exact, hash-named archive staged in the
++    // app container before the privileged transaction may begin.
++    public func verifiedBridgeArchivesComplete(packageIDs: [String]) -> Bool {
++        let uniquePackageIDs = Set(packageIDs)
++        guard !uniquePackageIDs.isEmpty else { return false }
++        let directory = FileManager.default.documentDirectory
++            .appendingPathComponent("0sky-authorized-packages", isDirectory: true)
++            .standardizedFileURL
++        for packageID in uniquePackageIDs {
++            guard let archive = verifiedBridgeArchives[packageID]?.standardizedFileURL,
++                  archive.deletingLastPathComponent() == directory,
++                  archive.pathExtension == "deb",
++                  archive.deletingPathExtension().lastPathComponent.range(
++                    of: "^[0-9a-f]{64}$", options: .regularExpression) != nil else {
++                return false
++            }
++            var archiveStat = stat()
++            guard lstat(archive.path, &archiveStat) == 0,
++                  (archiveStat.st_mode & S_IFMT) == S_IFREG else { return false }
++        }
++        return true
+     }
+ 
+     public func verifiedDownloadDiagnostic(packageIDs: [String]) -> String {
+@@ -361,8 +385,11 @@ final class DownloadManager {
+             guard let download = downloads[packageID] else {
+                 return packageID + ":missing-download"
+             }
++            let archiveState = verifiedBridgeArchivesComplete(packageIDs: [packageID]) ?
++                "staged" : "missing"
+             return packageID + ":progress=" + String(describing: download.progress) +
+                 ",success=" + String(download.success) +
++                ",archive=" + archiveState +
+                 ",failure=" + (download.failureReason ?? "none") +
+                 ",expected=" + (download.package.size ?? "none")
+         }.joined(separator: "; ")
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index c6e7465..1990b70 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -531,11 +531,11 @@ class DownloadsTableViewController: SileoViewController {
+         guard ProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27,
+               isDownloading, !isInstalling else { return }
+         let manager = DownloadManager.shared
+-        let recovered = manager.recoverVerifiedDownloads(packageIDs: packageIDs)
++        _ = manager.recoverVerifiedDownloads(packageIDs: packageIDs)
+         let recoveryDiagnostic = manager.verifiedDownloadDiagnostic(packageIDs: packageIDs)
+         try? recoveryDiagnostic.write(to: FileManager.default.documentDirectory
+             .appendingPathComponent("0sky-download-diagnostic.txt"), atomically: true, encoding: .utf8)
+-        if recovered || manager.verifyComplete() {
++        if manager.verifiedBridgeArchivesComplete(packageIDs: packageIDs) {
+             manager.lockedForInstallation = true
+             isDownloading = false
+             cancelDownload?.isHidden = true

@@ -1,0 +1,11 @@
+{
+  "converted_sha256": "3bd29448716730774e20583f1b634b44cf7c2879a8cd949742ff9835c591c24f",
+  "from_version": "1:1.1+0sky27.1",
+  "original_sha256": "0a1c5442bc5933ff0b3f6a58279e615951546981d28fbfcab006ce3ad5bbd6a6",
+  "output": "com.nahtedetihw.doodle_1%3a1.1+0sky27.2-reproduced_iphoneos-arm64.deb",
+  "package": "com.nahtedetihw.doodle",
+  "plist": "var/jb/Library/MobileSubstrate/DynamicLibraries/Doodle.plist",
+  "rule": "legacy-plist-canonicalization-v1",
+  "semantic_plist_preserved": true,
+  "to_version": "1:1.1+0sky27.2"
+}

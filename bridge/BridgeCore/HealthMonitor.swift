@@ -130,7 +130,7 @@ public actor HealthMonitor {
             && linkAppJSON?["executable"] as? Bool == true
             && linkAppJSON?["icon"] as? Bool == true
             && linkAppJSON?["version"] as? String == "1.9.0"
-            && linkAppJSON?["build"] as? String == "45"
+            && linkAppJSON?["build"] as? String == "47"
         let linkFailure: String
         if !linkAppReady {
             linkFailure = "0-Sky Link app is missing, unregistered, or its executable/icon cannot be verified. Rerun complete iOS component setup for this exact SRD."
@@ -244,7 +244,7 @@ public actor HealthMonitor {
             && linkAppJSON?["executable"] as? Bool == true
             && linkAppJSON?["icon"] as? Bool == true
             && linkAppJSON?["version"] as? String == "1.9.0"
-            && linkAppJSON?["build"] as? String == "45"
+            && linkAppJSON?["build"] as? String == "47"
         let installed = control.succeeded
             && (ControlRuntimeFields.bool(runtime, field: "registered")
                 || ControlRuntimeFields.bool(runtime, field: "mounted"))

@@ -1,0 +1,52 @@
+{
+  "classes": {
+    "CSPasscodeViewController": {
+      "class_present": true,
+      "ivars": {
+        "_passcodeLockView": "@\"UIView<SBUIPasscodeLockView_Private>\""
+      },
+      "methods": {
+        "showProudLock": "B16@0:8",
+        "viewDidLoad": "v16@0:8"
+      }
+    },
+    "SBFUserAuthenticationController": {
+      "class_present": true,
+      "ivars": {},
+      "methods": {
+        "_evaluateAuthenticationAttempt:outError:": "q32@0:8@16^@24"
+      }
+    },
+    "SBLockScreenManager": {
+      "class_present": true,
+      "ivars": {},
+      "methods": {
+        "_attemptUnlockWithPasscode:mesa:finishUIUnlock:completion:": "B40@0:8@16B24B28@?32",
+        "_isPasscodeVisible": "B16@0:8",
+        "setPasscodeVisible:animated:": "v24@0:8B16B20"
+      }
+    }
+  },
+  "component": "com.nahtedetihw.doodle",
+  "hook_execution": "UNVERIFIED",
+  "legacy_hook_compatibility": "BLOCKED_MISSING_LEGACY_API",
+  "missing_legacy_hooks": [
+    "SBIconController.viewDidAppear:",
+    "SBLockScreenManager._handleBacklightLevelWillChange:",
+    "SBDeviceApplicationSceneHandle.translucent"
+  ],
+  "observed_builds": [
+    {
+      "build": "24A5390f",
+      "device_model": "iPhone13,2"
+    },
+    {
+      "build": "24A437",
+      "device_model": "iPhone12,8"
+    }
+  ],
+  "runtime_semantics": "UNVERIFIED",
+  "schema": 1,
+  "status": "BLOCKED_MISSING_LEGACY_API",
+  "target": "ios27"
+}

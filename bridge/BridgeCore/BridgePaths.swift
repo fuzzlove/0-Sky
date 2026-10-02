@@ -19,9 +19,27 @@ public struct BridgePaths: Sendable {
     public static func detectBundledKitRoot() -> URL? {
         guard let resources = Bundle.main.resourceURL else { return nil }
         let candidate = resources.appendingPathComponent("Kit")
-        return FileManager.default.fileExists(
-            atPath: candidate.appendingPathComponent("host-mac/install.py").path
-        ) ? candidate : nil
+        guard !FileManager.default.fileExists(
+            atPath: resources.appendingPathComponent(".0sky-incomplete-build").path
+        ) else { return nil }
+        return hasCompleteKit(at: candidate) ? candidate : nil
+    }
+
+    public static func hasCompleteKit(at root: URL) -> Bool {
+        let requiredFiles = [
+            "SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
+            "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+            "host-mac/install.py", "host-mac/pair.py",
+            "host-mac/requirements-lock.txt", "payloads/0-Sky-Link-1.9.0-universal.ipa",
+        ]
+        var wheelhouseIsDirectory: ObjCBool = false
+        let wheelhouse = FileManager.default.fileExists(
+            atPath: root.appendingPathComponent("host-mac/wheelhouse").path,
+            isDirectory: &wheelhouseIsDirectory
+        ) && wheelhouseIsDirectory.boolValue
+        return wheelhouse && requiredFiles.allSatisfy {
+            FileManager.default.isReadableFile(atPath: root.appendingPathComponent($0).path)
+        }
     }
 
     public func enrollmentInstaller() throws -> URL {
@@ -89,18 +107,89 @@ public struct BridgePaths: Sendable {
         throw BridgeCoreError.dependencyMissing("complete 0-Sky project setup controller")
     }
 
+    public func afc2RootMountController() throws -> URL {
+        if let repositoryRoot {
+            let candidate = repositoryRoot.appendingPathComponent(
+                "bridge/0SkyBridge/Resources/Scripts/afc2_root_mount.py"
+            )
+            if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+        }
+        if let resources = Bundle.main.resourceURL {
+            for candidate in [
+                resources.appendingPathComponent("Scripts/afc2_root_mount.py"),
+                resources.appendingPathComponent("afc2_root_mount.py"),
+            ] where FileManager.default.isReadableFile(atPath: candidate.path) {
+                return candidate
+            }
+        }
+        throw BridgeCoreError.dependencyMissing("AFC2 Finder mount controller")
+    }
+
+    public func afc2RootMountPython(for profile: DeviceProfile) throws -> URL {
+        var candidates: [URL] = []
+        // Source builds use the repository's verified development environment.
+        // Release builds use the selected device's pinned, offline-installed
+        // environment and never borrow another device profile's interpreter.
+        if let repositoryRoot {
+            candidates.append(repositoryRoot.appendingPathComponent(".venv/bin/python"))
+            candidates.append(repositoryRoot.appendingPathComponent(".venv/bin/python3"))
+        }
+        candidates.append(instanceDirectory(profile).appendingPathComponent("venv/bin/python3"))
+        candidates.append(supportRoot.appendingPathComponent("venv/bin/python3"))
+        if let candidate = candidates.first(where: {
+            FileManager.default.isExecutableFile(atPath: $0.path)
+                && Self.hasAFC2WebDAVModules(python: $0)
+        }) {
+            return candidate
+        }
+        throw BridgeCoreError.dependencyMissing(
+            "pinned 0-Sky Python environment with pymobiledevice3 WebDAV support"
+        )
+    }
+
+    private static func hasAFC2WebDAVModules(python: URL) -> Bool {
+        let environment = python.deletingLastPathComponent().deletingLastPathComponent()
+        let library = environment.appendingPathComponent("lib", isDirectory: true)
+        let versions = (try? FileManager.default.contentsOfDirectory(
+            at: library, includingPropertiesForKeys: nil, options: [.skipsHiddenFiles]
+        )) ?? []
+        return versions.contains { version in
+            let packages = version.appendingPathComponent("site-packages", isDirectory: true)
+            return FileManager.default.fileExists(
+                atPath: packages.appendingPathComponent("pymobiledevice3", isDirectory: true).path
+            ) && FileManager.default.fileExists(
+                atPath: packages.appendingPathComponent("asgi_webdav", isDirectory: true).path
+            ) && FileManager.default.fileExists(
+                atPath: packages.appendingPathComponent("uvicorn", isDirectory: true).path
+            )
+        }
+    }
+
     public func projectSetupKit() throws -> URL {
+        if let bundledKitRoot, Self.hasCompleteKit(at: bundledKitRoot) {
+            return bundledKitRoot
+        }
+        // A distributable app must carry its own complete kit. A source tree
+        // found through the launch directory must not silently supply one.
+        if Bundle.main.bundleURL.pathExtension.lowercased() == "app" {
+            throw BridgeCoreError.dependencyMissing(
+                "complete 0-Sky kit in this app bundle; the build or installer is incomplete"
+            )
+        }
         if let repositoryRoot {
             for base in ["bridge/0SkyBridge/Resources/Scripts/kit",
                          "exploitdev/srdsh-work/components/zero-sky/kit"] {
                 let candidate = repositoryRoot.appendingPathComponent(base)
                 if FileManager.default.isReadableFile(
                     atPath: candidate.appendingPathComponent("SHA256SUMS").path
+                ) && FileManager.default.isReadableFile(
+                    atPath: candidate.appendingPathComponent("host-mac/install.py").path
                 ) { return candidate }
             }
         }
-        if let bundledKitRoot { return bundledKitRoot }
-        throw BridgeCoreError.dependencyMissing("verified complete 0-Sky project kit")
+        throw BridgeCoreError.dependencyMissing(
+            "complete 0-Sky kit; build with a verified kit or install a complete release"
+        )
     }
 
     public func projectPython() throws -> URL {

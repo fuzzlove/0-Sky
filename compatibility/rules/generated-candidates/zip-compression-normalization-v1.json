@@ -1,0 +1,40 @@
+{
+  "confidence": "HIGH",
+  "derived_from": [
+    "trollrecorder-zip-normalization"
+  ],
+  "evidence_fingerprint": "812f7a46276c9d7d6f844276f6f8d04d7fd8ffe20f227e06eac00729dc13a305",
+  "id": "zip-compression-normalization-v1",
+  "match": [
+    "zip member compression is BZIP2 or LZMA"
+  ],
+  "maturity": "EXPERIMENTAL",
+  "preconditions": [
+    "archive passes bounded structural validation",
+    "all member paths are safe",
+    "member expansion is within configured limits"
+  ],
+  "production_eligible": false,
+  "rollback": "discard derivative workspace and preserve original artifact",
+  "schema_version": 1,
+  "title": "Normalize unsupported IPA/TIPA ZIP compression",
+  "transformation": {
+    "preserve": [
+      "member bytes",
+      "names",
+      "timestamps",
+      "comments",
+      "Unix modes"
+    ],
+    "target_compression": "DEFLATE",
+    "type": "archive_repackage"
+  },
+  "validation": [
+    "member names unchanged",
+    "member SHA-256 unchanged",
+    "member modes unchanged",
+    "archive CRC passes",
+    "SRD installer extraction succeeds"
+  ],
+  "version": 1
+}

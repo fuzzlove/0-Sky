@@ -1,0 +1,57 @@
+diff --git a/Sileo/Backend/Download Manager/DownloadManager.swift b/Sileo/Backend/Download Manager/DownloadManager.swift
+index 8a13fd1..a72e6c4 100644
+--- a/Sileo/Backend/Download Manager/DownloadManager.swift
++++ b/Sileo/Backend/Download Manager/DownloadManager.swift
+@@ -347,6 +347,28 @@ final class DownloadManager {
+         }
+         return complete
+     }
++
++    public func verifiedDownloadDiagnostic(packageIDs: [String]) -> String {
++        let candidates = (try? FileManager.default.contentsOfDirectory(
++            at: EvanderNetworking.downloadCache,
++            includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey,
++                                         .fileSizeKey],
++            options: [.skipsHiddenFiles])) ?? []
++        let candidateSizes = candidates.compactMap {
++            try? $0.resourceValues(forKeys: [.fileSizeKey]).fileSize
++        }.map(String.init).joined(separator: ",")
++        let states = packageIDs.map { packageID -> String in
++            guard let download = downloads[packageID] else {
++                return packageID + ":missing-download"
++            }
++            return packageID + ":progress=" + String(describing: download.progress) +
++                ",success=" + String(download.success) +
++                ",failure=" + (download.failureReason ?? "none") +
++                ",expected=" + (download.package.size ?? "none")
++        }.joined(separator: "; ")
++        return states + "; cache-files=" + String(candidates.count) +
++            "; cache-sizes=" + candidateSizes
++    }
+     
+     private func aptEncoded(string: String, isArch: Bool) -> String {
+         var encodedString = string.replacingOccurrences(of: "_", with: "%5f")
+diff --git a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+index bb2a4c1..c6c4610 100644
+--- a/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
++++ b/Sileo/UI/DownloadsViewController/DownloadsTableViewController.swift
+@@ -521,5 +521,8 @@ class DownloadsTableViewController: SileoViewController {
+         let manager = DownloadManager.shared
+         let recovered = manager.recoverVerifiedDownloads(packageIDs: packageIDs)
++        let recoveryDiagnostic = manager.verifiedDownloadDiagnostic(packageIDs: packageIDs)
++        try? recoveryDiagnostic.write(to: FileManager.default.documentDirectory
++            .appendingPathComponent("0sky-download-diagnostic.txt"), atomically: true, encoding: .utf8)
+         if recovered || manager.verifyComplete() {
+             manager.lockedForInstallation = true
+             isDownloading = false
+@@ -533,7 +536,9 @@ class DownloadsTableViewController: SileoViewController {
+         guard remaining > 0 else {
+             isDownloading = false
+             manager.queueStarted = false
+-            presentConfirmFailure("Package download verification timed out. Refresh the source and retry.")
++            presentConfirmFailure(
++                "Package download verification timed out. " +
++                recoveryDiagnostic)
+             return
+         }
+         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in

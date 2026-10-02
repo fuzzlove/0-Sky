@@ -37,6 +37,19 @@ OTHER = "00000000-0000000000000002"
 
 
 class InstallerLifecycleTests(unittest.TestCase):
+    def test_device_bridge_supervisor_uses_unauthenticated_health_probe(self):
+        supervisor = (HOST.parent /
+                      "automation/CrypStoreAutomation/device_bridge_supervisor.sh")
+        source = supervisor.read_text(encoding="utf-8")
+        installer_source = (HOST / "install.py").read_text(encoding="utf-8")
+        self.assertIn("http://127.0.0.1:48654/health", source)
+        self.assertNotIn("http://127.0.0.1:48654/v1/status", source)
+        # The SE's Procursus wget is killed while opening this loopback URL;
+        # use the same Python runtime as the bridge for a portable probe.
+        self.assertIn("/var/jb/usr/bin/python3 -c", source)
+        self.assertNotIn("/var/jb/usr/bin/wget", source)
+        self.assertIn('device_bridge_supervisor.sh"', installer_source)
+
     @unittest.skipUnless(sys.platform == "darwin", "Mach-O helper verification requires macOS")
     def test_host_helpers_have_both_signed_architectures(self):
         kit = HOST.parent

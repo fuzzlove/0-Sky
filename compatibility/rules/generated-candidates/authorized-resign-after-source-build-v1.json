@@ -1,0 +1,32 @@
+{
+  "confidence": "MANUAL",
+  "derived_from": [
+    "srdzsh-2.0.4-final-signing"
+  ],
+  "evidence_fingerprint": "9bfb17b004329700e4c09843dbb877b66915780a8776fd8b102df7025959446a",
+  "id": "authorized-resign-after-source-build-v1",
+  "match": [
+    "Mach-O and CodeResources are the only changed payload files"
+  ],
+  "maturity": "EXPERIMENTAL",
+  "preconditions": [
+    "source provenance is pinned",
+    "entitlement contract is reviewed",
+    "configured SRD signing mechanism is available"
+  ],
+  "production_eligible": false,
+  "rollback": "discard derivative workspace and preserve original artifact",
+  "schema_version": 1,
+  "title": "Refresh authorized signatures after a controlled source build",
+  "transformation": {
+    "automatic_binary_rewrite": false,
+    "type": "source_build_signing"
+  },
+  "validation": [
+    "Mach-O dependency graph unchanged",
+    "required entitlements preserved",
+    "strict signature verification",
+    "install, launch, functional and rollback UAT"
+  ],
+  "version": 1
+}

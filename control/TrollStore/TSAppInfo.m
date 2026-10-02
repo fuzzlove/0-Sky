@@ -40,6 +40,51 @@ extern UIImage* imageWithSize(UIImage* image, CGSize size);
 	[self closeArchive];
 }
 
+- (void)applyInventoryMetadata:(NSDictionary*)metadata
+{
+	if(![metadata isKindOfClass:NSDictionary.class]) return;
+	NSMutableDictionary* merged = [_cachedInfoDictionary isKindOfClass:NSDictionary.class]
+		? [_cachedInfoDictionary mutableCopy] : [NSMutableDictionary new];
+	NSDictionary<NSString*, NSString*>* mapping = @{
+		@"bundle_identifier": @"CFBundleIdentifier",
+		@"name": @"CFBundleDisplayName",
+		@"version": @"CFBundleShortVersionString",
+	};
+	[mapping enumerateKeysAndObjectsUsingBlock:^(NSString* sourceKey, NSString* targetKey,
+		BOOL* stop) {
+		(void)stop;
+		id current = merged[targetKey];
+		id candidate = metadata[sourceKey];
+		if((![current isKindOfClass:NSString.class] || ![(NSString*)current length]) &&
+		   [candidate isKindOfClass:NSString.class] && [(NSString*)candidate length])
+			merged[targetKey] = candidate;
+	}];
+	if(![merged[@"CFBundleName"] isKindOfClass:NSString.class] &&
+	   [merged[@"CFBundleDisplayName"] isKindOfClass:NSString.class])
+		merged[@"CFBundleName"] = merged[@"CFBundleDisplayName"];
+	if(![merged[@"CFBundleVersion"] isKindOfClass:NSString.class] &&
+	   [merged[@"CFBundleShortVersionString"] isKindOfClass:NSString.class])
+		merged[@"CFBundleVersion"] = merged[@"CFBundleShortVersionString"];
+	id hidden = metadata[@"hidden"];
+	if([hidden isKindOfClass:NSNumber.class])
+		merged[@"0SkyHiddenApplication"] = hidden;
+	_cachedInfoDictionary = merged.copy;
+}
+
+- (BOOL)isHiddenApplication
+{
+	if([_cachedInfoDictionary[@"0SkyHiddenApplication"] boolValue]) return YES;
+	id tags = _cachedInfoDictionary[@"SBAppTags"];
+	if(![tags isKindOfClass:NSArray.class]) return NO;
+	for(id tag in (NSArray*)tags)
+	{
+		if([tag isKindOfClass:NSString.class] &&
+		   [(NSString*)tag caseInsensitiveCompare:@"hidden"] == NSOrderedSame)
+			return YES;
+	}
+	return NO;
+}
+
 - (void)enumerateArchive:(void (^)(struct archive_entry* entry, BOOL* stop))enumerateBlock
 {
 	[self openArchive];

@@ -3,14 +3,26 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import subprocess
+import tempfile
 import zipfile
+from typing import BinaryIO
 
 
 PATTERNS = {
-    "fixed-home-path": re.compile(rb"/(?:Users|home)/(?!example/|username/|USER/)[A-Za-z0-9._-]+/"),
+    "fixed-home-path": re.compile(rb"/(?:Users|home)/[A-Za-z0-9._-]+"),
+    "mounted-volume-path": re.compile(rb"/Volumes/[A-Za-z0-9._ -]+(?:/|\x00)"),
+    "derived-data-path": re.compile(rb"(?i)\bDerivedData(?:/|\\|\x00)"),
+    # A bare file URL is a normal Foundation/CoreFoundation string and does not
+    # identify the build host.  Flag only file URLs rooted in locations that
+    # can disclose a developer account or transient build workspace.
+    "absolute-file-uri": re.compile(
+        rb"(?i)file:///(?:Users|home|Volumes|private/(?:tmp|var/folders)|tmp|var/folders)/"),
     "physical-device-id": re.compile(rb"\b0000(?!0000)[0-9A-Fa-f]{4}-[0-9A-Fa-f]{16}\b"),
     "private-key": re.compile(rb"-----BEGIN (?:OPENSSH |RSA |EC )?PRIVATE KEY-----"),
     "embedded-password": re.compile(
@@ -25,9 +37,9 @@ PATTERNS = {
     "temporary-build-path": re.compile(
         rb"(?<!/var/jb/var)/(?:private/)?tmp/0sky-[A-Za-z0-9_-]{8,}/"),
 }
-SKIP_PARTS = {".git", ".build", ".venv", "__pycache__", "artifacts"}
-TEXT_SUFFIXES = {".py", ".sh", ".command", ".json", ".plist", ".txt",
-                 ".md", ".xml", ".yaml", ".yml", ".swift", ".m", ".h"}
+CHUNK_SIZE = 1024 * 1024
+OVERLAP = 8192
+MAX_ARCHIVE_MEMBER = 1024 * 1024 * 1024
 
 
 def load_deny_patterns(path: Path) -> dict[str, re.Pattern[bytes]]:
@@ -44,39 +56,134 @@ def audit(paths: list[Path], deny_patterns: dict[str, re.Pattern[bytes]] | None 
     findings: list[dict[str, str]] = []
     patterns = {**PATTERNS, **(deny_patterns or {})}
 
-    def scan(data: bytes, label: str) -> None:
+    def safe_label(value: str) -> str:
+        components = []
+        for component in Path(value).parts:
+            if ("@" in component or any(pattern.search(component.encode("utf-8", "replace"))
+                   for pattern in patterns.values())):
+                digest = hashlib.sha256(component.encode("utf-8")).hexdigest()[:12]
+                components.append(f"<redacted-name:{digest}>")
+            else:
+                components.append(component)
+        return "/".join(components)
+
+    def scan_stream(stream: BinaryIO, label: str) -> None:
+        found: set[str] = set()
+        tail = b""
+        while chunk := stream.read(CHUNK_SIZE):
+            data = tail + chunk
+            for category, pattern in patterns.items():
+                if category not in found and pattern.search(data):
+                    findings.append({"file": label, "category": category})
+                    found.add(category)
+            tail = data[-OVERLAP:]
+
+    def scan_name(value: str, label: str) -> None:
+        data = value.encode("utf-8", "replace")
         for category, pattern in patterns.items():
             if pattern.search(data):
                 findings.append({"file": label, "category": category})
 
+    def scan_zip_file(path: Path, label: str) -> None:
+        try:
+            with zipfile.ZipFile(path) as archive:
+                for member in archive.infolist():
+                    if member.is_dir():
+                        continue
+                    member_label = label + "!/" + safe_label(member.filename)
+                    if (Path(member.filename).is_absolute() or
+                            ".." in Path(member.filename).parts):
+                        findings.append({"file": member_label,
+                                         "category": "unsafe-archive-path"})
+                    scan_name(member.filename, member_label)
+                    if member.file_size > MAX_ARCHIVE_MEMBER:
+                        findings.append({"file": member_label,
+                                         "category": "oversized-archive-member"})
+                        continue
+                    with archive.open(member) as stream:
+                        scan_stream(stream, member_label)
+        except (OSError, zipfile.BadZipFile, RuntimeError):
+            findings.append({"file": label, "category": "invalid-archive"})
+
+    def scan_deb(path: Path, label: str) -> None:
+        try:
+            outer = subprocess.run(["/usr/bin/bsdtar", "-tf", str(path)],
+                                   capture_output=True, timeout=30, check=False)
+            if outer.returncode:
+                raise ValueError("invalid ar archive")
+            members = [line.strip() for line in outer.stdout.decode("utf-8", "replace").splitlines()]
+            nested = [name for name in members if name.startswith(("data.tar.", "control.tar."))]
+            if not any(name.startswith("data.tar.") for name in nested):
+                raise ValueError("missing Debian payload")
+            with tempfile.TemporaryDirectory(prefix="0sky-deb-scan-") as folder:
+                for index, name in enumerate(nested):
+                    archive = Path(folder) / f"nested-{index}.tar"
+                    with archive.open("wb") as output:
+                        extracted = subprocess.run(["/usr/bin/bsdtar", "-xOf", str(path), name],
+                                                   stdout=output, stderr=subprocess.DEVNULL,
+                                                   timeout=120, check=False)
+                    if extracted.returncode:
+                        raise ValueError("invalid Debian member")
+                    listing = subprocess.run(["/usr/bin/bsdtar", "-tf", str(archive)],
+                                             capture_output=True, timeout=60, check=False)
+                    if listing.returncode:
+                        raise ValueError("invalid nested archive")
+                    for member_index, member in enumerate(
+                            listing.stdout.decode("utf-8", "replace").splitlines()):
+                        clean = member.removeprefix("./")
+                        member_label = label + "!/" + safe_label(clean)
+                        if Path(clean).is_absolute() or ".." in Path(clean).parts:
+                            findings.append({"file": member_label, "category": "unsafe-archive-path"})
+                        scan_name(member, member_label)
+                        if Path(clean).suffix.lower() in {".ipa", ".zip", ".whl"}:
+                            nested_zip = Path(folder) / f"zip-{index}-{member_index}"
+                            with nested_zip.open("wb") as output:
+                                extracted_zip = subprocess.run(
+                                    ["/usr/bin/bsdtar", "-xOf", str(archive), member],
+                                    stdout=output, stderr=subprocess.DEVNULL,
+                                    timeout=120, check=False)
+                            if extracted_zip.returncode:
+                                raise ValueError("nested ZIP extraction failed")
+                            scan_zip_file(nested_zip, member_label)
+                    with tempfile.TemporaryFile() as output:
+                        contents = subprocess.run(["/usr/bin/bsdtar", "-xOf", str(archive)],
+                                                  stdout=output, stderr=subprocess.DEVNULL,
+                                                  timeout=300, check=False)
+                        if contents.returncode:
+                            raise ValueError("nested archive extraction failed")
+                        output.seek(0)
+                        scan_stream(output, label + "!/" + name)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
+            findings.append({"file": label, "category": "invalid-archive"})
+
     for root in paths:
         files = [root] if root.is_file() else root.rglob("*")
         for path in files:
-            if not path.is_file() or any(part in SKIP_PARTS
-                                         for part in path.relative_to(root).parts):
-                continue
-            label = path.name
-            if path.suffix.lower() in {".ipa", ".zip"}:
+            if path.is_symlink():
+                label = safe_label(str(path.relative_to(root)) if root.is_dir() else path.name)
                 try:
-                    with zipfile.ZipFile(path) as archive:
-                        for member in archive.infolist():
-                            if (member.is_dir() or member.file_size > 4 * 1024 * 1024
-                                    or Path(member.filename).suffix.lower() not in TEXT_SUFFIXES):
-                                continue
-                            data = archive.read(member)
-                            scan(data, label + "!/" + Path(member.filename).name)
-                except (OSError, zipfile.BadZipFile, RuntimeError):
-                    findings.append({"file": label, "category": "invalid-archive"})
+                    target = os.readlink(path)
+                    if Path(target).is_absolute() or ".." in Path(target).parts:
+                        findings.append({"file": label, "category": "unsafe-symlink"})
+                    scan_name(target, label)
+                except OSError:
+                    findings.append({"file": label, "category": "unreadable"})
+                continue
+            if not path.is_file():
+                continue
+            label = safe_label(str(path.relative_to(root)) if root.is_dir() else path.name)
+            scan_name(str(path.relative_to(root)) if root.is_dir() else path.name, label)
+            if path.suffix.lower() in {".ipa", ".zip", ".whl"}:
+                scan_zip_file(path, label)
+                continue
+            if path.suffix.lower() == ".deb":
+                scan_deb(path, label)
                 continue
             try:
                 with path.open("rb") as stream:
-                    sample = stream.read(4096)
-                    stream.seek(0)
-                    data = stream.read() if path.stat().st_size <= 64 * 1024 * 1024 else sample
+                    scan_stream(stream, label)
             except OSError:
                 findings.append({"file": label, "category": "unreadable"})
-                continue
-            scan(data, label)
     return findings
 
 

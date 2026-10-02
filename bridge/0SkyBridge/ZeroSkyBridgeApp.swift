@@ -38,6 +38,13 @@ struct ZeroSkyBridgeApp: App {
                 Divider()
                 Button("Reconnect") { model.reconnect() }
                 Button("Restart Bridge") { model.serviceAction("restart", service: .deviceBridge) }
+                if model.rootFilesystemMountPhase == .mounted {
+                    Button("Reveal Root in Finder") { model.revealRootFilesystemMount() }
+                    Button("Unmount Root") { model.stopRootFilesystemMount() }
+                } else {
+                    Button("Mount Root in Finder") { model.mountRootFilesystem() }
+                        .disabled(model.selectedDevice?.usbConnected != true || !model.selectedHasProfile)
+                }
                 if model.activeOperationName != nil {
                     Divider()
                     Text(model.activeOperationName ?? "Operation in progress")

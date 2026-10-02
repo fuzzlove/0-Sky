@@ -25,7 +25,10 @@ READ_OPERATIONS = frozenset({"getStatus", "getCapabilities", "getSensorHealth",
                              "getNotificationAnalytics", "getNotificationEvents",
                              "getPermissionTimeoutCapability", "getPermissionTimeouts",
                              "getControlCenterSummary", "getHealthTimeline",
-                             "getRecoveryOptions"})
+                             "getRecoveryOptions", "getCompatibility", "getCompatibilityDetail", "getCompatibilityAdmission",
+                             "analyzeCompatibility",
+                             "getTweakTargetApps",
+                             "getResearchToolkit", "getToolkitReport"})
 WRITE_OPERATIONS = frozenset({"restartNormally", "disableRecentTweaks",
                               "disableSelectedTweak", "startWithoutTweaks",
                               "createSnapshot", "restoreSnapshot",
@@ -35,7 +38,10 @@ WRITE_OPERATIONS = frozenset({"restartNormally", "disableRecentTweaks",
                               "freezeApp", "temporarilyActivateApp", "unfreezeApp"})
 WRITE_OPERATIONS = WRITE_OPERATIONS | frozenset({"setTemporaryPermission",
                                                   "revertPermissionTimeout",
-                                                  "publishPowerTelemetry"})
+                                                  "publishPowerTelemetry",
+                                                  "setTweakTargets",
+                                                  "cleanupCraneContainer",
+                                                  "runToolkitSmoke", "runToolkitUAT"})
 IDENTIFIER = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")
 
 
