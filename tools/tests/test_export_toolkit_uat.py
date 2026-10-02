@@ -66,7 +66,7 @@ class ToolkitUATExportTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             value = receipt("a" * 16)
-            value["inventory"]["components"][0]["name"] = "/Users/tester/private"
+            value["inventory"]["components"][0]["name"] = "/Users/example/private"
             source = root / "device.json"
             source.write_text(json.dumps(value))
             target = root / "bundle"

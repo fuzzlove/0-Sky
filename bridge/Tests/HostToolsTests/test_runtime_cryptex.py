@@ -10,7 +10,7 @@ from unittest import mock
 
 
 SCRIPT = (Path(__file__).resolve().parents[2] /
-          "0SkyBridge/Resources/Scripts/kit/automation/tools/"
+          "KitScripts/automation/tools/"
           "srd-runtime-manager/sync_runtime_cryptex.py")
 SPEC = importlib.util.spec_from_file_location("test_sync_runtime_cryptex", SCRIPT)
 assert SPEC and SPEC.loader

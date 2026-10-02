@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import hashlib
 import json
 import re
 import subprocess
@@ -16,6 +17,7 @@ BINARY_SOURCE_SUFFIXES = {".ipa", ".deb", ".dmg", ".pkg", ".p12",
                           ".mobileprovision", ".provisionprofile", ".pem",
                           ".key", ".cer", ".crt", ".zip", ".zst"}
 TEXT_SKIP_SUFFIXES = {".png", ".jpg", ".jpeg", ".gif", ".icns"}
+ALLOWLIST_PATH = Path("tools/pii_audit_allowlist.json")
 
 CHECKS = (
     ("fixed-home-path", re.compile(rb"/(?:Users|home)/(?!example/|username/|USER/)[A-Za-z0-9._-]+/")),
@@ -26,6 +28,80 @@ CHECKS = (
     ("embedded-credential", re.compile(
         rb"(?im)^\s*(?:CERT_PASS|PASSWORD|API_TOKEN|PRIVATE_KEY)\s*=\s*['\"][^'\"$]{4,}['\"]\s*$")),
 )
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def load_allowlist(root: Path) -> tuple[dict[tuple[str, str], str], list[dict[str, str]]]:
+    """Load exact-hash exceptions for immutable upstream or public-key fixtures."""
+    path = root / ALLOWLIST_PATH
+    if not path.is_file() or path.is_symlink():
+        return {}, [{"category": "allowlist-missing", "file": ALLOWLIST_PATH.as_posix()}]
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        return {}, [{"category": "allowlist-invalid", "file": ALLOWLIST_PATH.as_posix()}]
+    entries = payload.get("entries") if isinstance(payload, dict) else None
+    if (not isinstance(payload, dict) or payload.get("schema") != 1 or
+            not isinstance(entries, list)):
+        return {}, [{"category": "allowlist-invalid", "file": ALLOWLIST_PATH.as_posix()}]
+    allowed: dict[tuple[str, str], str] = {}
+    errors: list[dict[str, str]] = []
+    for entry in entries:
+        if not isinstance(entry, dict):
+            errors.append({"category": "allowlist-invalid", "file": ALLOWLIST_PATH.as_posix()})
+            continue
+        relative = entry.get("file")
+        category = entry.get("category")
+        digest = entry.get("sha256")
+        if (not isinstance(relative, str) or not isinstance(category, str) or
+                not isinstance(digest, str) or not re.fullmatch(r"[a-f0-9]{64}", digest) or
+                Path(relative).is_absolute() or ".." in Path(relative).parts or
+                (relative, category) in allowed):
+            errors.append({"category": "allowlist-invalid", "file": ALLOWLIST_PATH.as_posix()})
+            continue
+        allowed[(relative, category)] = digest
+    return allowed, errors
+
+
+def apply_allowlist(root: Path, findings: list[dict[str, object]]) -> tuple[list[dict[str, object]], int]:
+    """Suppress only findings whose category, path, and current bytes are pinned."""
+    allowlist, allowlist_errors = load_allowlist(root)
+    approved: set[tuple[str, str]] = set()
+    filtered: list[dict[str, object]] = list(allowlist_errors)
+    hashes: dict[str, str | None] = {}
+    for finding in findings:
+        key = (str(finding["file"]), str(finding["category"]))
+        expected = allowlist.get(key)
+        if expected is None:
+            filtered.append(finding)
+            continue
+        relative = key[0]
+        if relative not in hashes:
+            candidate = root / relative
+            hashes[relative] = sha256(candidate) if candidate.is_file() else None
+        if hashes[relative] == expected:
+            approved.add(key)
+        else:
+            filtered.append({"category": "allowlist-hash-mismatch", "file": relative})
+    for key, expected in allowlist.items():
+        relative, _ = key
+        if relative not in hashes:
+            candidate = root / relative
+            hashes[relative] = sha256(candidate) if candidate.is_file() else None
+        if hashes[relative] != expected:
+            mismatch = {"category": "allowlist-hash-mismatch", "file": relative}
+            if mismatch not in filtered:
+                filtered.append(mismatch)
+        elif key not in approved:
+            filtered.append({"category": "allowlist-stale", "file": relative})
+    return filtered, len(approved)
 
 
 def main() -> int:
@@ -66,10 +142,12 @@ def main() -> int:
         for category, regex in CHECKS:
             if regex.search(data):
                 findings.append({"category": category, "file": relative})
-    report = {"schema": 1, "passed": not findings,
-              "files_scanned_root": root.name, "findings": findings}
+    filtered, approved_count = apply_allowlist(root, findings)
+    report = {"schema": 1, "passed": not filtered,
+              "files_scanned_root": root.name,
+              "allowlisted_findings": approved_count, "findings": filtered}
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if not findings else 2
+    return 0 if not filtered else 2
 
 
 if __name__ == "__main__":

@@ -1,0 +1,197 @@
+{
+  "schema": 1,
+  "entries": [
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/dropbear/CHANGES",
+      "category": "fixed-home-path",
+      "sha256": "0f2294b17801a68420f55c2466cee457472abaccf6b8744996261c6697c0577f",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/dropbear/fuzz/fuzzer-pubkey.c",
+      "category": "fixed-home-path",
+      "sha256": "bf6ca1e12afb296c82f194e0bed6c409b024f543487f720c4ec8ec4e3626a4b1",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/dropbear/libtomcrypt/doc/crypt.tex",
+      "category": "fixed-home-path",
+      "sha256": "551dbaef1aa73b2967ce5a5092132303232087371cfe55b59c6c5296c3ed0cd1",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/dropbear/libtomcrypt/testprof/test.der",
+      "category": "unexpected-binary",
+      "sha256": "c1548cea1ecbe9ca933069bb72dd756db0defbb77feb4536a2b38b67b4017ee9",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/dropbear/libtomcrypt/tests/test.der",
+      "category": "unexpected-binary",
+      "sha256": "c1548cea1ecbe9ca933069bb72dd756db0defbb77feb4536a2b38b67b4017ee9",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/dropbear/src/keyimport.c",
+      "category": "private-key",
+      "sha256": "d0e2aae7a1b92c41177ad3af41cbf3fd0988c40ec307217e9c487ed5c2cf08f5",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/dropbear/test/test_aslr.py",
+      "category": "fixed-home-path",
+      "sha256": "a74bfe710a9a82e197b9426c19b247ad9032d80ad4dae16cc715806398e1a86e",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/cramfs.bz2",
+      "category": "unexpected-binary",
+      "sha256": "a3d349f767bfe9e60b707b04da513d6dec0181b88fd8fd480847149635bfaa08",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/ext2.bz2",
+      "category": "unexpected-binary",
+      "sha256": "01b6dbd1c43937d48d1906b2dd58986f3b05309c8ec5a78134a5b4521fc98d77",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/ext3.bz2",
+      "category": "unexpected-binary",
+      "sha256": "a6b24f910b66a0c796ab4ff5b3415fdd1b6609af4e82fde63167cf82a2af5a66",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/ext4.bz2",
+      "category": "unexpected-binary",
+      "sha256": "c743a42ac61c2756fb8808e40a399b02e71e369cbccb8338573e488a4f2f0b58",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/f2fs.bz2",
+      "category": "unexpected-binary",
+      "sha256": "ca752ede0fc38d41901600e327ba1130a0e721f12d6db681847707023ef3e719",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/iso.bz2",
+      "category": "unexpected-binary",
+      "sha256": "364381b5bf6c7fcfaf26b039c33f08e4ad296aef5de7755f55d520f622e41fe7",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/minix.bz2",
+      "category": "unexpected-binary",
+      "sha256": "315aca1aebc5618a1d37496c6b2e68b1dfa8713ea19b9c4222b9259318cb7010",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/msdos.bz2",
+      "category": "unexpected-binary",
+      "sha256": "cd037aa277097a389a121745b78762d60d696db8faa3701c80adf6988397bc14",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/ntfs.bz2",
+      "category": "unexpected-binary",
+      "sha256": "3b68e4a1882cd50701ae885d9870bc1dfdbb08e6b5548b056fc50c280c029ffa",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/reiser3.bz2",
+      "category": "unexpected-binary",
+      "sha256": "178db85686064131df4aa401f1a9f4a4e3f7fe5afe8e6574b0a497efceef5533",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/squashfs.bz2",
+      "category": "unexpected-binary",
+      "sha256": "3a66b8c604899ed0103eedce84825a973053dbee114ebbfe396124f58b06f32b",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/vfat.bz2",
+      "category": "unexpected-binary",
+      "sha256": "f78c64d5031bea31a7204b453834dca4f354718707ddbd7ea35ba769a9d6cf1e",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/blkid/xfs.bz2",
+      "category": "unexpected-binary",
+      "sha256": "7e55f6e18c961b5f4cf00f61f86f6b79c21235e431c8e9aa1d058a026f02677a",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/bzcat/badcrc.bz2",
+      "category": "unexpected-binary",
+      "sha256": "fd6888e2157b5f6efbad99eedfa582d3f8922d53ab6ef39d178f3cda95ab69ed",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/bzcat/overflow.bz2",
+      "category": "unexpected-binary",
+      "sha256": "daf20a2773680de2e80514d33d7fe85d35b79b8a5d61627b5b5b63e739dd6e7d",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/elf/fdstatic",
+      "category": "unexpected-binary",
+      "sha256": "22e16db81ef5838480ce22910bb6d15d7c5d75417f44874bd5780692e427b998",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/elf/ndk-elf-note-full",
+      "category": "unexpected-binary",
+      "sha256": "bb4383ae94bd1cbfdbacfba70a787e5c23df8caaeaf6da8d25415ac7abf19b56",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/elf/ndk-elf-note-shflags",
+      "category": "unexpected-binary",
+      "sha256": "6ec45b2214afab792d86fec59222a0fb71008886a6dfc39447748b581b95baf2",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/elf/ndk-elf-note-short",
+      "category": "unexpected-binary",
+      "sha256": "f56d92d12f78b935e1361743fdc42956f9ceba8707ac0d78524faff087041a67",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/java.class",
+      "category": "mach-o-binary",
+      "sha256": "17b3e343a6f0262c5c6143403d9a1e689a7e0e6eba25ecc4bb59c4b50df83f95",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/tar/tar.7z",
+      "category": "unexpected-binary",
+      "sha256": "b4fba428a7223cc218308dc4a6a2bfca2f627fd764132dbcaf29b3ce03a614b1",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/tar/tar.tbz2",
+      "category": "unexpected-binary",
+      "sha256": "aad15297aec5ef2531fe20438a60335849dc1cc4882368accd1bd2961096fa20",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "addons/PoC/srdsh-work/srdsh/vendor/toybox/tests/files/tar/tar.tgz",
+      "category": "unexpected-binary",
+      "sha256": "9f32911c27db8863a4462428755d971785de4a0d5476ae102dfddbe16223d339",
+      "reason": "immutable upstream source or test fixture"
+    },
+    {
+      "file": "bridge/DeviceRuntime/zero_sky_core/apt_keys/chariz.gpg",
+      "category": "unexpected-binary",
+      "sha256": "bba53eaf8b6dedaf50e45910aac4adbb289bb3edeee82d417b424dc9f9819f47",
+      "reason": "public repository signing key"
+    },
+    {
+      "file": "bridge/DeviceRuntime/zero_sky_core/apt_keys/havoc.gpg",
+      "category": "unexpected-binary",
+      "sha256": "c302d84e55eb1a1354ad741261220b131b944a5b503896798341c5c071e4fc52",
+      "reason": "public repository signing key"
+    }
+  ]
+}

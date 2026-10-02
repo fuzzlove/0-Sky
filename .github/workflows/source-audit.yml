@@ -20,7 +20,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - run: brew install dpkg
       - run: python3 -m unittest discover -s tools/tests -q
+      - run: PYTHONPATH=bridge/DeviceRuntime python3 -m unittest discover -s bridge/Tests/HostToolsTests -q
+      - run: cd bridge && swift run BridgeCoreTests
+      - run: python3 control/TrollStoreLite/tests/test_device_compatibility.py
       - run: python3 tools/verify_eula.py
       - run: bash -n build.sh scripts/build_release.sh scripts/verify_release.sh bridge/Scripts/embed_verified_kit.sh
       - run: zsh -n link/build.sh 'bridge/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command'

@@ -86,7 +86,7 @@ still be admitted through the authorized SRD trust/cryptex workflow.
 
    ```sh
    cd /tmp/0-sky-restored/bridge
-   swift test
+   swift run BridgeCoreTests
    cd ../control/TrollStoreLite
    python3 tests/test_device_compatibility.py
    cd ../../

@@ -15,7 +15,8 @@ from tools.stage_verified_kit import digest, stage
 
 
 ROOT = Path(__file__).resolve().parents[2]
-HOST = ROOT / "bridge/0SkyBridge/Resources/Scripts/kit/host-mac"
+HOST = ROOT / "bridge/HostTools"
+KIT_SCRIPTS = ROOT / "bridge/KitScripts"
 
 
 def load(name: str, path: Path):
@@ -30,7 +31,7 @@ def load(name: str, path: Path):
 
 installer = load("fixture_installer", HOST / "install.py")
 uninstaller = load("fixture_uninstaller", HOST / "uninstall.py")
-rekey = load("fixture_rekey", HOST.parent / "srdssh/rekey_image.py")
+rekey = load("fixture_rekey", KIT_SCRIPTS / "srdssh/rekey_image.py")
 
 UDID = "00000000-0000000000000001"
 OTHER = "00000000-0000000000000002"
@@ -39,7 +40,7 @@ OTHER = "00000000-0000000000000002"
 class InstallerLifecycleTests(unittest.TestCase):
     def test_device_bridge_supervisor_uses_unauthenticated_health_probe(self):
         supervisor = (HOST.parent /
-                      "automation/CrypStoreAutomation/device_bridge_supervisor.sh")
+                      "KitScripts/automation/CrypStoreAutomation/device_bridge_supervisor.sh")
         source = supervisor.read_text(encoding="utf-8")
         installer_source = (HOST / "install.py").read_text(encoding="utf-8")
         self.assertIn("http://127.0.0.1:48654/health", source)
@@ -50,13 +51,21 @@ class InstallerLifecycleTests(unittest.TestCase):
         self.assertNotIn("/var/jb/usr/bin/wget", source)
         self.assertIn('device_bridge_supervisor.sh"', installer_source)
 
-    @unittest.skipUnless(sys.platform == "darwin", "Mach-O helper verification requires macOS")
-    def test_host_helpers_have_both_signed_architectures(self):
-        kit = HOST.parent
-        for helper in [kit / "host-mac/zero-sky-bluetooth-tunnel",
-                       kit / "automation/CrypStoreAutomation/device_bridge_supervisor"]:
-            for arch in ("x86_64", "arm64"):
-                installer.verify_helper_architecture(helper, arch)
+    def test_host_helper_requires_requested_signed_architecture(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            helper = Path(temporary) / "fixture-helper"
+            helper.write_bytes(b"Mach-O fixture")
+            universal = subprocess.CompletedProcess(
+                ["lipo"], 0, "x86_64 arm64\n", "")
+            with patch.object(installer, "run", return_value=universal) as run:
+                installer.verify_helper_architecture(helper, "x86_64")
+                installer.verify_helper_architecture(helper, "arm64")
+            self.assertEqual(run.call_count, 4)
+
+            arm_only = subprocess.CompletedProcess(["lipo"], 0, "arm64\n", "")
+            with patch.object(installer, "run", return_value=arm_only):
+                with self.assertRaisesRegex(installer.InstallError, "lacks x86_64"):
+                    installer.verify_helper_architecture(helper, "x86_64")
 
     def test_ios_floor_and_future_capability_probe(self):
         for major in range(17, 29):

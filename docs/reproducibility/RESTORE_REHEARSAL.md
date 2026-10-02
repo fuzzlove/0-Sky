@@ -40,7 +40,7 @@ SHA-256 hashes, applied the tracked patches, consumed separately supplied
 exact-build `afcd`/`lockdownd` inputs, compiled with Xcode 26.6/iPhoneOS 26.5,
 signed ad hoc, packaged, and passed `scripts/check-port.sh`.
 
-## Checks with known failures
+## Checks with known failures at the r2 checkpoint
 
 - `python -m unittest discover -s tools/tests`: 218 tests, 2 errors, 4
   skipped. Both errors require the intentionally excluded prepared external
@@ -58,6 +58,32 @@ signed ad hoc, packaged, and passed `scripts/check-port.sh`.
   the observed SRD identifiers passed.
 - `git diff --check` reports historical whitespace in preserved upstream
   patch files and vendored source. It was not hidden or auto-rewritten.
+
+## Follow-up source and CI repair rehearsal
+
+The `v1.0.0-pre.4` follow-up promotes the host installer lifecycle and SRD
+runtime-manager sources used by these tests into tracked canonical paths. It
+also makes the Crane transformation fixture cover both reviewed binary
+transformations and pins privacy-audit exceptions to exact hashes for
+immutable upstream fixtures and public repository signing keys.
+
+A second isolated tracked-only checkout passed without a prepared external
+kit:
+
+- tools: 230 tests passed, 4 optional-fixture skips;
+- Bridge host tools: 109 tests passed, 1 optional external-kit skip;
+- `swift run BridgeCoreTests`: 33/33 passed;
+- Control compatibility: 15/15 passed;
+- iOS 27 CI selection: 100 tests passed;
+- iOS 27 inventory pipeline: passed with repository admission remaining
+  correctly blocked (`repo_admitted=0`) when no candidate packages are
+  supplied;
+- source privacy audit: passed with 32 exact-path/category/hash exceptions;
+- EULA verification and Bash/Zsh syntax checks: passed.
+
+The release-tool CI job now installs its declared `dpkg-deb` dependency before
+running the complete tools suite. No SRD or other device-changing command was
+used during this follow-up rehearsal.
 
 ## Reproducibility limitation found during rehearsal
 

@@ -1,5 +1,10 @@
 // swift-tools-version: 6.0
+import Foundation
 import PackageDescription
+
+let optionalKitExcludes = FileManager.default.fileExists(
+    atPath: "0SkyBridge/Resources/Scripts/kit"
+) ? ["Resources/Scripts/kit"] : []
 
 let package = Package(
     name: "0SkyBridge",
@@ -24,8 +29,8 @@ let package = Package(
             name: "0SkyBridge",
             dependencies: ["BridgeCore"],
             path: "0SkyBridge",
-            exclude: ["Info.plist", "0SkyBridge.entitlements", "Resources/Scripts/kit",
-                      "Resources/Scripts/__pycache__"],
+            exclude: ["Info.plist", "0SkyBridge.entitlements",
+                      "Resources/Scripts/__pycache__"] + optionalKitExcludes,
             resources: [
                 .process("Resources/AppIcon.icns"),
                 .process("Resources/bridge-operations.json"),

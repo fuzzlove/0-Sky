@@ -95,6 +95,14 @@ class BridgePackageCommandTests(unittest.TestCase):
             "change": "defer __CFPrefsGetPathForTriplet direct hook",
             "reason": ("iOS 27 rejects executable restoration of modified signed "
                        "shared-cache pages"),
+        }, {
+            "adapter": "ios27-rootless-support-signing-v1",
+            "path": "/var/jb/usr/lib/libcrane.dylib",
+            "original_sha256": "c367a60abdd759bc8682521ccc5bdec6bfee1869673b822b85fe31f298d2f058",
+            "adapted_sha256": "a5a10059a4d9af20d03676d525e8d2cffbe37185227ae0090a9c54ffa7ccd595",
+            "change": "deterministic ad-hoc signature for the rootless support library",
+            "reason": ("sandboxed iOS 27 daemon injection requires the dependency bytes "
+                       "to match the active SRD trust-cache generation"),
         }]
         bridge.validate_crane_binary_transformations("com.opa334.crane", expected)
         bridge.validate_crane_binary_transformations("com.opa334.cranelite", [])
@@ -392,7 +400,7 @@ class BridgePackageCommandTests(unittest.TestCase):
 
     def test_sileo_error_detail_redacts_credentials_and_host_user(self):
         value = self.bridge.sanitized_error_detail(RuntimeError(
-            "token=abc password: xyz https://me:pw@example.test /Users/person/build"))
+            "token=abc password: xyz https://me:pw@example.test /Users/example/build"))
         self.assertNotIn("abc", value)
         self.assertNotIn("xyz", value)
         self.assertNotIn("me:pw", value)

@@ -30,6 +30,10 @@ LINK_NAME = "0-Sky-Link-1.9.0-universal.ipa"
 OVERRIDES = {
     "automation/CrypStoreAutomation/native-install/install_cryptex_native.py": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
     "runtime-generation/install_cryptex_native.py": ROOT / "bridge/KitScripts/runtime-generation/install_cryptex_native.py",
+    "host-mac/install.py": ROOT / "bridge/HostTools/install.py",
+    "host-mac/uninstall.py": ROOT / "bridge/HostTools/uninstall.py",
+    "host-mac/instance.py": ROOT / "bridge/HostTools/instance.py",
+    "host-mac/refresh.py": ROOT / "bridge/HostTools/refresh.py",
     "host-mac/apple_device_transport.py": ROOT / "bridge/HostTools/apple_device_transport.py",
     "host-mac/pair.py": ROOT / "bridge/HostTools/pair.py",
     "host-mac/bootstrap_device.py": ROOT / "bridge/HostTools/bootstrap_device.py",
@@ -38,8 +42,36 @@ OVERRIDES = {
     "automation/CrypStoreAutomation/device_bridge_supervisor.sh": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/device_bridge_supervisor.sh",
     "automation/CrypStoreAutomation/native-install/build_and_install.sh": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/build_and_install.sh",
     "runtime-generation/build_and_install.sh": ROOT / "bridge/KitScripts/runtime-generation/build_and_install.sh",
-    "automation/tools/srd-runtime-manager/sync_runtime_cryptex.py": ROOT / "addons/PoC/srdsh-work/components/zero-sky/kit/automation/tools/srd-runtime-manager/sync_runtime_cryptex.py",
+    "srdssh/rekey_image.py": ROOT / "bridge/KitScripts/srdssh/rekey_image.py",
+    "automation/tools/srd-runtime-manager/sync_runtime_cryptex.py": ROOT / "bridge/KitScripts/automation/tools/srd-runtime-manager/sync_runtime_cryptex.py",
 }
+
+RUNTIME_MANAGER_SOURCE = ROOT / "bridge/KitScripts/automation/tools/srd-runtime-manager"
+for relative in (
+    "runtime_manager_launcher.c",
+    "codes.openai.research.srd-runtime-manager.plist",
+    "sandboxed-injector/LICENSE",
+    "sandboxed-injector/README.md",
+    "sandboxed-injector/arm64.h",
+    "sandboxed-injector/arm64.m",
+    "sandboxed-injector/dyld.h",
+    "sandboxed-injector/dyld.m",
+    "sandboxed-injector/entitlements.plist",
+    "sandboxed-injector/main.m",
+    "sandboxed-injector/pac.h",
+    "sandboxed-injector/rop_inject.h",
+    "sandboxed-injector/rop_inject.m",
+    "sandboxed-injector/sandbox.h",
+    "sandboxed-injector/shellcode_inject.h",
+    "sandboxed-injector/shellcode_inject.m",
+    "sandboxed-injector/task_utils.h",
+    "sandboxed-injector/task_utils.m",
+    "sandboxed-injector/thread_utils.h",
+    "sandboxed-injector/thread_utils.m",
+):
+    OVERRIDES["automation/tools/srd-runtime-manager/" + relative] = (
+        RUNTIME_MANAGER_SOURCE / relative
+    )
 
 
 def stage_link_control_only(verified_kit: Path, destination: Path) -> None:
