@@ -1,0 +1,31 @@
+{
+  "schema": 1,
+  "project": "NeoSky Background",
+  "package_identifier": "xyz.0sky.neoskybackground",
+  "package_version": "1.0.0+0sky27.1",
+  "preference_domain": "xyz.0sky.neoskybackground",
+  "implementation": "native-darwin-stats-no-shell-in-springboard",
+  "target": {
+    "hardware_model": "iPhone13,2",
+    "ios_version": "27.0",
+    "ios_build": "24A5390f",
+    "architectures": ["arm64", "arm64e"],
+    "rootless": true
+  },
+  "toolchain": {
+    "xcode_iphoneos_sdk": "26.5",
+    "theos_commit": "dd5c14bb9d91311e221d51b5bfb8c9e5948156db"
+  },
+  "status": {
+    "host_build": "VERIFIED_REPRODUCIBLE",
+    "package_validation": "VERIFIED",
+    "device_install": "NOT_PERFORMED",
+    "device_runtime": "UNTESTED"
+  },
+  "validated_artifact": {
+    "filename": "xyz.0sky.neoskybackground_1.0.0+0sky27.1_iphoneos-arm64.deb",
+    "sha256": "12d5f4ba487e909195530ba618979dcc97a9021c94f4d85a12d8533eb1b06d4c",
+    "two_clean_builds_identical": true,
+    "native_preference_controls": 10
+  }
+}
