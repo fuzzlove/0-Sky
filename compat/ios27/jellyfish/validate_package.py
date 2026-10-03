@@ -14,7 +14,7 @@ import tempfile
 
 EXPECTED = {
     "Package": "xyz.cypwn.jellyfish",
-    "Version": "1.6.5+0sky27.3",
+    "Version": "1.6.5+0sky27.5",
     "Architecture": "iphoneos-arm64",
 }
 ROOT = Path("var/jb")
@@ -136,4 +136,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

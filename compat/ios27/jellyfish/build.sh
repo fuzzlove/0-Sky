@@ -4,7 +4,7 @@ set -eu
 THEOS_COMMIT=dd5c14bb9d91311e221d51b5bfb8c9e5948156db
 SDK_VERSION=26.5
 SOURCE_DATE_EPOCH=1791061200
-PACKAGE_NAME=xyz.cypwn.jellyfish_1.6.5+0sky27.3_iphoneos-arm64.deb
+PACKAGE_NAME=xyz.cypwn.jellyfish_1.6.5+0sky27.5_iphoneos-arm64.deb
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)
@@ -115,4 +115,3 @@ python3 "$SCRIPT_DIR/validate_package.py" "$NORMALIZED_PACKAGE"
 cp "$NORMALIZED_PACKAGE" "$OUTPUT_DIR/$PACKAGE_NAME"
 echo "package: $OUTPUT_DIR/$PACKAGE_NAME"
 shasum -a 256 "$OUTPUT_DIR/$PACKAGE_NAME"
-

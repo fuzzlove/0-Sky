@@ -52,7 +52,7 @@ compat/ios27/jellyfish/build.sh
 The build output is written to:
 
 ```text
-.build/jellyfish-ios27/output/xyz.cypwn.jellyfish_1.6.5+0sky27.3_iphoneos-arm64.deb
+.build/jellyfish-ios27/output/xyz.cypwn.jellyfish_1.6.5+0sky27.5_iphoneos-arm64.deb
 ```
 
 The build script never installs a package or changes a device. It rebuilds from
@@ -61,19 +61,18 @@ runs the offline validator.
 
 ## Verified state
 
-On the exact target build, package `1.6.5+0sky27.3` is installed and the exact
-signed `Jellyfish27.dylib` is recorded as loaded in SpringBoard. The build guard
-found the expected class and method, the native preference bundle passed a
-device-side `dlopen`, and interactive 0-Sky Control testing verified a native
-menu and a persisted switch write. The switch was returned to its prior value
-after the test. No Jellyfish quarantine entry or new SpringBoard crash was
-observed during the final validation window.
+Package `1.6.5+0sky27.3` verified the native preference menu and stable
+injection, but produced no confirmed visible lock-screen change. Runtime class
+metadata showed why: iOS 27 uses `SBUILegibilityLabel` wrapper views, while that
+build searched only for descendant `UILabel` objects. Builds `0sky27.4` and
+`0sky27.5` target
+the exact iOS 27 wrappers and their alignment, font, subtitle, and sizing APIs
+directly; `.5` also avoids redundant private-API setters during repeated layout
+passes. Their device results are recorded separately in the validation manifest.
 
-The settings layer is therefore **verified**. A lock-screen visual acceptance
-test remains **pending**; injection and preference tests do not by themselves
-prove every visual option on this private-API build.
+The settings layer is **verified**. A build is not marked visually verified
+until an actual lock-screen screenshot shows the requested change.
 
 The sanitized device evidence is in
 `validation/device-validation-24A5390f.json`. It deliberately excludes device
 identifiers, pairing material, keys, and raw crash reports.
-

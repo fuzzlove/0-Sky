@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "captured_at": "2026-10-03T20:54:00Z",
+  "captured_at": "2026-10-03T21:20:46Z",
   "shareable": true,
   "target": {
     "hardware_model": "iPhone13,2",
@@ -9,31 +9,35 @@
   },
   "package": {
     "identifier": "xyz.cypwn.jellyfish",
-    "version": "1.6.5+0sky27.3",
+    "version": "1.6.5+0sky27.5",
     "status": "install ok installed",
-    "input_sha256": "4aceb840f7aa173bf322ab5cb482c9ea6ff97650da8643512b3c1ac05e6a0254",
-    "reproducible_clean_build_sha256": "43ada936b530eb5f64f62f51f420f991c8f33690790fc07fe3e2293faf1c1d3d",
+    "input_sha256": "6329568d342e451da289faec572b825e8dd28e8353e61e41b83b2724ea7325c6",
+    "reproducible_clean_build_sha256": "6329568d342e451da289faec572b825e8dd28e8353e61e41b83b2724ea7325c6",
     "two_clean_builds_identical": true
   },
   "runtime": {
-    "result": "PASS_EXACT_BUILD_GUARD_AND_INJECTION",
-    "installed_dylib_sha256": "425a40266219ff5c71f0ae88168bc506121f4282026f395ce8eec47230327c02",
+    "result": "PASS_EXACT_BUILD_DIRECT_API_GUARD_AND_INJECTION_VISUAL_EXECUTION_PENDING",
+    "installed_dylib_sha256": "981c6f47871cc8aacd471146e1fcf4406030c41203c4e940841d2c26d095f025",
     "injection_target": "com.apple.springboard",
     "exact_loaded_hash": true,
     "expected_build": "24A5390f",
     "observed_build": "24A5390f",
     "date_view_present": true,
     "layout_method_present": true,
+    "direct_api_guard_passed": true,
     "hook_installed": true,
+    "diagnostic_status": "hook-installed",
+    "active_direct_targets_observed": false,
     "quarantine_absent": true,
-    "new_springboard_crashes_final_15_minutes": 0
+    "springboard_state": "running",
+    "runtime_note": "The active-direct-ios27-targets diagnostic is intentionally required before claiming that the lock-screen layout hook executed."
   },
   "native_preferences": {
     "result": "PASS_DISPLAY_DLOPEN_AND_WRITE",
     "bundle": "Jellyfish27Preferences.bundle",
     "principal_class": "Jellyfish27PreferencesRootListController",
-    "installed_executable_sha256": "84991c1d10012fe830285eb7586c251591d8aaaaac3d67a7b8287be0d6759b45",
-    "installed_descriptor_sha256": "9392f8955aa16d9837467f02dd3c3122b3f76bed642ac7d1bd452c3a4503562d",
+    "installed_executable_sha256": "90dbfd2641e754000cde65af73971e4036392ec04093c5afbff0773c973aa918",
+    "installed_descriptor_sha256": "a41f894b0fb470f9b76b9aecc298dd88da3e812248bdc376cacb146db1a1fff5",
     "bundle_dlopen": "PASS",
     "interactive_display": "PASS_0SKY_CONTROL",
     "interactive_write": "PASS_CUSTOM_DATE_SWITCH",
@@ -44,8 +48,46 @@
   },
   "functional_uat": {
     "preferences_menu": "VERIFIED",
-    "lock_screen_visual_effect": "PENDING"
+    "lock_screen_visual_effect": "PENDING_VALID_LOCK_SCREEN_CAPTURE",
+    "test_profile": {
+      "enabled": true,
+      "alignment": "left",
+      "font_size_percent": 115,
+      "edge_padding": 24,
+      "custom_date_format": "EEEE • MMMM d",
+      "text_shadow": true,
+      "battery_percentage": true
+    },
+    "automation_note": "Host automation could not keep the device on the lock screen because wake transitioned to authentication or the home screen; no home-screen image was accepted as visual evidence."
   },
+  "variants": [
+    {
+      "version": "1.6.5+0sky27.3",
+      "status": "FAILED",
+      "failure_signature": "No observable lock-screen change; code targeted UILabel descendants rather than the SBUILegibilityLabel wrapper used by iOS build 24A5390f."
+    },
+    {
+      "version": "1.6.5+0sky27.4",
+      "status": "UNTESTED",
+      "failure_signature": null,
+      "note": "Direct-wrapper prototype superseded by 0sky27.5 before visual acceptance testing."
+    },
+    {
+      "version": "1.6.5+0sky27.5",
+      "status": "UNTESTED_VISUAL",
+      "failure_signature": null,
+      "note": "Package, exact-build direct API guard, injection, and native preferences passed; actual lock-screen visual result remains pending."
+    }
+  ],
+  "crash_observations": [
+    {
+      "time_local": "2026-10-03T16:17:55-05:00",
+      "process": "SpringBoard",
+      "signature": "EXC_BAD_ACCESS/SIGBUS in SBBannerManager presenterMinimumPreferredTopEdgeInset during a runtime-generation transition",
+      "jellyfish_image_present_in_used_images": false,
+      "attribution": "NOT_ATTRIBUTED_TO_JELLYFISH_BINARY_ABSENT_FROM_USED_IMAGES"
+    }
+  ],
   "regression_checks": {
     "appsync_unified": "PASS_FRONTBOARD_COMPONENT_LOADED_NO_QUARANTINE_INSTALLD_COMPONENT_NOT_REVALIDATED_AFTER_SYNC",
     "afc2": "PASS_READ_ONLY_ROOT_LISTING_AFTER_CONSERVATIVE_REGISTRY_REPAIR",

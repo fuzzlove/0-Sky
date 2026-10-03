@@ -1,7 +1,7 @@
 ARCHS = arm64 arm64e
 TARGET = iphone:clang:latest:14.0
 THEOS_PACKAGE_SCHEME = rootless
-PACKAGE_VERSION = 1.6.5+0sky27.3
+PACKAGE_VERSION = 1.6.5+0sky27.5
 
 include $(THEOS)/makefiles/common.mk
 
@@ -40,4 +40,3 @@ before-package::
 	@plutil -convert binary1 $(THEOS_STAGING_DIR)/Library/PreferenceBundles/Jellyfish27Preferences.bundle/Info.plist
 	@plutil -convert binary1 $(THEOS_STAGING_DIR)/Library/PreferenceBundles/Jellyfish27Preferences.bundle/Resources/Root.plist
 	@/usr/bin/codesign --force --sign - --timestamp=none --identifier xyz.0sky.jellyfish27.preferences $(THEOS_STAGING_DIR)/Library/PreferenceBundles/Jellyfish27Preferences.bundle
-

@@ -11,7 +11,7 @@
     "Justin Proulx",
     "Ayden Panhuyzen"
   ],
-  "package_version": "1.6.5+0sky27.3",
+  "package_version": "1.6.5+0sky27.5",
   "package_identifier": "xyz.cypwn.jellyfish",
   "preference_domain": "xyz.royalapps.jellyfish",
   "target": {
@@ -31,17 +31,34 @@
   "status": {
     "host_build": "VERIFIED",
     "package_validation": "VERIFIED",
-    "device_install": "VERIFIED_PACKAGE_0SKY27_3",
-    "device_runtime": "VERIFIED_INJECTED_EXACT_BUILD",
+    "device_install": "VERIFIED_PACKAGE_0SKY27_5",
+    "device_runtime": "VERIFIED_INJECTED_EXACT_BUILD_DIRECT_API_GUARD",
     "native_preferences": "VERIFIED_DISPLAY_DLOPEN_AND_WRITE",
     "lock_screen_visual_uat": "PENDING"
   },
+  "variants": [
+    {
+      "version": "1.6.5+0sky27.3",
+      "status": "FAILED_VISUAL_UAT",
+      "result": "Injected stably and preferences worked, but no visible lock-screen change was observed because the implementation searched for UILabel descendants while this build uses SBUILegibilityLabel wrappers."
+    },
+    {
+      "version": "1.6.5+0sky27.4",
+      "status": "UNTESTED_VISUAL_UAT_SUPERSEDED",
+      "result": "Introduced direct iOS 27 wrapper targets; superseded by 0sky27.5 before a valid lock-screen visual capture."
+    },
+    {
+      "version": "1.6.5+0sky27.5",
+      "status": "INJECTED_VISUAL_UAT_PENDING",
+      "result": "Exact-build direct API guard and SpringBoard injection verified; observable lock-screen layout execution and visual result remain pending."
+    }
+  ],
   "validated_artifact": {
-    "filename": "xyz.cypwn.jellyfish_1.6.5+0sky27.3_iphoneos-arm64.deb",
-    "reproducible_build_sha256": "43ada936b530eb5f64f62f51f420f991c8f33690790fc07fe3e2293faf1c1d3d",
-    "installed_package_input_sha256": "4aceb840f7aa173bf322ab5cb482c9ea6ff97650da8643512b3c1ac05e6a0254",
-    "installed_dylib_sha256": "425a40266219ff5c71f0ae88168bc506121f4282026f395ce8eec47230327c02",
-    "installed_preferences_executable_sha256": "84991c1d10012fe830285eb7586c251591d8aaaaac3d67a7b8287be0d6759b45",
+    "filename": "xyz.cypwn.jellyfish_1.6.5+0sky27.5_iphoneos-arm64.deb",
+    "reproducible_build_sha256": "6329568d342e451da289faec572b825e8dd28e8353e61e41b83b2724ea7325c6",
+    "installed_package_input_sha256": "6329568d342e451da289faec572b825e8dd28e8353e61e41b83b2724ea7325c6",
+    "installed_dylib_sha256": "981c6f47871cc8aacd471146e1fcf4406030c41203c4e940841d2c26d095f025",
+    "installed_preferences_executable_sha256": "90dbfd2641e754000cde65af73971e4036392ec04093c5afbff0773c973aa918",
     "evidence": "validation/device-validation-24A5390f.json"
   }
 }
