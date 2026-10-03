@@ -27,7 +27,7 @@ index 2709321..3450410 100644
  Section: Tweaks
 -Version: 1.4.1
 \ No newline at end of file
-+Version: 1.4.1+0sky27.3
++Version: 1.4.1+0sky27.4
 \ No newline at end of file
 diff --git a/src/Hooks/GridLayout.xm b/src/Hooks/GridLayout.xm
 index eff8fd2..89a79a3 100644
@@ -114,6 +114,16 @@ diff --git a/src/Hooks/MainLayout.xm b/src/Hooks/MainLayout.xm
 index 4af459b..cd342ce 100644
 --- a/src/Hooks/MainLayout.xm
 +++ b/src/Hooks/MainLayout.xm
+@@ -36,5 +36,8 @@
+ 	SBIconListModel *model = [self model];
+ 	ARITweakManager *manager = [ARITweakManager sharedInstance];
+- 	if(!model._atriaLocation) model._atriaLocation = self.iconLocation;
++	if([model respondsToSelector:@selector(_atriaLocation)] &&
++	   [model respondsToSelector:@selector(set_atriaLocation:)]) {
++		if(!model._atriaLocation) model._atriaLocation = self.iconLocation;
++	}
+  	[manager.listViewModelMap setObject:self forKey:model];
+ 
 @@ -41,7 +41,8 @@
  	if(self._originalLayout != orig || self._atriaNeedsLayout) {
  		self._originalLayout = orig;

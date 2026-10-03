@@ -45,6 +45,12 @@ remain part of the evidence rather than being described as working:
   13–16 private grid structs directly into SpringBoard ivars. Build `.3` skips
   those legacy ABI hooks on iOS 17 and later while retaining the copied
   layout-configuration path in `MainLayout.xm`.
+- `1.4.1+0sky27.3` then failed with an `SBIconListModel` unrecognized-selector
+  exception from `-[SBIconListView layout]`. Disabling the legacy
+  `GridLayout.xm` hooks also stopped Logos from installing the associated
+  `_atriaLocation` property, while `MainLayout.xm` still called that accessor.
+  Build `.4` checks that both the getter and setter exist before using the
+  property.
 
 The port also replaces the preference bundle's root descriptor with a native,
 data-only iOS 27 page. It contains only controls that 0-Sky Control hosts
@@ -82,16 +88,21 @@ device-changing step.
 - Compatibility build `1.4.1+0sky27.2`: **failed on the exact target**. Its
   installed dylib produced an `EXC_BAD_ACCESS` / possible pointer-
   authentication failure while SpringBoard queried grid-size class data.
-- Compatibility build `1.4.1+0sky27.3`: **clean host build, deterministic
-  package validation, and package installation passed; runtime test pending**.
-  The runtime renewal did not commit because both Apple RemoteXPC transports
-  timed out before the new Cryptex could be installed. The device was kept at
-  the explicit runtime-pause recovery point and restarted, then disconnected
-  from USB. The `.3` dylib has therefore not been injected or described as
-  working. A different connected SRD was not substituted for the pinned
-  hardware/build target.
-- Native iOS 27 preferences: **installed and structurally validated**. Runtime
-  display/write verification remains pending with the `.3` target test.
+- Compatibility build `1.4.1+0sky27.3`: **failed on the exact target**. The
+  exact installed image produced an `NSInvalidArgumentException` when
+  `MainLayout.xm` called the absent `_atriaLocation` accessor on
+  `SBIconListModel`; symbolication resolves Atria offset `0xa074` to
+  `-[SBIconListView layout]` at `MainLayout.xm:38`.
+- Compatibility build `1.4.1+0sky27.4`: **automated runtime verification
+  passed on the exact target**. The deterministic package installed, its exact
+  signed dylib hash was injected, SpringBoard remained stable for the 90-second
+  observation window, no new SpringBoard crash appeared, and no Atria
+  quarantine entry was created. This is not a claim that editor UAT has passed.
+- Native iOS 27 preferences: **installed, structurally validated, and loaded
+  successfully**. The page has 40 rows, 33 editable controls, no unsupported
+  cell types, a scoped preference domain and notification, and its executable
+  passes a device-side `dlopen`. Interactive display/write verification remains
+  pending.
 - Editor functional UAT: **pending**. A researcher must still open the editor,
   make and reverse one layout change, and confirm the final visual state.
 - Upstream 1.4.1: **failed**. Captured crashes load the upstream dylib SHA-256
@@ -102,6 +113,13 @@ device-changing step.
 The prior DEB and its failed device result remain recorded in
 `validation/device-validation-24A5390f.json`. Device identifiers, pairing
 material, signing keys, and raw crash reports are deliberately excluded.
+
+Post-reboot validation exposed stale PID-keyed injection telemetry. After
+preserving a device-local backup, only the stale entries were removed and the
+runtime manager repopulated them from exact currently installed images.
+AppSync Unified, AFC2, and Crane retained exact loaded hashes with no quarantine;
+an AFC2 read-only root-directory listing also passed. Doodle's pre-existing
+quarantine remains unchanged and is not claimed as repaired.
 
 The first runtime renewal exposed stale, device-local Crane enrollment hashes.
 The operator reconciled those hashes only after the currently mounted and

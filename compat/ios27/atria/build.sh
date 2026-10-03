@@ -8,7 +8,7 @@ UPSTREAM_ARCHIVE_SHA256=bbcb6929b4477990214c1e135b401354940b5eb9ab37c388469cff1e
 THEOS_COMMIT=dd5c14bb9d91311e221d51b5bfb8c9e5948156db
 SDK_VERSION=26.5
 SOURCE_DATE_EPOCH=1687460877
-PACKAGE_NAME=me.lau.atria_1.4.1+0sky27.3_iphoneos-arm64.deb
+PACKAGE_NAME=me.lau.atria_1.4.1+0sky27.4_iphoneos-arm64.deb
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)

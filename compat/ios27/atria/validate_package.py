@@ -14,7 +14,7 @@ import tempfile
 
 EXPECTED = {
     "Package": "me.lau.atria",
-    "Version": "1.4.1+0sky27.3",
+    "Version": "1.4.1+0sky27.4",
     "Architecture": "iphoneos-arm64",
 }
 MACHOS = (

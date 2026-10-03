@@ -1,6 +1,6 @@
 {
-  "schema": 2,
-  "captured_at": "2026-10-03T14:59:10Z",
+  "schema": 3,
+  "captured_at": "2026-10-03T15:35:15Z",
   "shareable": true,
   "target": {
     "hardware_model": "iPhone13,2",
@@ -41,30 +41,65 @@
     },
     {
       "version": "1.4.1+0sky27.3",
-      "result": "INSTALLED_RUNTIME_UNTESTED",
+      "result": "FAILED",
       "artifact_sha256": "49292898ffdad9c6686fb8c5e4d0cf59ea0b066d16790056fe3e25ee3cfa1707",
+      "installed_dylib_sha256": "32201150810a53319a291fc697fdbce756b4151055bdbd751810756cbc3860a8",
+      "installed_native_preferences_sha256": "3fec931af1a6ef32e9d1b5696f27fa5c6c9668a2bd46934f6bd6e7889c3009c6",
       "host_build": "PASS",
       "package_validation": "PASS",
       "package_install": "PASS",
       "native_preferences_structure": "PASS",
-      "runtime_sync": "FAILED_ENVIRONMENTAL_RSD_TRANSPORT_TIMEOUT",
-      "runtime_pause_recovery_marker": "RESTORED_BEFORE_RESTART",
-      "reason": "The package installed on the exact target, but both Apple RemoteXPC transports timed out before the runtime Cryptex could commit. The device was restarted for transport recovery and then disconnected from USB; the .3 dylib was not injected or functionally tested."
+      "runtime_sync": "PASS_AFTER_TRANSPORT_RECOVERY",
+      "failure_type": "NSInvalidArgumentException",
+      "failure_signature": "SBIconListModel unrecognized selector from -[SBIconListView layout]",
+      "symbolication": "Atria offset 0xa074 -> -[SBIconListView layout], MainLayout.xm:38",
+      "evidence_index": [
+        "SpringBoard-2026-10-03-100429.000.ips (sanitized summary only; raw report excluded)",
+        "SpringBoard-2026-10-03-100438.ips (sanitized summary only; raw report excluded)"
+      ],
+      "reason": "The iOS 17+ GridLayout exclusion also omitted the Logos-backed _atriaLocation property, but MainLayout still called its accessor."
+    },
+    {
+      "version": "1.4.1+0sky27.4",
+      "result": "AUTOMATED_RUNTIME_VERIFIED",
+      "functional_uat": false,
+      "artifact_sha256": "81f77e4fb066f10a080abdc1be2d563ac4d7ee7d3c2cd6b5b97f10477a30f9d4",
+      "installed_dylib_sha256": "c22ce82f0f712145a78dd6b1d98697bd7cc11c15a710d82152890a05fdc84ff7",
+      "installed_preferences_executable_sha256": "70f02ff6c19b6f1218c93e7a2f904f908caa8957b92e23f4981c21823e5a56d3",
+      "installed_native_preferences_sha256": "3fec931af1a6ef32e9d1b5696f27fa5c6c9668a2bd46934f6bd6e7889c3009c6",
+      "host_build": "PASS",
+      "package_validation": "PASS",
+      "package_install": "PASS",
+      "runtime_sync": "PASS_973.1_SECONDS",
+      "runtime_registry_exact_hash": "PASS",
+      "injection_exact_hash": "PASS",
+      "springboard_stability_90_seconds": "PASS",
+      "new_springboard_crashes": "NONE",
+      "atria_quarantine_absent": "PASS",
+      "preference_bundle_dlopen": "PASS",
+      "native_preferences_structure": {
+        "result": "PASS",
+        "rows": 40,
+        "editable_controls": 33,
+        "unsupported_cell_types": 0,
+        "scoped_domain_and_notification": true
+      },
+      "editor_functional_uat": "UNTESTED"
     }
   ],
-  "regression_requirements_for_next_test": {
-    "appsync_unified": "PRESERVE_AND_RECHECK_EXACT_LOADED_HASHES",
-    "afc2": "PRESERVE_AND_RECHECK_EXACT_LOADED_HASH",
-    "crane": "PRESERVE_AND_RECHECK_WITHOUT_QUARANTINE",
-    "doodle": "PRESERVE_PREEXISTING_PENDING_STATE"
+  "regression_checks": {
+    "appsync_unified": "PASS_EXACT_LOADED_HASHES_NO_QUARANTINE",
+    "afc2": "PASS_EXACT_LOADED_HASH_AND_READ_ONLY_ROOT_LISTING",
+    "crane": "PASS_RELEVANT_IMAGES_LOADED_NO_QUARANTINE",
+    "doodle": "PREEXISTING_QUARANTINE_PRESERVED_UNCHANGED"
   },
   "remaining": {
-    "install_0sky27_3": "PASS",
-    "runtime_sync_0sky27_3": "PENDING_EXACT_TARGET_RECONNECT_AND_UNLOCK",
-    "native_preferences_display_and_write": "UNTESTED",
-    "springboard_stability_window": "UNTESTED",
+    "install_0sky27_4": "PASS",
+    "runtime_sync_0sky27_4": "PASS",
+    "native_preferences_display_and_write": "UNTESTED_INTERACTIVE_UAT",
+    "springboard_stability_window": "PASS_90_SECONDS",
     "editor_functional_uat": "UNTESTED",
-    "required_operator_action": "Reconnect and unlock the selected iPhone 12 SRD, verify the runtime-pause marker survived restart, then retry only the runtime renewal and validation without substituting another device."
+    "required_operator_action": "Open Atria settings through 0-Sky Control, confirm no row requests native preference code, then open the editor and make and reverse one layout change while observing SpringBoard stability."
   },
   "redactions": [
     "device_unique_identifiers",
