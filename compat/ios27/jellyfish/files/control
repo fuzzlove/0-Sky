@@ -1,0 +1,12 @@
+Package: xyz.cypwn.jellyfish
+Name: Jellyfish (iOS 27 compatibility)
+Version: 1.6.5+0sky27.3
+Architecture: iphoneos-arm64
+Description: Exact-build-guarded Jellyfish compatibility implementation for the 0-Sky iOS 27 SRD environment
+Maintainer: 0-Sky Project
+Author: Compatibility implementation based on public behavior; original Jellyfish by Justin Proulx and Ayden Panhuyzen
+Section: Tweaks
+Depends: firmware (>= 15.0), preferenceloader
+Conflicts: xyz.royalapps.jellyfish
+Replaces: xyz.royalapps.jellyfish
+

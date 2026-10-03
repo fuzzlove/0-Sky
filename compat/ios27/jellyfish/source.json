@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "project": "Jellyfish iOS 27 clean-room compatibility implementation",
+  "reference_binary": {
+    "url": "https://repo.cypwn.xyz/debians/xyz.cypwn.jellyfish_1.6.5_iphoneos-arm64.deb",
+    "sha256": "b7e0ddcd21bf045ac02a0e03786ee09589ddde6ee381ab0c10a4476c30cca506",
+    "redistributed": false,
+    "role": "observable-behavior interoperability reference only"
+  },
+  "original_authors": [
+    "Justin Proulx",
+    "Ayden Panhuyzen"
+  ],
+  "package_version": "1.6.5+0sky27.3",
+  "package_identifier": "xyz.cypwn.jellyfish",
+  "preference_domain": "xyz.royalapps.jellyfish",
+  "target": {
+    "hardware_model": "iPhone13,2",
+    "ios_version": "27.0",
+    "ios_build": "24A5390f",
+    "architectures": [
+      "arm64",
+      "arm64e"
+    ],
+    "rootless": true
+  },
+  "toolchain": {
+    "xcode_iphoneos_sdk": "26.5",
+    "theos_commit": "dd5c14bb9d91311e221d51b5bfb8c9e5948156db"
+  },
+  "status": {
+    "host_build": "VERIFIED",
+    "package_validation": "VERIFIED",
+    "device_install": "VERIFIED_PACKAGE_0SKY27_3",
+    "device_runtime": "VERIFIED_INJECTED_EXACT_BUILD",
+    "native_preferences": "VERIFIED_DISPLAY_DLOPEN_AND_WRITE",
+    "lock_screen_visual_uat": "PENDING"
+  },
+  "validated_artifact": {
+    "filename": "xyz.cypwn.jellyfish_1.6.5+0sky27.3_iphoneos-arm64.deb",
+    "reproducible_build_sha256": "43ada936b530eb5f64f62f51f420f991c8f33690790fc07fe3e2293faf1c1d3d",
+    "installed_package_input_sha256": "4aceb840f7aa173bf322ab5cb482c9ea6ff97650da8643512b3c1ac05e6a0254",
+    "installed_dylib_sha256": "425a40266219ff5c71f0ae88168bc506121f4282026f395ce8eec47230327c02",
+    "installed_preferences_executable_sha256": "84991c1d10012fe830285eb7586c251591d8aaaaac3d67a7b8287be0d6759b45",
+    "evidence": "validation/device-validation-24A5390f.json"
+  }
+}

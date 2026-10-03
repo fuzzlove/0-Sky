@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "captured_at": "2026-10-03T20:54:00Z",
+  "shareable": true,
+  "target": {
+    "hardware_model": "iPhone13,2",
+    "ios_version": "27.0",
+    "ios_build": "24A5390f"
+  },
+  "package": {
+    "identifier": "xyz.cypwn.jellyfish",
+    "version": "1.6.5+0sky27.3",
+    "status": "install ok installed",
+    "input_sha256": "4aceb840f7aa173bf322ab5cb482c9ea6ff97650da8643512b3c1ac05e6a0254",
+    "reproducible_clean_build_sha256": "43ada936b530eb5f64f62f51f420f991c8f33690790fc07fe3e2293faf1c1d3d",
+    "two_clean_builds_identical": true
+  },
+  "runtime": {
+    "result": "PASS_EXACT_BUILD_GUARD_AND_INJECTION",
+    "installed_dylib_sha256": "425a40266219ff5c71f0ae88168bc506121f4282026f395ce8eec47230327c02",
+    "injection_target": "com.apple.springboard",
+    "exact_loaded_hash": true,
+    "expected_build": "24A5390f",
+    "observed_build": "24A5390f",
+    "date_view_present": true,
+    "layout_method_present": true,
+    "hook_installed": true,
+    "quarantine_absent": true,
+    "new_springboard_crashes_final_15_minutes": 0
+  },
+  "native_preferences": {
+    "result": "PASS_DISPLAY_DLOPEN_AND_WRITE",
+    "bundle": "Jellyfish27Preferences.bundle",
+    "principal_class": "Jellyfish27PreferencesRootListController",
+    "installed_executable_sha256": "84991c1d10012fe830285eb7586c251591d8aaaaac3d67a7b8287be0d6759b45",
+    "installed_descriptor_sha256": "9392f8955aa16d9837467f02dd3c3122b3f76bed642ac7d1bd452c3a4503562d",
+    "bundle_dlopen": "PASS",
+    "interactive_display": "PASS_0SKY_CONTROL",
+    "interactive_write": "PASS_CUSTOM_DATE_SWITCH",
+    "test_value_restored": true,
+    "editable_controls": 8,
+    "unsupported_cell_types": 0,
+    "scoped_domain_and_notification": true
+  },
+  "functional_uat": {
+    "preferences_menu": "VERIFIED",
+    "lock_screen_visual_effect": "PENDING"
+  },
+  "regression_checks": {
+    "appsync_unified": "PASS_FRONTBOARD_COMPONENT_LOADED_NO_QUARANTINE_INSTALLD_COMPONENT_NOT_REVALIDATED_AFTER_SYNC",
+    "afc2": "PASS_READ_ONLY_ROOT_LISTING_AFTER_CONSERVATIVE_REGISTRY_REPAIR",
+    "crane": "PASS_RELEVANT_IMAGES_LOADED_NO_QUARANTINE",
+    "atria": "PASS_LOADED_NO_QUARANTINE",
+    "cylinder": "PASS_LOADED_NO_QUARANTINE",
+    "stella": "PASS_LOADED_NO_QUARANTINE"
+  },
+  "redactions": [
+    "device_unique_identifiers",
+    "pairing_records",
+    "private_keys",
+    "randomized_cryptex_mount_suffixes",
+    "process_identifiers",
+    "raw_crash_reports"
+  ]
+}
