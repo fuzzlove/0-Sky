@@ -1141,8 +1141,13 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
     }
 
     self.navigationItem.prompt = [NSString stringWithFormat:@"Opening %@ settings…", title];
-    // iOS 27's Settings application still registers the private `prefs:` route;
-    // `App-prefs:` can report success without foregrounding Settings on an SRD.
+    // Prefer the same LaunchServices path as tapping Settings on the Home
+    // Screen.  The reviewed PreferenceLoader adapter consumes the bounded
+    // request above after Settings launches.  This avoids iOS 27's sensitive-
+    // URL permission alert; retain the URL routes only as a compatibility
+    // fallback for builds where the system application is not discoverable.
+    if([[TSApplicationsManager sharedInstance]
+        openApplicationWithBundleID:@"com.apple.Preferences"]) return;
     NSURL* settingsURL = [NSURL URLWithString:@"prefs:"];
     [UIApplication.sharedApplication openURL:settingsURL options:@{}
         completionHandler:^(BOOL success) {

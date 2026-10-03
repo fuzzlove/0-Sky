@@ -20,6 +20,7 @@ SCENE_DELEGATE = ROOT.parent / "TrollStore" / "TSSceneDelegate.m"
 BLUETOOTH_FALLBACK = ROOT.parent / "TrollStore" / "TSBluetoothFallback.m"
 INFO_PLIST = ROOT / "Resources" / "Info.plist"
 CONTROL = ROOT / "control"
+MAKEFILE = ROOT / "Makefile"
 
 class DeviceCompatibilityTests(unittest.TestCase):
     def test_declares_iphone_and_ipad(self):
@@ -34,6 +35,19 @@ class DeviceCompatibilityTests(unittest.TestCase):
                          r"^" + re.escape(info["CFBundleShortVersionString"]) + r"\.\d+$")
         self.assertEqual(set(info["UIDeviceFamily"]), {1, 2})
         self.assertIn("Crane", info.get("NSFaceIDUsageDescription", ""))
+
+    def test_host_installer_can_preserve_control_entitlements(self):
+        entitlements = plistlib.loads((ROOT / "entitlements.plist").read_bytes())
+        self.assertIs(entitlements.get("com.apple.springboard.opensensitiveurl"), True)
+        makefile = MAKEFILE.read_text()
+        self.assertIn("/usr/bin/codesign --force --sign -", makefile)
+        self.assertIn("--generate-entitlement-der", makefile)
+        self.assertIn("--entitlements entitlements.plist", makefile)
+        self.assertIn("com.liquidsky.CrypStore", makefile)
+        inventory = INVENTORY_CONTROLLER.read_text()
+        launch = 'openApplicationWithBundleID:@"com.apple.Preferences"'
+        self.assertIn(launch, inventory)
+        self.assertLess(inventory.index(launch), inventory.index('URLWithString:@"prefs:"'))
 
     def test_table_reload_uses_one_bounded_snapshot(self):
         source = SOURCE.read_text()

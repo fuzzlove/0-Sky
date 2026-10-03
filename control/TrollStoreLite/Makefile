@@ -16,6 +16,19 @@ CrypStore_CODESIGN_FLAGS = -Sentitlements.plist
 
 include $(THEOS_MAKE_PATH)/application.mk
 
+# The paired-Mac Control installer preserves entitlements from signatures that
+# Apple's codesign tooling can validate.  Theos' default ldid output is valid
+# on-device but is not readable by that host-side preservation step, which can
+# silently strip the private Settings/LaunchServices permissions.  Seal the
+# staged main executable with the reviewed entitlement file before packaging.
+after-CrypStore-stage::
+	@/usr/bin/codesign --force --sign - --timestamp=none \
+		--generate-entitlement-der --identifier com.liquidsky.CrypStore \
+		--entitlements entitlements.plist \
+		"$(THEOS_STAGING_DIR)/Applications/CrypStore.app/CrypStore"
+	@/usr/bin/codesign --verify --strict \
+		"$(THEOS_STAGING_DIR)/Applications/CrypStore.app/CrypStore"
+
 # A paid Crane license is never committed or bundled in ordinary releases.
 # An authorized private build may point CRANE_RUNTIME_DIR at an isolated
 # extraction containing the exact installed Crane and dependency artifacts.
