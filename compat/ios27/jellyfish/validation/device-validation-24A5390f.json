@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "captured_at": "2026-10-03T21:20:46Z",
+  "captured_at": "2026-10-03T21:39:44Z",
   "shareable": true,
   "target": {
     "hardware_model": "iPhone13,2",
@@ -9,15 +9,16 @@
   },
   "package": {
     "identifier": "xyz.cypwn.jellyfish",
-    "version": "1.6.5+0sky27.5",
+    "version": "1.6.5+0sky27.7",
     "status": "install ok installed",
-    "input_sha256": "6329568d342e451da289faec572b825e8dd28e8353e61e41b83b2724ea7325c6",
-    "reproducible_clean_build_sha256": "6329568d342e451da289faec572b825e8dd28e8353e61e41b83b2724ea7325c6",
+    "input_sha256": "c2800eccfc1f20ee288c533be55ed74466f97154aa72191789d40d25cf9a0e10",
+    "reproducible_clean_build_sha256": "c2800eccfc1f20ee288c533be55ed74466f97154aa72191789d40d25cf9a0e10",
     "two_clean_builds_identical": true
   },
   "runtime": {
-    "result": "PASS_EXACT_BUILD_DIRECT_API_GUARD_AND_INJECTION_VISUAL_EXECUTION_PENDING",
-    "installed_dylib_sha256": "981c6f47871cc8aacd471146e1fcf4406030c41203c4e940841d2c26d095f025",
+    "result": "PASS_ACTIVE_PROMINENT_IOS27_TARGETS_AND_VISUAL_UAT",
+    "installed_dylib_sha256": "ae5c4142305eb6256e809c03eb5fa21d3dc1f1e101c6c4a7dd20f176981bec48",
+    "runtime_loaded_dylib_sha256": "ae5c4142305eb6256e809c03eb5fa21d3dc1f1e101c6c4a7dd20f176981bec48",
     "injection_target": "com.apple.springboard",
     "exact_loaded_hash": true,
     "expected_build": "24A5390f",
@@ -26,11 +27,16 @@
     "layout_method_present": true,
     "direct_api_guard_passed": true,
     "hook_installed": true,
-    "diagnostic_status": "hook-installed",
-    "active_direct_targets_observed": false,
+    "diagnostic_status": "active-prominent-ios27-targets",
+    "active_direct_targets_observed": true,
+    "direct_time_target_present": true,
+    "direct_subtitle_target_present": true,
+    "prominent_date_target_present": true,
+    "layout_calls_at_capture": 1,
+    "enabled_layout_calls_at_capture": 1,
     "quarantine_absent": true,
     "springboard_state": "running",
-    "runtime_note": "The active-direct-ios27-targets diagnostic is intentionally required before claiming that the lock-screen layout hook executed."
+    "runtime_note": "The active diagnostic is written only after CSProminentDisplayView supplies the time view, title label, subtitle view, and concrete CSProminentSubtitleDateView target. The normal host refresh selected a stale Python 3.9 support environment even though the generated runtime build requires Python 3.12; the same versioned sync_runtime_cryptex.py was therefore invoked directly with the repository Python 3.12 environment. Runtime generation 20261003T213524Z completed successfully."
   },
   "native_preferences": {
     "result": "PASS_DISPLAY_DLOPEN_AND_WRITE",
@@ -48,7 +54,7 @@
   },
   "functional_uat": {
     "preferences_menu": "VERIFIED",
-    "lock_screen_visual_effect": "PENDING_VALID_LOCK_SCREEN_CAPTURE",
+    "lock_screen_visual_effect": "VERIFIED_VALID_LOCK_SCREEN_CAPTURE",
     "test_profile": {
       "enabled": true,
       "alignment": "left",
@@ -58,7 +64,12 @@
       "text_shadow": true,
       "battery_percentage": true
     },
-    "automation_note": "Host automation could not keep the device on the lock screen because wake transitioned to authentication or the home screen; no home-screen image was accepted as visual evidence."
+    "visual_evidence": {
+      "local_path_not_tracked": ".build/jellyfish-ios27/visual-uat/short-wake-050ms.png",
+      "sha256": "eb8fa932d336383ff74d0da4cf7c79cb12843264a8c736d86d0dbb9a9b98f27f",
+      "observed": "The lock screen visibly showed Saturday • October 3 • 100%, a 115 percent clock, and left-positioned prominent content."
+    },
+    "automation_note": "A short side-button wake sequence produced a valid lock-screen capture. The image remains outside Git because it contains a device wallpaper and operator-controlled visual state."
   },
   "variants": [
     {
@@ -74,9 +85,21 @@
     },
     {
       "version": "1.6.5+0sky27.5",
-      "status": "UNTESTED_VISUAL",
+      "status": "FAILED",
+      "failure_signature": "A valid lock-screen capture remained visually unchanged.",
+      "note": "The build targeted SBFLockScreenDateView, while the active iOS 27 lock screen used CSProminentDisplayView."
+    },
+    {
+      "version": "1.6.5+0sky27.6",
+      "status": "UNVERIFIED_SUPERSEDED",
       "failure_signature": null,
-      "note": "Package, exact-build direct API guard, injection, and native preferences passed; actual lock-screen visual result remains pending."
+      "note": "Prominent layout execution was observed, but transient charging UI obscured visual acceptance and the diagnostic did not require the concrete prominent date target."
+    },
+    {
+      "version": "1.6.5+0sky27.7",
+      "status": "VERIFIED",
+      "failure_signature": null,
+      "note": "Exact-build prominent display, title-label, and date-string targets executed and the configured visual changes appeared in a valid lock-screen capture."
     }
   ],
   "crash_observations": [
@@ -90,11 +113,12 @@
   ],
   "regression_checks": {
     "appsync_unified": "PASS_FRONTBOARD_COMPONENT_LOADED_NO_QUARANTINE_INSTALLD_COMPONENT_NOT_REVALIDATED_AFTER_SYNC",
-    "afc2": "PASS_READ_ONLY_ROOT_LISTING_AFTER_CONSERVATIVE_REGISTRY_REPAIR",
+    "afc2": "PASS_READ_ONLY_ROOT_LISTING_AFTER_POST_SYNC_CONSERVATIVE_REGISTRY_REPAIR",
     "crane": "PASS_RELEVANT_IMAGES_LOADED_NO_QUARANTINE",
     "atria": "PASS_LOADED_NO_QUARANTINE",
     "cylinder": "PASS_LOADED_NO_QUARANTINE",
-    "stella": "PASS_LOADED_NO_QUARANTINE"
+    "stella": "PASS_LOADED_NO_QUARANTINE",
+    "springboard": "PASS_RUNNING_NO_NEW_CRASH_REPORTS_IN_15_MINUTE_WINDOW"
   },
   "redactions": [
     "device_unique_identifiers",

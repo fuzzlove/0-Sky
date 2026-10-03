@@ -52,7 +52,7 @@ compat/ios27/jellyfish/build.sh
 The build output is written to:
 
 ```text
-.build/jellyfish-ios27/output/xyz.cypwn.jellyfish_1.6.5+0sky27.5_iphoneos-arm64.deb
+.build/jellyfish-ios27/output/xyz.cypwn.jellyfish_1.6.5+0sky27.7_iphoneos-arm64.deb
 ```
 
 The build script never installs a package or changes a device. It rebuilds from
@@ -65,13 +65,19 @@ Package `1.6.5+0sky27.3` verified the native preference menu and stable
 injection, but produced no confirmed visible lock-screen change. Runtime class
 metadata showed why: iOS 27 uses `SBUILegibilityLabel` wrapper views, while that
 build searched only for descendant `UILabel` objects. Builds `0sky27.4` and
-`0sky27.5` target
-the exact iOS 27 wrappers and their alignment, font, subtitle, and sizing APIs
-directly; `.5` also avoids redundant private-API setters during repeated layout
-passes. Their device results are recorded separately in the validation manifest.
+`0sky27.5` targeted those wrappers, but a real lock-screen capture proved the
+active iOS 27 path is the CoverSheet `CSProminentDisplayView`, not the legacy
+date view. Build `0sky27.7` hooks that exact prominent-display path, its native
+title-label protocol, and its date-string method while retaining the legacy
+path for compact layouts. Device results are recorded separately in the
+validation manifest.
 
-The settings layer is **verified**. A build is not marked visually verified
-until an actual lock-screen screenshot shows the requested change.
+The settings layer and the `0sky27.7` lock-screen visual path are **verified**
+on build `24A5390f`. The acceptance capture showed the configured custom date,
+battery percentage, left alignment, and 115% clock scale. Device-specific
+evidence and prior failed or superseded variants are recorded in the validation
+manifest; the screenshot itself remains outside Git because it contains a
+device wallpaper and other operator-controlled visual state.
 
 The sanitized device evidence is in
 `validation/device-validation-24A5390f.json`. It deliberately excludes device

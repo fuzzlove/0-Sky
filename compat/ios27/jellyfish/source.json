@@ -11,7 +11,7 @@
     "Justin Proulx",
     "Ayden Panhuyzen"
   ],
-  "package_version": "1.6.5+0sky27.5",
+  "package_version": "1.6.5+0sky27.7",
   "package_identifier": "xyz.cypwn.jellyfish",
   "preference_domain": "xyz.royalapps.jellyfish",
   "target": {
@@ -31,10 +31,10 @@
   "status": {
     "host_build": "VERIFIED",
     "package_validation": "VERIFIED",
-    "device_install": "VERIFIED_PACKAGE_0SKY27_5",
-    "device_runtime": "VERIFIED_INJECTED_EXACT_BUILD_DIRECT_API_GUARD",
+    "device_install": "VERIFIED_PACKAGE_0SKY27_7",
+    "device_runtime": "VERIFIED_ACTIVE_PROMINENT_IOS27_TARGETS",
     "native_preferences": "VERIFIED_DISPLAY_DLOPEN_AND_WRITE",
-    "lock_screen_visual_uat": "PENDING"
+    "lock_screen_visual_uat": "VERIFIED"
   },
   "variants": [
     {
@@ -49,16 +49,28 @@
     },
     {
       "version": "1.6.5+0sky27.5",
-      "status": "INJECTED_VISUAL_UAT_PENDING",
-      "result": "Exact-build direct API guard and SpringBoard injection verified; observable lock-screen layout execution and visual result remain pending."
+      "status": "FAILED_VISUAL_UAT",
+      "result": "Exact-build direct API guard and SpringBoard injection passed, but a valid lock-screen capture remained unchanged because the active iOS 27 lock screen uses the CoverSheet prominent-display path rather than SBFLockScreenDateView."
+    },
+    {
+      "version": "1.6.5+0sky27.6",
+      "status": "SUPERSEDED_AFTER_HOOK_EXECUTION",
+      "result": "The CSProminentDisplayView layout hook executed, but the capture was obscured by transient charging UI and the build did not require the concrete prominent date target before reporting active status. Superseded by 0sky27.7."
+    },
+    {
+      "version": "1.6.5+0sky27.7",
+      "status": "VERIFIED",
+      "result": "Exact-build prominent-display, title-label, and date-string targets executed. A lock-screen capture visibly showed the custom date format, battery percentage, 115 percent clock scale, and left alignment."
     }
   ],
   "validated_artifact": {
-    "filename": "xyz.cypwn.jellyfish_1.6.5+0sky27.5_iphoneos-arm64.deb",
-    "reproducible_build_sha256": "6329568d342e451da289faec572b825e8dd28e8353e61e41b83b2724ea7325c6",
-    "installed_package_input_sha256": "6329568d342e451da289faec572b825e8dd28e8353e61e41b83b2724ea7325c6",
-    "installed_dylib_sha256": "981c6f47871cc8aacd471146e1fcf4406030c41203c4e940841d2c26d095f025",
+    "filename": "xyz.cypwn.jellyfish_1.6.5+0sky27.7_iphoneos-arm64.deb",
+    "reproducible_build_sha256": "c2800eccfc1f20ee288c533be55ed74466f97154aa72191789d40d25cf9a0e10",
+    "installed_package_input_sha256": "c2800eccfc1f20ee288c533be55ed74466f97154aa72191789d40d25cf9a0e10",
+    "installed_dylib_sha256": "ae5c4142305eb6256e809c03eb5fa21d3dc1f1e101c6c4a7dd20f176981bec48",
+    "runtime_loaded_dylib_sha256": "ae5c4142305eb6256e809c03eb5fa21d3dc1f1e101c6c4a7dd20f176981bec48",
     "installed_preferences_executable_sha256": "90dbfd2641e754000cde65af73971e4036392ec04093c5afbff0773c973aa918",
+    "visual_evidence_sha256": "eb8fa932d336383ff74d0da4cf7c79cb12843264a8c736d86d0dbb9a9b98f27f",
     "evidence": "validation/device-validation-24A5390f.json"
   }
 }

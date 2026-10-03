@@ -4,7 +4,7 @@ set -eu
 THEOS_COMMIT=dd5c14bb9d91311e221d51b5bfb8c9e5948156db
 SDK_VERSION=26.5
 SOURCE_DATE_EPOCH=1791061200
-PACKAGE_NAME=xyz.cypwn.jellyfish_1.6.5+0sky27.5_iphoneos-arm64.deb
+PACKAGE_NAME=xyz.cypwn.jellyfish_1.6.5+0sky27.7_iphoneos-arm64.deb
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)

@@ -14,7 +14,7 @@ import tempfile
 
 EXPECTED = {
     "Package": "xyz.cypwn.jellyfish",
-    "Version": "1.6.5+0sky27.5",
+    "Version": "1.6.5+0sky27.7",
     "Architecture": "iphoneos-arm64",
 }
 ROOT = Path("var/jb")
