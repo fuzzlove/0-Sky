@@ -16,6 +16,7 @@ INVENTORY_CONTROLLER = ROOT.parent / "TrollStore" / "TSInventoryTableViewControl
 COMPATIBILITY_CONTROLLER = ROOT.parent / "TrollStore" / "TSCompatibilityTableViewController.m"
 APPLICATIONS_MANAGER = ROOT.parent / "TrollStore" / "TSApplicationsManager.m"
 CRANE_CONTROLLER = ROOT.parent / "TrollStore" / "TSCraneSettingsViewController.m"
+INLINE_PREFERENCES = ROOT.parent / "TrollStore" / "TSInlinePreferenceTableViewController.m"
 SCENE_DELEGATE = ROOT.parent / "TrollStore" / "TSSceneDelegate.m"
 BLUETOOTH_FALLBACK = ROOT.parent / "TrollStore" / "TSBluetoothFallback.m"
 INFO_PLIST = ROOT / "Resources" / "Info.plist"
@@ -106,6 +107,18 @@ class DeviceCompatibilityTests(unittest.TestCase):
         crane = CRANE_CONTROLLER.read_text()
         self.assertIn('@"Native Crane Settings"', crane)
         self.assertNotIn("TSInlinePreferenceTableViewController", crane)
+
+    def test_axon_legacy_preferences_open_inside_control(self):
+        source = INLINE_PREFERENCES.read_text()
+        self.assertIn('@"Root.plist", @"Prefs.plist"', source)
+        self.assertIn('@"validValues"', source)
+        self.assertIn('@"validTitles"', source)
+        self.assertIn('@"PSSegmentCell"', source)
+        self.assertIn('@"PSSliderCell"', source)
+        self.assertIn('@"AxonPrefs.bundle"', source)
+        self.assertIn("TSAxonLocationViewController", source)
+        self.assertIn('@"me.nepeta.axon/ReloadPrefs"', source)
+        self.assertNotIn("bundleWithPath", source)
 
     def test_bluetooth_fallback_requires_explicit_opt_in(self):
         source = BLUETOOTH_FALLBACK.read_text()
