@@ -1,0 +1,237 @@
+diff --git a/Prefs/src/ARIListController.m b/Prefs/src/ARIListController.m
+index 16a565a..d402fc7 100644
+--- a/Prefs/src/ARIListController.m
++++ b/Prefs/src/ARIListController.m
+@@ -51,7 +51,7 @@ - (void)respringWithAnimation {
+     UIVisualEffectView *matEffect = [[UIVisualEffectView alloc] initWithEffect:[UIBlurEffect effectWithStyle:UIBlurEffectStyleSystemChromeMaterial]];
+     matEffect.alpha = 0.0F;
+     matEffect.translatesAutoresizingMaskIntoConstraints = NO;
+-    UIView *view = [UIApplication sharedApplication].keyWindow.rootViewController.view;
++    UIView *view = self.view.window.rootViewController.view ?: self.view;
+     [view addSubview:matEffect];
+     [NSLayoutConstraint activateConstraints:@[
+         [matEffect.widthAnchor constraintEqualToAnchor:view.widthAnchor],
+diff --git a/layout/DEBIAN/control b/layout/DEBIAN/control
+index 2709321..3450410 100644
+--- a/layout/DEBIAN/control
++++ b/layout/DEBIAN/control
+@@ -2,9 +2,9 @@ Architecture: iphoneos-arm
+ Author: ren7995
+ Depends: firmware (>= 13.0), mobilesubstrate, preferenceloader, ws.hbang.alderis (>= 1.1)
+ Conflicts: com.irepo.boxy4, me.kritanta.homepluspro
+-Description: A proper homescreen layout editor for iOS 13-16
++Description: A proper homescreen layout editor with 0-Sky iOS 27 compatibility
+ Maintainer: ren7995
+ Name: Atria
+ Package: me.lau.atria
+ Section: Tweaks
+-Version: 1.4.1
+\ No newline at end of file
++Version: 1.4.1+0sky27.1
+\ No newline at end of file
+diff --git a/src/Hooks/GridLayout.xm b/src/Hooks/GridLayout.xm
+index eff8fd2..89a79a3 100644
+--- a/src/Hooks/GridLayout.xm
++++ b/src/Hooks/GridLayout.xm
+@@ -31,9 +31,9 @@ static struct SBHIconGridSizeClassSizes generateGridSizeClassSizes(double cols,
+ 	} else {
+ 		// Usually 2x2, 4x2, 4x4, 4x6
+ 		sizes.small = (struct SBHIconGridSize) { .width = ROUND_SHORT(cols / 2), .height = ROUND_SHORT(rows / 3) };
+-		sizes.medium = (struct SBHIconGridSize) { .width = cols, .height = ROUND_SHORT(rows / 3) };
+-		sizes.large = (struct SBHIconGridSize) { .width = cols, .height = ROUND_SHORT(rows * 2 / 3) };
+-		sizes.extraLarge = (struct SBHIconGridSize) { .width = cols, .height = rows };
++		sizes.medium = (struct SBHIconGridSize) { .width = (short)cols, .height = ROUND_SHORT(rows / 3) };
++		sizes.large = (struct SBHIconGridSize) { .width = (short)cols, .height = ROUND_SHORT(rows * 2 / 3) };
++		sizes.extraLarge = (struct SBHIconGridSize) { .width = (short)cols, .height = (short)rows };
+ 	}
+ 	return sizes;
+ }
+@@ -73,7 +73,7 @@ static struct SBHIconGridSizeClassSizes generateGridSizeClassSizes(double cols,
+ 
+ - (struct SBHIconGridSize)gridSize {
+ 	if(!self._atriaLocation) {
+-		struct SBHIconGridSize size = { .height = 0x7FFF, .width = 0x7FFF };
++		struct SBHIconGridSize size = { .width = 0x7FFF, .height = 0x7FFF };
+ 		return size;
+ 	}
+ 	// If location is already set, size should have been modified as needed
+diff --git a/src/Hooks/Helper.xm b/src/Hooks/Helper.xm
+index 00e602e..67be8d8 100644
+--- a/src/Hooks/Helper.xm
++++ b/src/Hooks/Helper.xm
+@@ -28,7 +28,8 @@
+         [splash addEntry:@"See the preference pane in the Settings app for even more options" image:[UIImage systemImageNamed:[manager firmwareVersion] >= 14 ? @"gearshape" : @"gear"]];
+         [splash addEntry:@"If you encounter a bug, don't hesitate to report it! Please include your device and iOS version." image:[UIImage systemImageNamed:[manager firmwareVersion] >= 14 ? @"ladybug" : @"ant"]];
+         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, 1.0 * NSEC_PER_SEC), dispatch_get_main_queue(), ^{
+-            [[objc_getClass("SBIconController") sharedInstance] presentViewController:splash animated:YES completion:nil];
++            UIViewController *presenter = [manager presentationController];
++            if(presenter) [presenter presentViewController:splash animated:YES completion:nil];
+         });
+     }
+ }
+diff --git a/src/Hooks/IconView.xm b/src/Hooks/IconView.xm
+index 6597fba..660b23b 100644
+--- a/src/Hooks/IconView.xm
++++ b/src/Hooks/IconView.xm
+@@ -214,7 +214,8 @@
+ 	// Add shortcut item to activate editor
+ 	// I found this really cool gist to allow me to do this, tyvm to the author <3
+ 	// Link: https://gist.github.com/MTACS/8e26c4f430b27d6a1d2a11f0a828f250
+-	NSMutableArray *items = [%orig mutableCopy];
++	NSArray *originalItems = %orig;
++	NSMutableArray *items = [originalItems mutableCopy];
+ 	if(!(IconIsInRoot(self) || IconIsInDock(self))) return items;
+ 	if(!items) items = [NSMutableArray new];
+ 
+diff --git a/src/Hooks/MainLayout.xm b/src/Hooks/MainLayout.xm
+index 4af459b..4b52950 100644
+--- a/src/Hooks/MainLayout.xm
++++ b/src/Hooks/MainLayout.xm
+@@ -267,6 +267,17 @@ static BOOL didLaunchSB = NO;
+ 
+ %end
+ 
++// SBIconController is no longer a view controller on iOS 27. Observe the
++// actual root folder controller as the lifecycle signal on modern builds.
++%hook SBRootFolderController
++
++- (void)viewWillAppear:(BOOL)animated {
++	%orig;
++	didLaunchSB = YES;
++}
++
++%end
++
+ // Layout provider hook
+ %hook SBHDefaultIconListLayoutProvider
+ 
+diff --git a/src/Manager/ARIEditManager.m b/src/Manager/ARIEditManager.m
+index 1913330..845c686 100644
+--- a/src/Manager/ARIEditManager.m
++++ b/src/Manager/ARIEditManager.m
+@@ -34,7 +34,13 @@ - (void)toggleEditView:(BOOL)toggle withTargetLocation:(NSString *)targetLoc {
+         _isEditing = YES;
+         _editingLocation = targetLoc;
+ 
+-        UIViewController *iconController = (UIViewController *)[objc_getClass("SBIconController") sharedInstance];
++        UIViewController *iconController = [[ARITweakManager sharedInstance] presentationController];
++        UIView *hostView = iconController.view;
++        if(!hostView) {
++            _isEditing = NO;
++            _editingLocation = nil;
++            return;
++        }
+ 
+         // Check if this list view has custom config
+         _current = [[ARITweakManager sharedInstance] currentListView];
+@@ -48,9 +54,9 @@ - (void)toggleEditView:(BOOL)toggle withTargetLocation:(NSString *)targetLoc {
+         ARIEditingMainView *view = [[ARIEditingMainView alloc] initWithTarget:targetLoc];
+         view.alpha = 0.0F;
+         view.transform = CGAffineTransformMakeScale(0.25F, 0.25F);
+-        [iconController.view addSubview:view];
++        [hostView addSubview:view];
+         [NSLayoutConstraint activateConstraints:@[
+-            [view.centerXAnchor constraintEqualToAnchor:iconController.view.centerXAnchor],
++            [view.centerXAnchor constraintEqualToAnchor:hostView.centerXAnchor],
+         ]];
+ 
+         [UIView animateWithDuration:0.2f
+@@ -112,7 +118,9 @@ - (void)presentEditAlert {
+                                             handler:^(UIAlertAction *action){
+                                             }]];
+ 
+-    [[objc_getClass("SBIconController") sharedInstance] presentViewController:alert animated:YES completion:nil];
++    UIViewController *presenter = [manager presentationController];
++    if(!presenter) return;
++    [presenter presentViewController:alert animated:YES completion:nil];
+ }
+ 
+ - (UIAlertAction *)_createEditAlertAction:(NSString *)title editLocation:(NSString *)location {
+diff --git a/src/Manager/ARITweakManager.h b/src/Manager/ARITweakManager.h
+index 8749041..19d74c9 100644
+--- a/src/Manager/ARITweakManager.h
++++ b/src/Manager/ARITweakManager.h
+@@ -152,11 +152,14 @@ typedef struct SBRootFolderViewMetrics {
+ 
+ @interface SBRootFolderController : UIViewController
+ - (SBRootFolderView *)rootFolderView;
++- (SBRootFolderView *)rootFolderViewIfLoaded;
+ @end
+ 
+ @interface SBHIconManager : NSObject
+ @property (nonatomic, assign, getter=isEditing) BOOL editing;
+ - (SBIconListModel *)iconModel;
++- (SBRootFolderController *)rootFolderController;
++- (UIViewController *)rootViewController;
+ - (BOOL)relayout;
+ @end
+ 
+@@ -201,6 +204,8 @@ typedef struct SBRootFolderViewMetrics {
+ - (void)relayoutEntireIconModel;
+ - (void)feedbackForButton;
+ - (void)onSpringboardLaunched;
++- (SBRootFolderController *)rootFolderController;
++- (UIViewController *)presentationController;
+ - (NSUInteger)indexOfListView:(SBIconListView *)target;
+ - (SBRootFolderView *)rootFolderView;
+ - (NSArray<SBIconListView *> *)allRootListViews;
+diff --git a/src/Manager/ARITweakManager.m b/src/Manager/ARITweakManager.m
+index 9f08730..e27c287 100644
+--- a/src/Manager/ARITweakManager.m
++++ b/src/Manager/ARITweakManager.m
+@@ -518,11 +518,53 @@ - (void)onSpringboardLaunched {
+ }
+ 
+ - (SBRootFolderView *)rootFolderView {
+-    return [[[objc_getClass("SBIconController") sharedInstance] _rootFolderController] rootFolderView];
++    SBRootFolderController *controller = [self rootFolderController];
++    if(!controller) return nil;
++
++    if([controller respondsToSelector:@selector(rootFolderViewIfLoaded)]) {
++        SBRootFolderView *loaded = [controller rootFolderViewIfLoaded];
++        if(loaded) return loaded;
++    }
++    return [controller respondsToSelector:@selector(rootFolderView)]
++        ? [controller rootFolderView]
++        : nil;
++}
++
++- (SBRootFolderController *)rootFolderController {
++    SBIconController *iconController = [objc_getClass("SBIconController") sharedInstance];
++    if(!iconController) return nil;
++
++    // iOS 13-16 exposed this controller directly on SBIconController. iOS 27
++    // moved it to SBHIconManager; calling the removed selector aborts SpringBoard.
++    if([iconController respondsToSelector:@selector(_rootFolderController)]) {
++        return [iconController _rootFolderController];
++    }
++
++    SBHIconManager *iconManager = [iconController respondsToSelector:@selector(iconManager)]
++        ? [iconController iconManager]
++        : nil;
++    if([iconManager respondsToSelector:@selector(rootFolderController)]) {
++        return [iconManager rootFolderController];
++    }
++
++    UIViewController *root = [iconManager respondsToSelector:@selector(rootViewController)]
++        ? [iconManager rootViewController]
++        : nil;
++    return [root isKindOfClass:objc_getClass("SBRootFolderController")]
++        ? (SBRootFolderController *)root
++        : nil;
++}
++
++- (UIViewController *)presentationController {
++    SBIconController *iconController = [objc_getClass("SBIconController") sharedInstance];
++    if([iconController isKindOfClass:[UIViewController class]]) {
++        return (UIViewController *)iconController;
++    }
++    return [self rootFolderController];
+ }
+ 
+ - (NSArray<SBIconListView *> *)allRootListViews {
+-    return [self rootFolderView].iconListViews;
++    return [self rootFolderView].iconListViews ?: @[];
+ }
+ 
+ - (NSUInteger)indexOfListView:(SBIconListView *)target {

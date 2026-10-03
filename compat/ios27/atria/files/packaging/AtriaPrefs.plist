@@ -1,0 +1,9 @@
+{
+  entry = {
+    bundle = AtriaPrefs;
+    cell = PSLinkCell;
+    detail = ARIRootListController;
+    icon = "/Library/PreferenceBundles/AtriaPrefs.bundle/icon.png";
+    label = Atria;
+  };
+}
