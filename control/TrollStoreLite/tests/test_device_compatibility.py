@@ -120,6 +120,10 @@ class DeviceCompatibilityTests(unittest.TestCase):
         self.assertIn('@"me.nepeta.axon/ReloadPrefs"', source)
         self.assertNotIn("bundleWithPath", source)
 
+    def test_signed_bundle_resources_open_inside_control(self):
+        source = INLINE_PREFERENCES.read_text()
+        self.assertIn('@"Resources/Root.plist", @"Resources/Prefs.plist"', source)
+
     def test_bluetooth_fallback_requires_explicit_opt_in(self):
         source = BLUETOOTH_FALLBACK.read_text()
         self.assertIn("setBool:NO forKey:TSBLEEnabledKey", source)

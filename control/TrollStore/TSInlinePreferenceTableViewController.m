@@ -84,9 +84,14 @@
         [plistNames addObject:[requestedPlist.pathExtension isEqualToString:@"plist"]
             ? requestedPlist : [requestedPlist stringByAppendingPathExtension:@"plist"]];
     }
-    // PreferenceLoader conventionally uses Root.plist, but older panes such
-    // as Axon publish their data-only form as Prefs.plist instead.
-    for(NSString* fallback in @[@"Root.plist", @"Prefs.plist"])
+    // Legacy PreferenceLoader bundles commonly keep their descriptor at the
+    // bundle root.  Modern, fully signed bundles keep data resources under
+    // Resources/ so macOS codesign does not treat them as unsigned nested
+    // components.  Support both layouts without loading executable prefs UI.
+    for(NSString* fallback in @[
+        @"Root.plist", @"Prefs.plist",
+        @"Resources/Root.plist", @"Resources/Prefs.plist"
+    ])
         if(![plistNames containsObject:fallback]) [plistNames addObject:fallback];
     for(NSString* plistName in plistNames) {
         NSDictionary* root = [self descriptorAtPath:
