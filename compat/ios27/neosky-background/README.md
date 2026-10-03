@@ -29,7 +29,7 @@ compat/ios27/neosky-background/build.sh
 Output:
 
 ```text
-.build/neosky-background-ios27/output/xyz.0sky.neoskybackground_1.0.0+0sky27.1_iphoneos-arm64.deb
+.build/neosky-background-ios27/output/xyz.0sky.neoskybackground_1.0.0+0sky27.2_iphoneos-arm64.deb
 ```
 
 The package defaults to disabled. Enable **NeoSky Background** in the native
@@ -37,3 +37,6 @@ preferences menu after installation. Home Screen and Lock Screen visibility,
 text size, opacity, vertical placement, refresh interval, logo, and color are
 independently configurable.
 
+For deterministic device testing, `neoskyctl enable|disable|status` updates the
+same mobile preference domain and posts the same Darwin notification as the
+native preference pane.

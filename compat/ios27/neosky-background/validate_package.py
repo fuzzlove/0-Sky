@@ -8,7 +8,7 @@ from pathlib import Path
 
 EXPECTED = {
     "Package": "xyz.0sky.neoskybackground",
-    "Version": "1.0.0+0sky27.1",
+    "Version": "1.0.0+0sky27.2",
     "Architecture": "iphoneos-arm64",
 }
 ROOT = Path("var/jb")
@@ -38,10 +38,11 @@ def main() -> int:
         entry = root / ROOT / "Library/PreferenceLoader/Preferences/NeoSkyBackgroundPreferences.plist"
         descriptor = root / ROOT / "Library/MobileSubstrate/DynamicLibraries/NeoSkyBackground.plist"
         resources = root / ROOT / "Library/PreferenceBundles/NeoSkyBackgroundPreferences.bundle/Resources/Root.plist"
-        for item in (dylib, prefs, entry, descriptor, resources):
+        control_tool = root / ROOT / "usr/bin/neoskyctl"
+        for item in (dylib, prefs, entry, descriptor, resources, control_tool):
             if not item.is_file():
                 raise SystemExit(f"missing package file: {item.relative_to(root)}")
-        for binary in (dylib, prefs):
+        for binary in (dylib, prefs, control_tool):
             architectures = subprocess.check_output(["lipo", "-archs", str(binary)], text=True).split()
             if set(architectures) != {"arm64", "arm64e"}:
                 raise SystemExit(f"unexpected architectures for {binary.name}: {architectures}")
@@ -60,4 +61,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
