@@ -1,6 +1,7 @@
 #import "TSInlinePreferenceTableViewController.h"
 #import "TSDoodlePatternRecorderViewController.h"
 #import <TSUtil.h>
+#import <math.h>
 
 @interface TSInlinePreferenceTableViewController ()
 @property(nonatomic,copy) NSString* descriptorPath;
@@ -425,8 +426,11 @@
         field.autocapitalizationType = UITextAutocapitalizationTypeNone;
         field.clearButtonMode = UITextFieldViewModeWhileEditing;
         field.secureTextEntry = [cellType isEqualToString:@"PSSecureEditTextCell"];
+        if([item[@"keyboard"] isEqualToString:@"NumbersAndPunctuation"])
+            field.keyboardType = UIKeyboardTypeNumbersAndPunctuation;
         id value = [self valueForSpecifier:item];
         if([value isKindOfClass:NSString.class]) field.text = value;
+        else if([value isKindOfClass:NSNumber.class]) field.text = [value stringValue];
         cell.accessoryView = field;
     } else if([item[@"detail"] isEqualToString:@"AXNLocationController"] &&
               [self.bundleRoot.lastPathComponent isEqualToString:@"AxonPrefs.bundle"]) {
@@ -555,7 +559,37 @@
 - (void)textFieldDidEndEditing:(UITextField*)textField
 {
     if(textField.tag < 0 || textField.tag >= (NSInteger)self.items.count) return;
-    [self setValue:textField.text ?: @"" forSpecifier:self.items[textField.tag]];
+    NSDictionary* item = self.items[textField.tag];
+    id previous = [self valueForSpecifier:item];
+    id fallback = item[@"default"];
+    NSString* text = [textField.text ?: @"" stringByTrimmingCharactersInSet:
+        NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    BOOL numeric = [previous isKindOfClass:NSNumber.class] ||
+        [fallback isKindOfClass:NSNumber.class] ||
+        [item[@"keyboard"] isEqualToString:@"NumbersAndPunctuation"];
+    if(numeric) {
+        double parsed = 0;
+        NSScanner* scanner = [NSScanner scannerWithString:text];
+        BOOL valid = text.length && [scanner scanDouble:&parsed] && scanner.isAtEnd && isfinite(parsed);
+        if(!valid) {
+            id restored = [previous isKindOfClass:NSNumber.class] ? previous : (fallback ?: previous);
+            textField.text = [restored respondsToSelector:@selector(stringValue)]
+                ? [restored stringValue] : [restored description];
+            if(![previous isKindOfClass:NSNumber.class] &&
+               [restored isKindOfClass:NSNumber.class])
+                [self setValue:restored forSpecifier:item];
+            return;
+        }
+        if([item[@"min"] respondsToSelector:@selector(doubleValue)])
+            parsed = MAX(parsed, [item[@"min"] doubleValue]);
+        if([item[@"max"] respondsToSelector:@selector(doubleValue)])
+            parsed = MIN(parsed, [item[@"max"] doubleValue]);
+        NSNumber* value = @(parsed);
+        textField.text = value.stringValue;
+        [self setValue:value forSpecifier:item];
+        return;
+    }
+    [self setValue:text forSpecifier:item];
 }
 
 - (BOOL)textFieldShouldReturn:(UITextField*)textField
