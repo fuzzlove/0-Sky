@@ -1,7 +1,7 @@
 ARCHS = arm64 arm64e
 TARGET = iphone:clang:latest:14.0
 THEOS_PACKAGE_SCHEME = rootless
-PACKAGE_VERSION = 1.0.0+0sky27.2
+PACKAGE_VERSION = 1.0.0+0sky27.6
 
 include $(THEOS)/makefiles/common.mk
 
@@ -20,14 +20,6 @@ NeoSkyBackgroundPreferences_INSTALL_PATH = /Library/PreferenceBundles
 
 include $(THEOS_MAKE_PATH)/tweak.mk
 include $(THEOS_MAKE_PATH)/bundle.mk
-
-TOOL_NAME = neoskyctl
-neoskyctl_FILES = neoskyctl.m
-neoskyctl_CFLAGS = -fobjc-arc -Wall -Wextra
-neoskyctl_FRAMEWORKS = Foundation CoreFoundation
-neoskyctl_INSTALL_PATH = /usr/bin
-
-include $(THEOS_MAKE_PATH)/tool.mk
 
 before-package::
 	@mkdir -p $(THEOS_STAGING_DIR)/Library/MobileSubstrate/DynamicLibraries

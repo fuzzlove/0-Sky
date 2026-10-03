@@ -196,8 +196,8 @@ static void NSUpdateAllLabels(void) {
     }
     for (UIView *host in NSLockHosts.allObjects) {
         UILabel *label = objc_getAssociatedObject(host, NSLockLabelKey);
-        label.hidden = !(enabled && NSBool(@"lockEnabled", YES));
-        NSConfigureLabel(label, label.superview, NSPrefNumber(@"lockY", 320.0));
+        label.hidden = !(enabled && NSBool(@"lockEnabled", NO));
+        NSConfigureLabel(label, label.superview, NSPrefNumber(@"lockY", 620.0));
     }
 }
 
@@ -227,41 +227,35 @@ static void NSHomeLayout(id self, SEL selector) {
     }
 }
 
-static UIView *NSLockContainer(UIView *host, UIView **directChild) {
-    UIView *child = host;
-    UIView *container = host.superview;
-    CGFloat screenHeight = UIScreen.mainScreen.bounds.size.height;
-    while (container.superview && CGRectGetHeight(container.bounds) < screenHeight * 0.70) {
-        child = container;
-        container = container.superview;
-    }
-    if (directChild) *directChild = child;
-    return container ?: host;
-}
-
 static void NSLockLayout(id self, SEL selector) {
     NSOriginalLockLayout(self, selector);
     CSProminentDisplayView *host = (CSProminentDisplayView *)self;
     [NSLockHosts addObject:host];
-    BOOL visible = NSBool(@"enabled", NO) && NSBool(@"lockEnabled", YES);
+    BOOL visible = NSBool(@"enabled", NO) && NSBool(@"lockEnabled", NO);
     UILabel *label = objc_getAssociatedObject(host, NSLockLabelKey);
     if (!label) {
         label = NSNewLabel();
         objc_setAssociatedObject(host, NSLockLabelKey, label, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    UIView *directChild = nil;
-    UIView *container = NSLockContainer(host, &directChild);
+    UIView *container = host.superview ?: host;
     if (label.superview != container) {
         [label removeFromSuperview];
-        if (directChild && directChild.superview == container)
-            [container insertSubview:label belowSubview:directChild];
+        if (host.superview == container)
+            [container insertSubview:label aboveSubview:host];
         else
-            [container insertSubview:label atIndex:0];
-    } else if (directChild && directChild.superview == container) {
-        [container insertSubview:label belowSubview:directChild];
+            [container addSubview:label];
+    } else if (host.superview == container) {
+        [container insertSubview:label aboveSubview:host];
     }
     label.hidden = !visible;
-    NSConfigureLabel(label, container, NSPrefNumber(@"lockY", 320.0));
+    CGFloat screenY = NSPrefNumber(@"lockY", 620.0);
+    CGPoint origin = host.window ? [container convertPoint:CGPointMake(18.0, screenY)
+                                                   fromView:host.window]
+                                 : CGPointMake(18.0, screenY);
+    NSConfigureLabel(label, container, origin.y);
+    CGRect frame = label.frame;
+    frame.origin.x = origin.x;
+    label.frame = frame;
     if (visible && !NSLockActive) {
         NSLockActive = YES;
         NSWriteDiagnostics(NSHomeActive ? @"active-lock-and-home" : @"active-lock");

@@ -1,0 +1,60 @@
+{
+  "schema": 1,
+  "target": {
+    "hardware_model": "iPhone13,2",
+    "ios_version": "27.0",
+    "ios_build": "24A5390f",
+    "device_identifier": "REDACTED"
+  },
+  "package": {
+    "identifier": "xyz.0sky.neoskybackground",
+    "version": "1.0.0+0sky27.6",
+    "host_artifact_sha256": "bbda21f893c14ef7e1b8287df96c8dee15d7cd242c577fcde609f9df2098e67b",
+    "installation": "VERIFIED",
+    "backup_before_install": "/var/jb/var/lib/srd-runtime/backups/pre-neosky-20261003T234351Z"
+  },
+  "runtime_refresh": {
+    "status": "SUCCESS",
+    "generation": "20261003T234356Z",
+    "standard_refresh_issue": "host entry point selected Python 3.9 while the runtime builder requires Python >=3.12",
+    "tested_workaround": "run the support sync_runtime_cryptex.py with the repository .venv/bin/python"
+  },
+  "runtime": {
+    "current_variant_injection": "PENDING_RECONNECT",
+    "home_visual": {
+      "status": "VERIFIED_PREVIOUS_VARIANT",
+      "version": "1.0.0+0sky27.5",
+      "result": "native statistics visible behind Home Screen icons"
+    },
+    "lock_visual": {
+      "status": "FAILED_UNVERIFIED",
+      "versions_tested": [
+        "1.0.0+0sky27.4",
+        "1.0.0+0sky27.5"
+      ],
+      "result": "hook diagnostics became active but screenshots contained no NeoSky text",
+      "current_default": "disabled"
+    },
+    "quarantine": "NOT_QUARANTINED_AT_LAST_CONNECTED_CHECK"
+  },
+  "crash_evidence": {
+    "latest_report": "SpringBoard-2026-10-03-184838.ips",
+    "exception": "EXC_CRASH SIGABRT",
+    "failure_signature": "doesNotRecognizeSelector -> Atria.dylib+21468 -> UIView _postMovedFromSuperview -> SBFloatingDockViewController viewDidLoad",
+    "neosky_faulting_frame": false,
+    "notes": "The latest transition crash occurred before NeoSky was loaded into that SpringBoard PID. Combined-stack stability still requires post-reconnect observation."
+  },
+  "afc2": {
+    "status_before_repair": "InvalidService",
+    "repair_backup": "/var/jb/var/lib/srd-runtime/backups/pre-afc2-registry-repair-20261003T234018Z.json",
+    "status_after_repair": "FUNCTIONAL_PASS",
+    "root_listing_verified": true,
+    "post_runtime_refresh_recheck": "PENDING_RECONNECT"
+  },
+  "remaining_gaps": [
+    "Reconnect the selected SRD and verify that the 1.0.0+0sky27.6 dylib is loaded in the current SpringBoard PID.",
+    "Unlock the SRD and capture a fresh Home Screen screenshot for 1.0.0+0sky27.6.",
+    "Observe SpringBoard long enough to distinguish runtime-transition crashes from steady-state crashes.",
+    "Re-run AFC2 functional validation after the final runtime refresh."
+  ]
+}

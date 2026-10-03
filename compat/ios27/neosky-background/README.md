@@ -2,7 +2,8 @@
 
 NeoSky Background is an exact-build-guarded SpringBoard extension for the
 0-Sky iOS 27 SRD environment. It presents Neofetch-style system information
-behind the Home Screen icons and beneath the prominent Lock Screen content.
+behind the Home Screen icons. A separate Lock Screen path is retained as an
+experimental, default-off control; it is not currently a verified feature.
 
 The extension intentionally does not start Bash or Neofetch inside
 SpringBoard. The displayed fields are collected through lightweight native
@@ -29,14 +30,33 @@ compat/ios27/neosky-background/build.sh
 Output:
 
 ```text
-.build/neosky-background-ios27/output/xyz.0sky.neoskybackground_1.0.0+0sky27.2_iphoneos-arm64.deb
+.build/neosky-background-ios27/output/xyz.0sky.neoskybackground_1.0.0+0sky27.6_iphoneos-arm64.deb
 ```
 
 The package defaults to disabled. Enable **NeoSky Background** in the native
-preferences menu after installation. Home Screen and Lock Screen visibility,
-text size, opacity, vertical placement, refresh interval, logo, and color are
-independently configurable.
+preferences menu after installation. Home Screen visibility, text size,
+opacity, vertical placement, refresh interval, logo, and color are
+configurable. **Lock Screen (Experimental)** defaults to disabled.
 
-For deterministic device testing, `neoskyctl enable|disable|status` updates the
-same mobile preference domain and posts the same Darwin notification as the
-native preference pane.
+## Validation status
+
+- Host: two clean builds of `1.0.0+0sky27.6` were byte-identical and passed
+  package, architecture, signing-input, and native-preference checks.
+- Device installation: `1.0.0+0sky27.6` was installed on the supported target.
+- Home Screen: visually verified with the preceding `1.0.0+0sky27.5` binary on
+  the exact supported build. The current `1.0.0+0sky27.6` removes the late-view
+  forced-layout scan, but final visual revalidation remains pending because the
+  device disconnected before the new dylib reached the current SpringBoard.
+- Lock Screen: the hook and layout diagnostics executed on the supported build,
+  but repeated screenshots did not show the overlay. This path is therefore
+  **unverified**, labeled experimental, and disabled by default.
+- SpringBoard transition crashes observed during runtime refresh symbolicated to
+  `Atria.dylib` at `SBFloatingDockViewController viewDidLoad`; NeoSky was not the
+  faulting image in the latest report. This is attribution evidence, not a claim
+  that the combined stack is crash-free.
+
+The standard 0-Sky refresh entry point selected a stale Python 3.9 support
+interpreter on this host while the runtime builder requires Python 3.12 or
+newer. Device validation used the repository `.venv/bin/python` to run the
+support copy of `sync_runtime_cryptex.py` directly; the host-selection defect
+must not be hidden by disabling its version check.

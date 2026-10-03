@@ -8,7 +8,7 @@ from pathlib import Path
 
 EXPECTED = {
     "Package": "xyz.0sky.neoskybackground",
-    "Version": "1.0.0+0sky27.2",
+    "Version": "1.0.0+0sky27.6",
     "Architecture": "iphoneos-arm64",
 }
 ROOT = Path("var/jb")
@@ -38,11 +38,10 @@ def main() -> int:
         entry = root / ROOT / "Library/PreferenceLoader/Preferences/NeoSkyBackgroundPreferences.plist"
         descriptor = root / ROOT / "Library/MobileSubstrate/DynamicLibraries/NeoSkyBackground.plist"
         resources = root / ROOT / "Library/PreferenceBundles/NeoSkyBackgroundPreferences.bundle/Resources/Root.plist"
-        control_tool = root / ROOT / "usr/bin/neoskyctl"
-        for item in (dylib, prefs, entry, descriptor, resources, control_tool):
+        for item in (dylib, prefs, entry, descriptor, resources):
             if not item.is_file():
                 raise SystemExit(f"missing package file: {item.relative_to(root)}")
-        for binary in (dylib, prefs, control_tool):
+        for binary in (dylib, prefs):
             architectures = subprocess.check_output(["lipo", "-archs", str(binary)], text=True).split()
             if set(architectures) != {"arm64", "arm64e"}:
                 raise SystemExit(f"unexpected architectures for {binary.name}: {architectures}")
@@ -55,6 +54,9 @@ def main() -> int:
         controls = sum(item.get("cell", "").startswith(("PSSwitch", "PSSlider", "PSSegment")) for item in specifiers)
         if controls < 9:
             raise SystemExit(f"expected at least 9 native controls, found {controls}")
+        lock = next((item for item in specifiers if item.get("key") == "lockEnabled"), None)
+        if not lock or lock.get("default") is not False or "Experimental" not in lock.get("label", ""):
+            raise SystemExit("Lock Screen must remain explicitly experimental and default-off")
     digest = hashlib.sha256(package.read_bytes()).hexdigest()
     print(f"PASS package={package.name} sha256={digest} native_controls={controls}")
     return 0
