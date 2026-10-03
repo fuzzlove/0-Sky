@@ -32,6 +32,10 @@ not identify which experimental AFC2 package variant is installed.
   <a href="docs/assets/control-dashboard-status.png"><img src="docs/assets/control-dashboard-status.png" alt="0-Sky Control dashboard" width="30%"></a>
 </p>
 
+<p align="center">
+  <a href="docs/assets/srdzsh-interactive-terminal-redacted.png"><img src="docs/assets/srdzsh-interactive-terminal-redacted.png" alt="srdzsh interactive root terminal on an Apple Security Research Device" width="30%"></a>
+</p>
+
 ## Requirements
 
 See [`REQUIREMENTS.md`](REQUIREMENTS.md) for complete host, SDK, dependency,
