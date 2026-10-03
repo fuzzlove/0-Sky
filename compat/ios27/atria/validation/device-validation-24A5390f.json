@@ -1,46 +1,70 @@
 {
-  "schema": 1,
-  "captured_at": "2026-10-03T13:50:31Z",
+  "schema": 2,
+  "captured_at": "2026-10-03T14:59:10Z",
   "shareable": true,
   "target": {
     "hardware_model": "iPhone13,2",
     "ios_version": "27.0",
     "ios_build": "24A5390f"
   },
-  "package": {
-    "identifier": "me.lau.atria",
-    "version": "1.4.1+0sky27.1",
-    "status": "install ok installed",
-    "artifact_sha256": "c450b4e7d65b8f0f89dd2cc52305044dbb39808d32140108b141006d955e0e4c",
-    "installed_dylib_sha256": "2d06dfea3b50d6e1696460e5e7331cc87b2c89943f9eae13fd3fac8f134a7507",
-    "installed_preferences_executable_sha256": "c114c8c22f9cb2ca29f742f4456429fcb2a1ee8817685340dc6b4011fd3c5c0d"
-  },
-  "automated_results": {
-    "runtime_sync": "PASS",
-    "runtime_registry_exact_hash": "PASS",
-    "springboard_injection_exact_hash": "PASS",
-    "atria_quarantine_absent": "PASS",
-    "springboard_pid_stable_automated_window": "PASS",
-    "new_springboard_crash_in_automated_window": "NONE",
-    "preference_bundle_dlopen": "PASS"
-  },
-  "failure_evidence": {
-    "upstream_version": "1.4.1",
-    "upstream_dylib_sha256": "f8d84a5c1917f50e4e18e5ba53f210ae3912d32645627318f096ac9900f88686",
-    "result": "FAILED",
-    "exception": "NSInvalidArgumentException",
-    "signature": "-[SBIconController _rootFolderController]: unrecognized selector",
-    "note": "Captured reports identify the upstream hash, not the compatibility-build hash."
-  },
-  "regression_checks": {
-    "appsync_unified": "INSTALLED_AND_LOADED_EXACT_HASHES",
-    "afc2": "INSTALLED_AND_LOADED_EXACT_HASH",
-    "crane": "SPRINGBOARD_COMPONENTS_LOADED_WITHOUT_QUARANTINE",
-    "doodle": "PREEXISTING_PENDING_QUARANTINE_UNCHANGED"
+  "variants": [
+    {
+      "version": "1.4.1",
+      "result": "FAILED",
+      "installed_dylib_sha256": "f8d84a5c1917f50e4e18e5ba53f210ae3912d32645627318f096ac9900f88686",
+      "failure_type": "NSInvalidArgumentException",
+      "failure_signature": "-[SBIconController _rootFolderController]: unrecognized selector"
+    },
+    {
+      "version": "1.4.1+0sky27.1",
+      "result": "FAILED_AFTER_INITIAL_AUTOMATED_WINDOW",
+      "artifact_sha256": "c450b4e7d65b8f0f89dd2cc52305044dbb39808d32140108b141006d955e0e4c",
+      "installed_dylib_sha256": "2d06dfea3b50d6e1696460e5e7331cc87b2c89943f9eae13fd3fac8f134a7507",
+      "installed_preferences_executable_sha256": "c114c8c22f9cb2ca29f742f4456429fcb2a1ee8817685340dc6b4011fd3c5c0d",
+      "failure_type": "NSInvalidArgumentException",
+      "failure_signatures": [
+        "-[SBWidgetIcon application]: unrecognized selector",
+        "-[SBFolderIcon application]: unrecognized selector"
+      ]
+    },
+    {
+      "version": "1.4.1+0sky27.2",
+      "result": "FAILED",
+      "artifact_sha256": "f5663d272b6bda2495111bf7189afa9b85df7302007f058dd03eab6b1262bd92",
+      "installed_dylib_sha256": "93ae992b9210622af26f1c3965bd48e391df369408fffea8a78911e5004e5f6e",
+      "installed_preferences_executable_sha256": "508913d5265a77461034c799fb7fee8fb60bd590a1fafce657494e301167901c",
+      "installed_native_preferences_sha256": "3fec931af1a6ef32e9d1b5696f27fa5c6c9668a2bd46934f6bd6e7889c3009c6",
+      "failure_type": "EXC_BAD_ACCESS_POSSIBLE_POINTER_AUTHENTICATION_FAILURE",
+      "failure_signature": "objc_retain -> -[SBIconListModel gridSizeClassSizesWithOptions:] -> -[SBIconListView iconGridSizeClassSizes]",
+      "bad_address": "0x0002000400020002",
+      "evidence_index": "SpringBoard-2026-10-03-091245.ips (sanitized summary only; raw report excluded)"
+    },
+    {
+      "version": "1.4.1+0sky27.3",
+      "result": "INSTALLED_RUNTIME_UNTESTED",
+      "artifact_sha256": "49292898ffdad9c6686fb8c5e4d0cf59ea0b066d16790056fe3e25ee3cfa1707",
+      "host_build": "PASS",
+      "package_validation": "PASS",
+      "package_install": "PASS",
+      "native_preferences_structure": "PASS",
+      "runtime_sync": "FAILED_ENVIRONMENTAL_RSD_TRANSPORT_TIMEOUT",
+      "runtime_pause_recovery_marker": "RESTORED_BEFORE_RESTART",
+      "reason": "The package installed on the exact target, but both Apple RemoteXPC transports timed out before the runtime Cryptex could commit. The device was restarted for transport recovery and then disconnected from USB; the .3 dylib was not injected or functionally tested."
+    }
+  ],
+  "regression_requirements_for_next_test": {
+    "appsync_unified": "PRESERVE_AND_RECHECK_EXACT_LOADED_HASHES",
+    "afc2": "PRESERVE_AND_RECHECK_EXACT_LOADED_HASH",
+    "crane": "PRESERVE_AND_RECHECK_WITHOUT_QUARANTINE",
+    "doodle": "PRESERVE_PREEXISTING_PENDING_STATE"
   },
   "remaining": {
+    "install_0sky27_3": "PASS",
+    "runtime_sync_0sky27_3": "PENDING_EXACT_TARGET_RECONNECT_AND_UNLOCK",
+    "native_preferences_display_and_write": "UNTESTED",
+    "springboard_stability_window": "UNTESTED",
     "editor_functional_uat": "UNTESTED",
-    "required_operator_action": "Open Atria editor, make and reverse one layout change, and confirm SpringBoard remains stable."
+    "required_operator_action": "Reconnect and unlock the selected iPhone 12 SRD, verify the runtime-pause marker survived restart, then retry only the runtime renewal and validation without substituting another device."
   },
   "redactions": [
     "device_unique_identifiers",

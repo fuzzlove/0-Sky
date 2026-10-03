@@ -8,11 +8,14 @@
   "license": "GPL-3.0-only",
   "license_sha256": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
   "upstream_version": "1.4.1",
-  "package_version": "1.4.1+0sky27.1",
+  "package_version": "1.4.1+0sky27.3",
   "package_identifier": "me.lau.atria",
   "inputs": {
-    "patch_sha256": "136c569d53f8017c5904f3f0e55ce51e1caf8ffcbe350d944e6490295e44cfbc",
-    "makefile_sha256": "3721768623f53f4e2cda114d2ac89cf5463525eb1bc31a1470802951c2f8ca2c",
+    "build_script_sha256": "890973cf3955c336738c1f6571d3906b6facdac351038d893ebc43689f3cf532",
+    "validator_sha256": "ea9ae815a55aa6fde3a37de397bc6d5b0d0e9b4247566a77815532e23f45a4d8",
+    "patch_sha256": "d8c1aa07486cdcfea850d9cfa87dbc38cd2b565471443bb65388f55f5911372e",
+    "makefile_sha256": "6743eae87255af87d8c811b4e371a2275a4c272c552954a6c2f096390954883e",
+    "native_preferences_sha256": "b135612cf93d0412f1a2b7a488c67142bf5f1e65721c599be2f5f7307b13bb81",
     "preference_loader_plist_sha256": "71fc0acb528f61c9342b55cd8fbb9ad70249f5cef74c79e838524fc062be2194",
     "preferences_stub_sha256": "4a9cd4969e38b32ec91a1baf304f1127fb444198143907b5b019ae9d45bcd193"
   },
@@ -30,16 +33,18 @@
   "status": {
     "upstream_runtime": "FAILED_QUARANTINED",
     "compatibility_build": "HOST_BUILD_VALIDATED",
-    "device_install": "VERIFIED",
-    "device_runtime": "VERIFIED_INJECTED_STABLE_WINDOW",
-    "preference_bundle_load": "VERIFIED",
+    "device_install": "VERIFIED_PACKAGE_0SKY27_3",
+    "device_runtime": "UNTESTED_RUNTIME_SYNC_RSD_TIMEOUT",
+    "previous_device_runtime": "FAILED_POINTER_AUTH_GRID_LAYOUT_ABI_0SKY27_2",
+    "native_preferences": "INSTALLED_STRUCTURE_VALIDATED_DISPLAY_PENDING",
+    "preference_bundle_load": "PENDING_RUNTIME_SYNC_AND_RECONNECT",
     "editor_uat": "UNTESTED"
   },
   "validated_artifact": {
-    "filename": "me.lau.atria_1.4.1+0sky27.1_iphoneos-arm64.deb",
-    "sha256": "c450b4e7d65b8f0f89dd2cc52305044dbb39808d32140108b141006d955e0e4c",
-    "installed_dylib_sha256": "2d06dfea3b50d6e1696460e5e7331cc87b2c89943f9eae13fd3fac8f134a7507",
-    "installed_preferences_executable_sha256": "c114c8c22f9cb2ca29f742f4456429fcb2a1ee8817685340dc6b4011fd3c5c0d",
+    "filename": "me.lau.atria_1.4.1+0sky27.3_iphoneos-arm64.deb",
+    "sha256": "49292898ffdad9c6686fb8c5e4d0cf59ea0b066d16790056fe3e25ee3cfa1707",
+    "installed_dylib_sha256": "PENDING_INSTALL",
+    "installed_preferences_executable_sha256": "PENDING_INSTALL",
     "evidence": "validation/device-validation-24A5390f.json"
   }
 }

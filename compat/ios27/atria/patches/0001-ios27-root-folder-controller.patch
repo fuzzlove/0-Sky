@@ -27,7 +27,7 @@ index 2709321..3450410 100644
  Section: Tweaks
 -Version: 1.4.1
 \ No newline at end of file
-+Version: 1.4.1+0sky27.1
++Version: 1.4.1+0sky27.3
 \ No newline at end of file
 diff --git a/src/Hooks/GridLayout.xm b/src/Hooks/GridLayout.xm
 index eff8fd2..89a79a3 100644
@@ -55,6 +55,21 @@ index eff8fd2..89a79a3 100644
  		return size;
  	}
  	// If location is already set, size should have been modified as needed
+@@ -185,7 +185,14 @@ static struct SBHIconGridSizeClassSizes generateGridSizeClassSizes(double cols,
+ %end
+ 
+ %ctor {
+ 	ARITweakManager *manager = [ARITweakManager sharedInstance];
++	// These hooks write private SBH grid structs directly into ivars whose ABI
++	// changed after iOS 16. The modern MainLayout configuration path remains
++	// active; skip the legacy model mutation to avoid pointer corruption.
++	if([manager firmwareVersion] >= 17) {
++		NSLog(@"[Atria]: Skipping legacy grid-model ABI hooks on iOS 17+");
++		return;
++	}
+ 	if([manager isEnabled] && [manager boolValueForKey:@"layoutEnabled"]) {
+ 		NSLog(@"[Atria]: Loading hooks from %s", __FILE__);
+ 
 diff --git a/src/Hooks/Helper.xm b/src/Hooks/Helper.xm
 index 00e602e..67be8d8 100644
 --- a/src/Hooks/Helper.xm
@@ -70,9 +85,21 @@ index 00e602e..67be8d8 100644
      }
  }
 diff --git a/src/Hooks/IconView.xm b/src/Hooks/IconView.xm
-index 6597fba..660b23b 100644
+index 6597fba..0a4e89b 100644
 --- a/src/Hooks/IconView.xm
 +++ b/src/Hooks/IconView.xm
+@@ -166,7 +166,10 @@
+ - (void)_atriaSetupDropShadow:(BOOL)isEditing {
+ 	BOOL enabled = [[ARITweakManager sharedInstance] boolValueForKey:@"dropShadow"];
+ 	SBIcon *icon = [self icon];
+-	BOOL widgetOrAppIcon = [icon application] || [icon isKindOfClass:objc_getClass("SBWidgetIcon")] || [icon isKindOfClass:objc_getClass("SBBookmarkIcon")];
++	// SBWidgetIcon and SBFolderIcon no longer implement -application on iOS 27.
++	// Query it only for icon classes that actually advertise the selector.
++	id application = [icon respondsToSelector:@selector(application)] ? [icon application] : nil;
++	BOOL widgetOrAppIcon = application || [icon isKindOfClass:objc_getClass("SBWidgetIcon")] || [icon isKindOfClass:objc_getClass("SBBookmarkIcon")];
+ 	// Don't apply shadows in floating dock, because dynamic scaling of the app icons gets weird
+ 	// Use containsString instead of the macro because we need to check for the suggestions location too
+ 	if(enabled && !isEditing && widgetOrAppIcon && ![self.location containsString:@"Floating"]) {
 @@ -214,7 +214,8 @@
  	// Add shortcut item to activate editor
  	// I found this really cool gist to allow me to do this, tyvm to the author <3
@@ -84,9 +111,19 @@ index 6597fba..660b23b 100644
  	if(!items) items = [NSMutableArray new];
  
 diff --git a/src/Hooks/MainLayout.xm b/src/Hooks/MainLayout.xm
-index 4af459b..4b52950 100644
+index 4af459b..cd342ce 100644
 --- a/src/Hooks/MainLayout.xm
 +++ b/src/Hooks/MainLayout.xm
+@@ -41,7 +41,8 @@
+ 	if(self._originalLayout != orig || self._atriaNeedsLayout) {
+ 		self._originalLayout = orig;
+ 		[self _atriaUpdateLayoutCache];
+-		[model _atriaUpdateModelGridSizes];
++		if([model respondsToSelector:@selector(_atriaUpdateModelGridSizes)])
++			[model _atriaUpdateModelGridSizes];
+ 		self._atriaNeedsLayout = NO;
+ 	}
+ 
 @@ -267,6 +267,17 @@ static BOOL didLaunchSB = NO;
  
  %end
@@ -105,6 +142,24 @@ index 4af459b..4b52950 100644
  // Layout provider hook
  %hook SBHDefaultIconListLayoutProvider
  
+@@ -317,6 +328,17 @@ static void preferencesChanged() {
+ 			(CFStringRef)@"me.lau.Atria/ReloadPrefs",
+ 			NULL,
+ 			CFNotificationSuspensionBehaviorDeliverImmediately
+ 		);
++		// 0-Sky's data-only iOS 27 preference host only posts notifications
++		// within the preference domain. Keep the upstream notification while
++		// accepting the native host's scoped equivalent.
++		CFNotificationCenterAddObserver(
++			CFNotificationCenterGetDarwinNotifyCenter(),
++			NULL,
++			(CFNotificationCallback)preferencesChanged,
++			(CFStringRef)@"me.lau.AtriaPrefs/ReloadPrefs",
++			NULL,
++			CFNotificationSuspensionBehaviorDeliverImmediately
++		);
+ 	}
+ }
 diff --git a/src/Manager/ARIEditManager.m b/src/Manager/ARIEditManager.m
 index 1913330..845c686 100644
 --- a/src/Manager/ARIEditManager.m

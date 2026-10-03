@@ -8,7 +8,7 @@ UPSTREAM_ARCHIVE_SHA256=bbcb6929b4477990214c1e135b401354940b5eb9ab37c388469cff1e
 THEOS_COMMIT=dd5c14bb9d91311e221d51b5bfb8c9e5948156db
 SDK_VERSION=26.5
 SOURCE_DATE_EPOCH=1687460877
-PACKAGE_NAME=me.lau.atria_1.4.1+0sky27.1_iphoneos-arm64.deb
+PACKAGE_NAME=me.lau.atria_1.4.1+0sky27.3_iphoneos-arm64.deb
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(git -C "$SCRIPT_DIR" rev-parse --show-toplevel)
@@ -90,9 +90,11 @@ actual_archive=$(git -C "$SOURCE_DIR" archive --format=tar HEAD | shasum -a 256 
 git -C "$SOURCE_DIR" apply --check "$SCRIPT_DIR/patches/0001-ios27-root-folder-controller.patch"
 git -C "$SOURCE_DIR" apply "$SCRIPT_DIR/patches/0001-ios27-root-folder-controller.patch"
 cp "$SCRIPT_DIR/files/Makefile" "$SOURCE_DIR/Makefile"
-mkdir -p "$SOURCE_DIR/packaging" "$SOURCE_DIR/stubs/Preferences.framework"
+mkdir -p "$SOURCE_DIR/packaging" "$SOURCE_DIR/stubs/Preferences.framework" \
+    "$SOURCE_DIR/Prefs/Resources"
 cp "$SCRIPT_DIR/files/packaging/AtriaPrefs.plist" "$SOURCE_DIR/packaging/AtriaPrefs.plist"
 cp "$SCRIPT_DIR/files/stubs/Preferences.framework/Preferences.tbd" "$SOURCE_DIR/stubs/Preferences.framework/Preferences.tbd"
+cp "$SCRIPT_DIR/files/Prefs/Resources/Root.plist" "$SOURCE_DIR/Prefs/Resources/Root.plist"
 
 export THEOS
 export SOURCE_DATE_EPOCH
@@ -102,7 +104,40 @@ make -C "$SOURCE_DIR" clean package FINALPACKAGE=1
 package="$SOURCE_DIR/packages/$PACKAGE_NAME"
 [ -f "$package" ] || { echo "error: expected package was not built: $package" >&2; exit 1; }
 
-python3 "$SCRIPT_DIR/validate_package.py" "$package"
-cp "$package" "$OUTPUT_DIR/$PACKAGE_NAME"
+# Theos' legacy dm.pl packager preserves the wall-clock build time in the ar
+# and tar members. Normalize the already-built filesystem tree so identical
+# source inputs produce an identical final DEB and hash.
+NORMALIZED_DIR="$BUILD_ROOT/normalized-package"
+NORMALIZED_PACKAGE="$BUILD_ROOT/$PACKAGE_NAME"
+python3 - "$NORMALIZED_DIR" <<'PY'
+from pathlib import Path
+import shutil
+import sys
+
+path = Path(sys.argv[1])
+if path.exists():
+    shutil.rmtree(path)
+path.mkdir(parents=True)
+PY
+dpkg-deb -R "$package" "$NORMALIZED_DIR" >/dev/null
+python3 - "$NORMALIZED_DIR" "$SOURCE_DATE_EPOCH" <<'PY'
+from pathlib import Path
+import os
+import sys
+
+root = Path(sys.argv[1])
+epoch = int(sys.argv[2])
+for path in sorted(root.rglob("*")):
+    try:
+        os.utime(path, (epoch, epoch), follow_symlinks=False)
+    except (FileNotFoundError, NotImplementedError):
+        pass
+os.utime(root, (epoch, epoch))
+PY
+dpkg-deb --root-owner-group --uniform-compression -Zgzip -z9 \
+    --build "$NORMALIZED_DIR" "$NORMALIZED_PACKAGE" >/dev/null
+
+python3 "$SCRIPT_DIR/validate_package.py" "$NORMALIZED_PACKAGE"
+cp "$NORMALIZED_PACKAGE" "$OUTPUT_DIR/$PACKAGE_NAME"
 echo "package: $OUTPUT_DIR/$PACKAGE_NAME"
 shasum -a 256 "$OUTPUT_DIR/$PACKAGE_NAME"
