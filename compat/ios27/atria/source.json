@@ -40,6 +40,6 @@
     "sha256": "c450b4e7d65b8f0f89dd2cc52305044dbb39808d32140108b141006d955e0e4c",
     "installed_dylib_sha256": "2d06dfea3b50d6e1696460e5e7331cc87b2c89943f9eae13fd3fac8f134a7507",
     "installed_preferences_executable_sha256": "c114c8c22f9cb2ca29f742f4456429fcb2a1ee8817685340dc6b4011fd3c5c0d",
-    "evidence": "evidence/device-validation-24A5390f.json"
+    "evidence": "validation/device-validation-24A5390f.json"
   }
 }

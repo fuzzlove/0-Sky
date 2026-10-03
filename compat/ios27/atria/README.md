@@ -73,7 +73,7 @@ device-changing step.
 
 The validated DEB has SHA-256
 `c450b4e7d65b8f0f89dd2cc52305044dbb39808d32140108b141006d955e0e4c`.
-See `evidence/device-validation-24A5390f.json` for the sanitized automated
+See `validation/device-validation-24A5390f.json` for the sanitized automated
 result. Device identifiers, pairing material, signing keys, and raw crash
 reports are deliberately excluded.
 

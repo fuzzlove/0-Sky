@@ -1,0 +1,53 @@
+{
+  "schema": 1,
+  "captured_at": "2026-10-03T13:50:31Z",
+  "shareable": true,
+  "target": {
+    "hardware_model": "iPhone13,2",
+    "ios_version": "27.0",
+    "ios_build": "24A5390f"
+  },
+  "package": {
+    "identifier": "me.lau.atria",
+    "version": "1.4.1+0sky27.1",
+    "status": "install ok installed",
+    "artifact_sha256": "c450b4e7d65b8f0f89dd2cc52305044dbb39808d32140108b141006d955e0e4c",
+    "installed_dylib_sha256": "2d06dfea3b50d6e1696460e5e7331cc87b2c89943f9eae13fd3fac8f134a7507",
+    "installed_preferences_executable_sha256": "c114c8c22f9cb2ca29f742f4456429fcb2a1ee8817685340dc6b4011fd3c5c0d"
+  },
+  "automated_results": {
+    "runtime_sync": "PASS",
+    "runtime_registry_exact_hash": "PASS",
+    "springboard_injection_exact_hash": "PASS",
+    "atria_quarantine_absent": "PASS",
+    "springboard_pid_stable_automated_window": "PASS",
+    "new_springboard_crash_in_automated_window": "NONE",
+    "preference_bundle_dlopen": "PASS"
+  },
+  "failure_evidence": {
+    "upstream_version": "1.4.1",
+    "upstream_dylib_sha256": "f8d84a5c1917f50e4e18e5ba53f210ae3912d32645627318f096ac9900f88686",
+    "result": "FAILED",
+    "exception": "NSInvalidArgumentException",
+    "signature": "-[SBIconController _rootFolderController]: unrecognized selector",
+    "note": "Captured reports identify the upstream hash, not the compatibility-build hash."
+  },
+  "regression_checks": {
+    "appsync_unified": "INSTALLED_AND_LOADED_EXACT_HASHES",
+    "afc2": "INSTALLED_AND_LOADED_EXACT_HASH",
+    "crane": "SPRINGBOARD_COMPONENTS_LOADED_WITHOUT_QUARANTINE",
+    "doodle": "PREEXISTING_PENDING_QUARANTINE_UNCHANGED"
+  },
+  "remaining": {
+    "editor_functional_uat": "UNTESTED",
+    "required_operator_action": "Open Atria editor, make and reverse one layout change, and confirm SpringBoard remains stable."
+  },
+  "redactions": [
+    "device_unique_identifiers",
+    "pairing_records",
+    "private_keys",
+    "randomized_cryptex_mount_suffixes",
+    "process_identifiers",
+    "raw_crash_reports"
+  ]
+}
