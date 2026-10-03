@@ -120,10 +120,10 @@ CRANE_IOS27_LIBCRANE_IDENTIFIER = (
     "codes.openai.research.support." + CRANE_IOS27_LIBCRANE_SOURCE_SHA256[:20]
 )
 CRANE_IOS27_SPRINGBOARD_COMPAT_SOURCE_SHA256 = (
-    "6891c3c33f4e2853e233a10d43fceca6c2b0cb0dba3de1c50f8b86b386a538dd"
+    "eda48d25c8699521386c327746ba52ecdbb0130c01dd209cd6a033ee0e3987c5"
 )
 CRANE_IOS27_SPRINGBOARD_COMPAT_SHA256 = (
-    "7a14cb0b25f15113dc1146f504a9cb06d10b422abcd04b4a40423f3912e3934d"
+    "420b7efc5b0efb8776c08959506e96e80243fb065f656e1c9f51c1e65732b8a9"
 )
 CRANE_IOS27_SPRINGBOARD_COMPAT_FILTER_SHA256 = (
     "e7dc57a8e03d8bfbdcc532669806e91849452e5974645aad9dffde2d6e2a90d5"
@@ -454,7 +454,7 @@ def _sign_crane_library_ios27(root: Path, package: str) -> list[dict]:
 
 
 def _build_crane_springboard_compat_ios27(root: Path, package: str) -> list[dict]:
-    """Build the exact iOS 27 shortcut-provider companion for paid Crane."""
+    """Build the exact iOS 27 menu diagnostic companion for paid Crane."""
     if package != "com.opa334.crane":
         return []
     source = Path(__file__).with_name("shims") / "crane_springboard_ios27.m"
@@ -527,13 +527,14 @@ def _build_crane_springboard_compat_ios27(root: Path, package: str) -> list[dict
     if _sha256(filter_path) != CRANE_IOS27_SPRINGBOARD_COMPAT_FILTER_SHA256:
         raise ValueError("Crane SpringBoard compatibility filter differs")
     return [{
-        "adapter": "ios27-springboard-shortcut-provider-v1",
+        "adapter": "ios27-springboard-menu-children-v6",
         "path": "/var/jb/Library/MobileSubstrate/DynamicLibraries/CraneSBCompat.dylib",
         "source_sha256": CRANE_IOS27_SPRINGBOARD_COMPAT_SOURCE_SHA256,
         "adapted_sha256": CRANE_IOS27_SPRINGBOARD_COMPAT_SHA256,
         "filter_sha256": CRANE_IOS27_SPRINGBOARD_COMPAT_FILTER_SHA256,
-        "change": "replace Crane's marker in the iOS 27 effective shortcut array",
-        "reason": "iOS 27 removed UIMenu._interfaceActionGroupForActions:",
+        "change": "replace the sentinel in UIMenu children using Crane's reviewed menu builder",
+        "reason": ("iOS 27 bypasses Crane's legacy private menu-construction hooks "
+                   "after producing a title-based container-selection sentinel"),
     }]
 
 

@@ -1607,17 +1607,18 @@ def validate_crane_binary_transformations(package, value):
             "reason": ("sandboxed iOS 27 daemon injection requires the dependency bytes "
                        "to match the active SRD trust-cache generation"),
         }, {
-            "adapter": "ios27-springboard-shortcut-provider-v1",
+            "adapter": "ios27-springboard-menu-children-v6",
             "path": ("/var/jb/Library/MobileSubstrate/DynamicLibraries/"
                      "CraneSBCompat.dylib"),
-            "source_sha256": ("6891c3c33f4e2853e233a10d43fceca6"
-                              "c2b0cb0dba3de1c50f8b86b386a538dd"),
-            "adapted_sha256": ("7a14cb0b25f15113dc1146f504a9cb06"
-                               "d10b422abcd04b4a40423f3912e3934d"),
+            "source_sha256": ("eda48d25c8699521386c327746ba52ec"
+                              "dbb0130c01dd209cd6a033ee0e3987c5"),
+            "adapted_sha256": ("420b7efc5b0efb8776c08959506e96e8"
+                               "0243fb065f656e1c9f51c1e65732b8a9"),
             "filter_sha256": ("e7dc57a8e03d8bfbdcc532669806e918"
                               "49452e5974645aad9dffde2d6e2a90d5"),
-            "change": "replace Crane's marker in the iOS 27 effective shortcut array",
-            "reason": "iOS 27 removed UIMenu._interfaceActionGroupForActions:",
+            "change": "replace the sentinel in UIMenu children using Crane's reviewed menu builder",
+            "reason": ("iOS 27 bypasses Crane's legacy private menu-construction hooks "
+                       "after producing a title-based container-selection sentinel"),
         }]
     if value != expected:
         raise RuntimeError(package + ": binary transformations differ from the reviewed contract")
