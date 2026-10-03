@@ -32,6 +32,7 @@ after-CrypStore-stage::
 	@cp "$(CRANE_RUNTIME_DIR)/libellekit.dylib" "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/Frameworks/"
 	@cp -R "$(CRANE_RUNTIME_DIR)/AltList.framework" "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/Frameworks/"
 	@cp -R "$(CRANE_RUNTIME_DIR)/CranePrefs.bundle" "$(THEOS_STAGING_DIR)/Applications/CrypStore.app/"
-	@/usr/bin/install_name_tool -add_rpath '@loader_path/../Frameworks' \
-		"$(THEOS_STAGING_DIR)/Applications/CrypStore.app/CranePrefs.bundle/CranePrefs"
+	@/usr/bin/codesign --verify --strict \
+		"$(THEOS_STAGING_DIR)/Applications/CrypStore.app/CranePrefs.bundle/CranePrefs" || \
+		(echo "CRANE_RUNTIME_DIR must contain the reviewed signed CranePrefs executable" >&2; exit 1)
 endif

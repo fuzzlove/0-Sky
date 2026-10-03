@@ -15,10 +15,41 @@
 @property(nonatomic,strong) UIRefreshControl* pullRefresh;
 @property(nonatomic,strong) UIBarButtonItem* exportButton;
 @property(nonatomic,strong) UIBarButtonItem* removeButton;
+@property(nonatomic,strong) UIBarButtonItem* quarantineButton;
 @property(nonatomic,strong) NSDictionary* packageHealth;
+@property(nonatomic,strong) NSArray* quarantines;
 @end
 
 static NSString* const TSTweakSettingsRequestPath = @"/var/mobile/pl/open-tweak-settings.json";
+static NSString* const TSQuarantineWarningFingerprintKey =
+    @"ZeroSkyControlAcknowledgedQuarantineFingerprint";
+
+static NSString* TSQuarantineFingerprint(NSArray* quarantines)
+{
+    NSMutableArray<NSString*>* identities = [NSMutableArray array];
+    for(NSDictionary* item in quarantines) {
+        NSString* package = [item[@"package"] isKindOfClass:NSString.class]
+            ? item[@"package"] : @"";
+        NSString* target = [item[@"target"] isKindOfClass:NSString.class]
+            ? item[@"target"] : @"";
+        NSString* dylib = [item[@"dylib"] isKindOfClass:NSString.class]
+            ? item[@"dylib"] : @"";
+        NSString* stamp = [item[@"time"] isKindOfClass:NSString.class]
+            ? item[@"time"] : @"";
+        [identities addObject:[NSString stringWithFormat:@"%@|%@|%@|%@",
+                               package, target, dylib, stamp]];
+    }
+    [identities sortUsingSelector:@selector(compare:)];
+    NSData* data = [[identities componentsJoinedByString:@"\n"]
+        dataUsingEncoding:NSUTF8StringEncoding];
+    if(!data.length) return nil;
+    unsigned char digest[CC_SHA256_DIGEST_LENGTH];
+    CC_SHA256(data.bytes, (CC_LONG)data.length, digest);
+    NSMutableString* result = [NSMutableString stringWithCapacity:CC_SHA256_DIGEST_LENGTH * 2];
+    for(NSUInteger index = 0; index < CC_SHA256_DIGEST_LENGTH; index++)
+        [result appendFormat:@"%02x", digest[index]];
+    return result;
+}
 
 static NSString* TSDeviceSysctlString(const char* name)
 {
@@ -311,7 +342,10 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
 - (instancetype)init
 {
     self = [super initWithStyle:UITableViewStyleInsetGrouped];
-    if(self) _tweaks = @[];
+    if(self) {
+        _tweaks = @[];
+        _quarantines = @[];
+    }
     return self;
 }
 
@@ -329,10 +363,16 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
     self.removeButton.enabled = NO;
     self.removeButton.accessibilityLabel = @"Remove installed tweak";
     self.removeButton.accessibilityIdentifier = @"ZeroSkyControlRemoveTweakMenu";
+    self.quarantineButton = [[UIBarButtonItem alloc]
+        initWithImage:[UIImage systemImageNamed:@"shield.lefthalf.filled"]
+        style:UIBarButtonItemStylePlain target:nil action:nil];
+    self.quarantineButton.enabled = NO;
+    self.quarantineButton.accessibilityLabel = @"Review quarantined tweaks";
+    self.quarantineButton.accessibilityIdentifier = @"ZeroSkyControlQuarantineMenu";
     // Preserve the existing package-import button while making export
     // and removal discoverable. The first item is the trailing button.
     self.navigationItem.rightBarButtonItems =
-        @[addButton, self.exportButton, self.removeButton];
+        @[addButton, self.exportButton, self.quarantineButton, self.removeButton];
     UIBarButtonItem* fixMenus = [[UIBarButtonItem alloc]
         initWithTitle:@"Fix Menus" style:UIBarButtonItemStylePlain
         target:self action:@selector(repairPreferenceMenus)];
@@ -382,6 +422,12 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
         NSError* coreError = nil;
         NSDictionary* envelope = [[TSApplicationsManager sharedInstance]
             coreRequestOperation:@"getPackages" parameters:@{@"limit": @512} error:&coreError];
+        NSDictionary* quarantineEnvelope = [[TSApplicationsManager sharedInstance]
+            coreRequestOperation:@"getQuarantinedTweaks"
+            parameters:@{@"limit": @256} error:nil];
+        NSArray* quarantines = [quarantineEnvelope[@"result"][@"quarantines"]
+            isKindOfClass:NSArray.class]
+            ? quarantineEnvelope[@"result"][@"quarantines"] : @[];
         NSArray* packages = [envelope[@"result"][@"packages"] isKindOfClass:NSArray.class]
             ? envelope[@"result"][@"packages"] : @[];
         NSMutableDictionary* packageHealth = [NSMutableDictionary dictionary];
@@ -400,13 +446,16 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
         dispatch_async(dispatch_get_main_queue(), ^{
             if(tweaks) self.tweaks = tweaks;
             self.packageHealth = packageHealth;
+            self.quarantines = quarantines;
             [self rebuildExportMenu];
             [self rebuildRemovalMenu];
+            [self rebuildQuarantineMenu];
             [self.pullRefresh endRefreshing];
             [self.tableView reloadData];
             self.navigationItem.prompt = inventory
                 ? [NSString stringWithFormat:@"%lu installed package payloads", (unsigned long)self.tweaks.count]
                 : @"Local inventory service unavailable";
+            [self presentNewQuarantineWarningIfNeeded];
         });
     });
 }
@@ -467,6 +516,199 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
         title = dylib.length ? dylib : package;
     }
     return title;
+}
+
+- (NSString*)displayNameForPackage:(NSString*)package
+{
+    for(NSDictionary* tweak in self.tweaks) {
+        if([tweak[@"package"] isEqualToString:package])
+            return [self displayTitleForTweak:tweak];
+    }
+    return package.length ? package : @"Unknown tweak";
+}
+
+- (void)retryQuarantine:(NSDictionary*)item
+{
+    NSString* package = [item[@"package"] isKindOfClass:NSString.class]
+        ? item[@"package"] : nil;
+    NSString* target = [item[@"target"] isKindOfClass:NSString.class]
+        ? item[@"target"] : nil;
+    if(!package.length || !target.length || [self isProtectedPackage:package]) return;
+    self.quarantineButton.enabled = NO;
+    self.navigationItem.prompt = [NSString stringWithFormat:@"Retrying %@…", package];
+    [TSPresentationDelegate startActivity:@"Retrying quarantined tweak"];
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+        NSError* error = nil;
+        NSDictionary* envelope = [[TSApplicationsManager sharedInstance]
+            coreRequestOperation:@"clearTweakQuarantine"
+            parameters:@{@"package": package, @"target": target} error:&error];
+        BOOL success = [envelope[@"success"] boolValue];
+        NSString* message = success
+            ? (envelope[@"result"][@"message"] ?: @"The retry was queued.")
+            : (error.localizedDescription ?: envelope[@"errorMessage"] ?:
+               @"The quarantine state changed before it could be retried.");
+        dispatch_async(dispatch_get_main_queue(), ^{
+            [TSPresentationDelegate stopActivityWithCompletion:^{
+                self.navigationItem.prompt = success
+                    ? @"Retry queued • runtime protection remains active"
+                    : @"Tweak retry failed";
+                [self showTitle:success ? @"Retry queued" : @"Retry failed"
+                    message:message];
+                dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                    (int64_t)(1.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                    [self refresh];
+                });
+            }];
+        });
+    });
+}
+
+- (void)presentQuarantineDetail:(NSDictionary*)item
+{
+    NSString* package = [item[@"package"] isKindOfClass:NSString.class]
+        ? item[@"package"] : @"Unknown package";
+    NSString* target = [item[@"target"] isKindOfClass:NSString.class]
+        ? item[@"target"] : @"Unknown process";
+    NSString* reason = [item[@"reason"] isKindOfClass:NSString.class]
+        ? item[@"reason"] : @"The runtime stopped this tweak after a failed load.";
+    NSString* dylib = [item[@"dylib"] isKindOfClass:NSString.class]
+        ? item[@"dylib"] : @"Unknown component";
+    NSString* name = [self displayNameForPackage:package];
+    BOOL protected = [self isProtectedPackage:package];
+    NSString* message = [NSString stringWithFormat:
+        @"0-Sky quarantined %@ to protect the device.\n\n"
+         @"Package: %@\nTarget: %@\nComponent: %@\nReason: %@\n\n"
+         @"Retrying may destabilize the affected process. If it fails again, "
+         @"runtime protection will quarantine it again.%@",
+        name, package, target, dylib, reason,
+        protected ? @"\n\nThis foundational package must be repaired from the paired Mac." : @""];
+    UIAlertController* alert = [UIAlertController alertControllerWithTitle:@"Tweak quarantined"
+        message:message preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
+        style:UIAlertActionStyleCancel handler:nil]];
+    if(!protected) {
+        [alert addAction:[UIAlertAction actionWithTitle:@"Remove Tweak"
+            style:UIAlertActionStyleDestructive handler:^(UIAlertAction* action) {
+                (void)action;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self confirmRemovalOfPackage:package displayName:name];
+                });
+            }]];
+        [alert addAction:[UIAlertAction actionWithTitle:@"Retry Tweak"
+            style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+                (void)action;
+                [self retryQuarantine:item];
+            }]];
+    }
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)presentQuarantineChooser
+{
+    if(!self.quarantines.count) return;
+    if(self.quarantines.count == 1) {
+        [self presentQuarantineDetail:self.quarantines.firstObject];
+        return;
+    }
+    UIAlertController* chooser = [UIAlertController alertControllerWithTitle:@"Quarantined Tweaks"
+        message:@"Choose a protected process to review, retry, or remove its tweak."
+        preferredStyle:UIAlertControllerStyleActionSheet];
+    for(NSDictionary* item in self.quarantines) {
+        NSString* package = [item[@"package"] isKindOfClass:NSString.class]
+            ? item[@"package"] : @"Unknown package";
+        NSString* target = [item[@"target"] isKindOfClass:NSString.class]
+            ? item[@"target"] : @"Unknown process";
+        NSString* title = [NSString stringWithFormat:@"%@ — %@",
+                           [self displayNameForPackage:package], target];
+        [chooser addAction:[UIAlertAction actionWithTitle:title
+            style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+                (void)action;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    [self presentQuarantineDetail:item];
+                });
+            }]];
+    }
+    [chooser addAction:[UIAlertAction actionWithTitle:@"Cancel"
+        style:UIAlertActionStyleCancel handler:nil]];
+    chooser.popoverPresentationController.sourceView = self.view;
+    chooser.popoverPresentationController.sourceRect = CGRectMake(
+        CGRectGetMidX(self.view.bounds), CGRectGetMinY(self.view.bounds), 1, 1);
+    [self presentViewController:chooser animated:YES completion:nil];
+}
+
+- (void)rebuildQuarantineMenu
+{
+    NSMutableArray<UIMenuElement*>* actions = [NSMutableArray array];
+    for(NSDictionary* item in self.quarantines) {
+        NSString* package = [item[@"package"] isKindOfClass:NSString.class]
+            ? item[@"package"] : nil;
+        NSString* target = [item[@"target"] isKindOfClass:NSString.class]
+            ? item[@"target"] : nil;
+        if(!package.length || !target.length) continue;
+        NSString* title = [NSString stringWithFormat:@"%@ — %@",
+                           [self displayNameForPackage:package], target];
+        UIAction* action = [UIAction actionWithTitle:title
+            image:[UIImage systemImageNamed:[self isProtectedPackage:package]
+                ? @"lock.shield" : @"shield.slash"] identifier:nil
+            handler:^(__kindof UIAction* selectedAction) {
+                (void)selectedAction;
+                [self presentQuarantineDetail:item];
+            }];
+        if(@available(iOS 15.0, *)) {
+            NSString* reason = [item[@"reason"] isKindOfClass:NSString.class]
+                ? item[@"reason"] : @"Protected after a failed load";
+            action.subtitle = reason;
+        }
+        [actions addObject:action];
+    }
+    self.quarantineButton.menu = [UIMenu menuWithTitle:
+        @"Quarantined tweaks are disabled automatically after failed runtime loads."
+        children:actions];
+    self.quarantineButton.enabled = actions.count > 0;
+    self.quarantineButton.tintColor = actions.count > 0
+        ? UIColor.systemOrangeColor : nil;
+}
+
+- (void)presentNewQuarantineWarningIfNeeded
+{
+    NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+    NSString* fingerprint = TSQuarantineFingerprint(self.quarantines);
+    if(!fingerprint.length) {
+        [defaults removeObjectForKey:TSQuarantineWarningFingerprintKey];
+        return;
+    }
+    if([[defaults stringForKey:TSQuarantineWarningFingerprintKey]
+        isEqualToString:fingerprint] || self.presentedViewController) return;
+    NSMutableOrderedSet<NSString*>* names = [NSMutableOrderedSet orderedSet];
+    for(NSDictionary* item in self.quarantines) {
+        NSString* package = [item[@"package"] isKindOfClass:NSString.class]
+            ? item[@"package"] : nil;
+        if(package.length) [names addObject:[self displayNameForPackage:package]];
+    }
+    NSArray* visible = names.array.count > 5
+        ? [names.array subarrayWithRange:NSMakeRange(0, 5)] : names.array;
+    NSString* list = [visible componentsJoinedByString:@", "];
+    NSString* more = names.count > visible.count
+        ? [NSString stringWithFormat:@" and %lu more",
+           (unsigned long)(names.count - visible.count)] : @"";
+    NSString* message = [NSString stringWithFormat:
+        @"0-Sky placed %@%@ in quarantine after a failed runtime load to protect the device. "
+         @"The tweak remains installed but disabled for the affected process.\n\n"
+         @"Review it to retry or remove the incompatible tweak.", list, more];
+    UIAlertController* alert = [UIAlertController alertControllerWithTitle:
+        @"Tweak protection activated" message:message
+        preferredStyle:UIAlertControllerStyleAlert];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Later"
+        style:UIAlertActionStyleCancel handler:nil]];
+    [alert addAction:[UIAlertAction actionWithTitle:@"Review Quarantine"
+        style:UIAlertActionStyleDefault handler:^(UIAlertAction* action) {
+            (void)action;
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self presentQuarantineChooser];
+            });
+        }]];
+    [defaults setObject:fingerprint forKey:TSQuarantineWarningFingerprintKey];
+    [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)rebuildRemovalMenu
@@ -749,7 +991,11 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
         ? self.packageHealth[package][@"health"] : @"Unknown";
     NSString* runtimeState = [self.packageHealth[package][@"runtimeState"] isKindOfClass:NSString.class]
         ? self.packageHealth[package][@"runtimeState"] : nil;
-    if(doodle && NSProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27)
+    NSNumber* quarantinedCount = [self.packageHealth[package][@"quarantinedCount"]
+        isKindOfClass:NSNumber.class] ? self.packageHealth[package][@"quarantinedCount"] : nil;
+    if(quarantinedCount.integerValue > 0)
+        health = @"QUARANTINED FOR SAFETY • use the shield menu to retry or remove";
+    else if(doodle && NSProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27)
         health = [self isVerifiedDoodlePort:tweak]
             ? @"VERIFIED on this device • pattern and keypad UAT passed"
             : [self.packageHealth[package][@"version"] isEqualToString:@"1:1.1+0sky27.2"]

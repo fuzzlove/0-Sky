@@ -119,6 +119,13 @@ CRANE_IOS27_LIBCRANE_SIGNED_SHA256 = (
 CRANE_IOS27_LIBCRANE_IDENTIFIER = (
     "codes.openai.research.support." + CRANE_IOS27_LIBCRANE_SOURCE_SHA256[:20]
 )
+CRANE_IOS27_PREFERENCES_SOURCE_SHA256 = (
+    "20d85ee4f3c656162ac7cb5805ef14f076b4ef283935a8cc7d276e379754e3a8"
+)
+CRANE_IOS27_PREFERENCES_SIGNED_SHA256 = (
+    "f785613bba274b1f9f10f95180d73e7779fc8640cacdbad1bfaa083668b302b7"
+)
+CRANE_IOS27_PREFERENCES_IDENTIFIER = "com.opa334.craneprefs"
 CRANE_IOS27_SPRINGBOARD_COMPAT_SOURCE_SHA256 = (
     "eda48d25c8699521386c327746ba52ecdbb0130c01dd209cd6a033ee0e3987c5"
 )
@@ -453,6 +460,55 @@ def _sign_crane_library_ios27(root: Path, package: str) -> list[dict]:
     }]
 
 
+def _sign_crane_preferences_ios27(root: Path, package: str) -> list[dict]:
+    """Sign Crane's reviewed preference executable for direct NSBundle use.
+
+    The SRD runtime already admits this exact deterministic CodeDirectory so
+    both Apple's Settings host and 0-Sky Control can load the package-owned
+    preference bundle.  Shipping the signed bytes in the adapted package also
+    prevents a package reinstall from restoring the unsigned vendor slice.
+    """
+    if package != "com.opa334.crane":
+        return []
+    relative = Path(
+        "var/jb/Library/PreferenceBundles/CranePrefs.bundle/CranePrefs")
+    path = root / relative
+    if not path.is_file() or path.is_symlink():
+        raise ValueError("paid Crane has no regular CranePrefs executable")
+    original_hash = _sha256(path)
+    if original_hash != CRANE_IOS27_PREFERENCES_SOURCE_SHA256:
+        raise ValueError(
+            "paid CranePrefs differs from the reviewed iOS 27 signing adapter")
+    completed = subprocess.run(
+        ["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none",
+         "--identifier", CRANE_IOS27_PREFERENCES_IDENTIFIER, str(path)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=30, check=False,
+    )
+    if completed.returncode:
+        raise ValueError("paid CranePrefs deterministic signing failed: " +
+                         completed.stderr.decode("utf-8", "replace")[-500:])
+    adapted_hash = _sha256(path)
+    if adapted_hash != CRANE_IOS27_PREFERENCES_SIGNED_SHA256:
+        raise ValueError("paid CranePrefs signing output differs from reviewed bytes")
+    verified = subprocess.run(
+        ["/usr/bin/codesign", "--verify", "--strict", str(path)],
+        stdin=subprocess.DEVNULL, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=30, check=False,
+    )
+    if verified.returncode:
+        raise ValueError("paid CranePrefs signed output did not verify")
+    return [{
+        "adapter": "ios27-preference-bundle-signing-v1",
+        "path": "/" + relative.as_posix(),
+        "original_sha256": original_hash,
+        "adapted_sha256": adapted_hash,
+        "change": "deterministic ad-hoc signature for the Crane preference executable",
+        "reason": ("iOS 27 rejects direct NSBundle loading when the package reinstall "
+                   "restores Crane's unsigned preference executable"),
+    }]
+
+
 def _build_crane_springboard_compat_ios27(root: Path, package: str) -> list[dict]:
     """Build the exact iOS 27 menu diagnostic companion for paid Crane."""
     if package != "com.opa334.crane":
@@ -702,6 +758,7 @@ def adapt_verified_deb(source, destination_directory, *,
         binary_transformations = (_adapt_crane_springboard_subtitles_ios27(root, package) +
                                   _adapt_crane_support_ios27(root, package) +
                                   _sign_crane_library_ios27(root, package) +
+                                  _sign_crane_preferences_ios27(root, package) +
                                   _build_crane_springboard_compat_ios27(root, package))
         manifest_path = root / "var/jb/usr/share/0-sky/package-adapters" / (package + ".json")
         manifest_path.parent.mkdir(mode=0o755, parents=True, exist_ok=True)

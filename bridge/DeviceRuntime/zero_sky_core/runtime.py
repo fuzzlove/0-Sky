@@ -30,6 +30,11 @@ from .research_toolkit_device import collect as collect_research_toolkit
 from .research_toolkit import load_catalog
 from .research_toolkit_runner import overall_result, run_smoke, run_uat, write_bundle
 
+PROTECTED_QUARANTINE_PACKAGES = frozenset({
+    "apt", "dpkg", "ellekit", "preferenceloader", "sileo", "org.coolstar.sileo",
+    "com.liquidskysecurity.srd-runtime-manager",
+})
+
 
 class CoreRuntime:
     def __init__(self, root: Path = Path("/"), telemetry_owner: bool = True,
@@ -598,6 +603,61 @@ class CoreRuntime:
         except (OSError, ValueError, TypeError):
             return {}
 
+    def _clear_tweak_quarantine(self, request: Any,
+                                caller: dict[str, Any] | None) -> dict[str, Any]:
+        """Queue one exact package/target retry for the authoritative manager."""
+        if not caller or caller.get("paired") is not True:
+            raise IPCValidationError("AUTHORIZATION_REQUIRED",
+                                     "a paired authorized Mac is required to retry a tweak")
+        package = request.parameters.get("package")
+        target = request.parameters.get("target")
+        if not isinstance(package, str) or not PACKAGE_ID.fullmatch(package):
+            raise IPCValidationError("INVALID_PARAMETERS", "invalid package identifier")
+        if (not isinstance(target, str) or not 1 <= len(target) <= 512 or
+                "\x00" in target):
+            raise IPCValidationError("INVALID_PARAMETERS", "target must be a bounded string")
+        if package.lower() in PROTECTED_QUARANTINE_PACKAGES:
+            raise IPCValidationError(
+                "PROTECTED_PACKAGE",
+                "foundational runtime packages cannot be retried from the tweak menu")
+        quarantined = self._runtime_registry().get("quarantined", [])
+        matches = [item for item in quarantined if isinstance(item, dict) and
+                   item.get("package") == package and item.get("target") == target]
+        if not matches:
+            raise IPCValidationError(
+                "QUARANTINE_CHANGED",
+                "this exact package and target are no longer quarantined")
+
+        request_path = self.paths.jailbreak(
+            "/var/lib/srd-runtime/quarantine-clear.request.json")
+        payload = {"schema": 1, "request_id": request.request_id,
+                   "created_at": time.time(), "package": package, "target": target}
+        encoded = (json.dumps(payload, sort_keys=True, separators=(",", ":")) + "\n").encode()
+        try:
+            descriptor = os.open(request_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError as error:
+            raise IPCValidationError(
+                "RECOVERY_BUSY", "another quarantine retry is awaiting the manager") from error
+        try:
+            with os.fdopen(descriptor, "wb") as stream:
+                stream.write(encoded)
+                stream.flush()
+                os.fsync(stream.fileno())
+        except Exception:
+            try:
+                request_path.unlink()
+            except OSError:
+                pass
+            raise
+        self.record_change("PACKAGE", "quarantine_retry_queued", package,
+                           previous_state={"target": target,
+                                           "quarantinedEntries": len(matches)},
+                           new_state={"queued": True}, reversible=False,
+                           transaction_id=request.request_id)
+        return {"queued": True, "package": package, "target": target,
+                "matchingEntries": len(matches), "packageRemovalPerformed": False,
+                "message": "Retry queued; the runtime will quarantine the tweak again if it fails."}
+
     def _recovery_episodes(self) -> list[dict[str, Any]]:
         crashes = self.store.latest_crashes(500)
         cutoff = time.time() - 600
@@ -1152,6 +1212,8 @@ class CoreRuntime:
                     result = self._publish_power_telemetry(request, caller)
                 elif request.operation == "setTweakTargets":
                     result = self._set_tweak_targets(request, caller)
+                elif request.operation == "clearTweakQuarantine":
+                    result = self._clear_tweak_quarantine(request, caller)
                 elif request.operation in {"restartNormally", "disableRecentTweaks",
                                          "disableSelectedTweak", "startWithoutTweaks"}:
                     result = self._queue_recovery(request, caller)
@@ -1267,6 +1329,11 @@ class CoreRuntime:
                 detail = PackageInventory(self.paths).detail(package, health)
                 result = {"available": detail is not None, "package": detail,
                           "authoritativeSource": str(self.paths.jailbreak("/Library/dpkg/status"))}
+            elif request.operation == "getQuarantinedTweaks":
+                limit = self._bounded_integer(request.parameters.get("limit"), 100, 256)
+                rows = PackageInventory(self.paths).quarantines(limit)
+                result = {"quarantines": rows, "count": len(rows),
+                          "automaticProtection": True}
             elif request.operation == "getCrashes":
                 limit = self._bounded_integer(request.parameters.get("limit"), 100, 500)
                 process = request.parameters.get("process")

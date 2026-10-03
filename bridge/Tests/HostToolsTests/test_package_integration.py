@@ -112,6 +112,14 @@ class BridgePackageCommandTests(unittest.TestCase):
             "reason": ("sandboxed iOS 27 daemon injection requires the dependency bytes "
                        "to match the active SRD trust-cache generation"),
         }, {
+            "adapter": "ios27-preference-bundle-signing-v1",
+            "path": "/var/jb/Library/PreferenceBundles/CranePrefs.bundle/CranePrefs",
+            "original_sha256": "20d85ee4f3c656162ac7cb5805ef14f076b4ef283935a8cc7d276e379754e3a8",
+            "adapted_sha256": "f785613bba274b1f9f10f95180d73e7779fc8640cacdbad1bfaa083668b302b7",
+            "change": "deterministic ad-hoc signature for the Crane preference executable",
+            "reason": ("iOS 27 rejects direct NSBundle loading when the package reinstall "
+                       "restores Crane's unsigned preference executable"),
+        }, {
             "adapter": "ios27-springboard-menu-children-v6",
             "path": "/var/jb/Library/MobileSubstrate/DynamicLibraries/CraneSBCompat.dylib",
             "source_sha256": "eda48d25c8699521386c327746ba52ecdbb0130c01dd209cd6a033ee0e3987c5",

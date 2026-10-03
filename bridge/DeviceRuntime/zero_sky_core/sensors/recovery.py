@@ -150,6 +150,38 @@ class PackageInventory:
                 quarantined.setdefault(item["package"], []).append(item)
         return tweaks, quarantined
 
+    def quarantines(self, limit: int = 256) -> list[dict[str, Any]]:
+        """Return a bounded, display-safe view of authoritative quarantine state."""
+        registry = _read_json(self.registry, {})
+        if not isinstance(registry, dict):
+            return []
+        rows: list[dict[str, Any]] = []
+        maximum = min(MAX_HOOKS, max(1, int(limit)))
+        for item in registry.get("quarantined", [])[:MAX_HOOKS]:
+            if not isinstance(item, dict):
+                continue
+            package = item.get("package")
+            target = item.get("target")
+            dylib = item.get("dylib")
+            reason = item.get("reason")
+            if (not isinstance(package, str) or not PACKAGE_ID.fullmatch(package) or
+                    not isinstance(target, str) or not 1 <= len(target) <= 512 or
+                    "\x00" in target):
+                continue
+            dylib_name = Path(dylib).name[:256] if isinstance(dylib, str) else ""
+            rows.append({
+                "package": package,
+                "target": target,
+                "dylib": dylib_name,
+                "reason": reason[:512] if isinstance(reason, str) else
+                          "The runtime stopped this tweak after a failed load.",
+                "time": str(item.get("time") or item.get("timestamp") or "")[:128],
+                "sha256": str(item.get("sha256") or "")[:128],
+            })
+            if len(rows) >= maximum:
+                break
+        return rows
+
     def collect(self, limit: int = 512, query: str | None = None,
                 health: dict[str, dict[str, Any]] | None = None) -> list[dict[str, Any]]:
         packages = _parse_control(self.status)
