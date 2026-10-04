@@ -28,7 +28,7 @@
   ],
   "executed_validation": {
     "tools_unit_tests": "PASS: 282 run, 3 skipped for unavailable private paid fixtures",
-    "host_tools_unit_tests": "PASS: 123 run, 1 skipped because the external source kit is absent",
+        "host_tools_unit_tests": "PASS: 126 run, 1 skipped because the external source kit is absent; includes private pairing transcript permissions, redacted actionable pairing errors, and symlink rejection",
     "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
     "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
         "bridge_core_tests": "PASS: 33/33, including incomplete-duplicate profile resume, deterministic candidate selection, complete-profile conflict rejection, and stale-port reservation",

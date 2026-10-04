@@ -21,6 +21,11 @@ ERR_PROFILE_STALE: Multiple profiles claim this UUID
 - Fails closed with `ERR_PROFILE_CONFLICT` when two complete profiles exist and
   directs the user to export redacted Diagnostics before removing only the
   obsolete Mac-side enrollment.
+- Fixes the generic `existing Apple and 0-Sky pairing exited 2` failure report.
+  Pairing stdout/stderr is now written atomically to the selected instance's
+  owner-only `logs/pairing-last.log`; the GUI receives a bounded redacted cause
+  plus a specific USB, unlock, Trust, SSH-key, SRD-runtime, or timeout action.
+  Unsafe/symlinked transcript paths fail closed.
 
 The distribution package retains the pre.11 embedded-kit permission fix and
 the verified iOS 26.0 / iOS 27 compatibility behavior. This build still needs

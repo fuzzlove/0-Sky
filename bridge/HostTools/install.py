@@ -48,6 +48,69 @@ def require_success(result: subprocess.CompletedProcess[str], stage: str) -> Non
         raise InstallError(f"{stage} exited {result.returncode}; inspect the private instance logs")
 
 
+def private_transcript(directory: Path, stage: str,
+                       result: subprocess.CompletedProcess[str]) -> Path:
+    """Persist child output owner-only instead of discarding the root cause."""
+    if not re.fullmatch(r"[a-z0-9-]{1,40}", stage):
+        raise InstallError("invalid private transcript stage")
+    logs = directory / "logs"
+    if logs.is_symlink() or not logs.is_dir():
+        raise InstallError("private instance log directory is missing or unsafe")
+    target = logs / f"{stage}-last.log"
+    if target.is_symlink() or (target.exists() and not target.is_file()):
+        raise InstallError("private pairing transcript path is unsafe")
+    payload = (f"EXIT_STATUS={result.returncode}\nSTDOUT:\n{result.stdout}"
+               f"\nSTDERR:\n{result.stderr}\n").encode("utf-8", "replace")
+    temporary = logs / f".{stage}.{os.getpid()}.{time.time_ns()}.tmp"
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL
+                 | getattr(os, "O_NOFOLLOW", 0), 0o600)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, target)
+        os.chmod(target, 0o600)
+        return target
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def pairing_failure_detail(result: subprocess.CompletedProcess[str], udid: str) -> str:
+    """Return a bounded, redacted user action while raw output stays private."""
+    lines = [line.strip() for line in (result.stderr + "\n" + result.stdout).splitlines()
+             if line.strip()]
+    failure = next((line for line in reversed(lines)
+                    if "[0-Sky Link pairing] FAILED:" in line), "")
+    detail = failure.split("FAILED:", 1)[-1].strip() if failure else ""
+    detail = detail.replace(udid, "<selected-device>")
+    detail = detail.replace(str(Path.home()), "~")
+    detail = re.sub(r"SHA256:[A-Za-z0-9+/=]{20,}", "SHA256:<redacted>", detail)
+    detail = re.sub(r"(?i)(token|password|secret)=\S+", r"\1=<redacted>", detail)
+    if len(detail) > 800:
+        detail = detail[:797] + "..."
+    combined = " ".join(lines).lower()
+    if "multiple_devices" in combined:
+        action = "Disconnect other Apple devices, leave only the selected SRD on USB, and press Resume."
+    elif "usb_not_connected" in combined:
+        action = "Connect the selected SRD directly by USB, unlock it, and press Resume."
+    elif "device_locked" in combined:
+        action = "Unlock the selected SRD, keep its screen on, and press Resume."
+    elif "trust_required" in combined or "trust_denied" in combined:
+        action = "Unlock the selected SRD, approve Trust This Computer, then press Resume."
+    elif "permission denied" in combined:
+        action = "The SRD rejected this Mac's SSH key. Use Repair Pinned Host Key with the exact device connected by USB."
+    elif ("usable host key" in combined or "connection refused" in combined
+          or "root-bridge-ready" in combined):
+        action = "The SRD SSH service is not ready. Complete Prepare SRD/Runtime Manager for this exact device, then press Resume."
+    elif "timed out" in combined or "timeout" in combined:
+        action = "Keep the selected SRD unlocked on USB and press Resume; if it repeats, export Diagnostics."
+    else:
+        action = "Keep the exact SRD unlocked on USB, export Diagnostics, and press Resume after correcting the reported condition."
+    return f"{detail + '. ' if detail else ''}{action}"
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -333,7 +396,14 @@ def main() -> int:
         pair_argv.append("--verify-only" if args.verify_pairing_only else "--confirm-host-enrollment")
         pair_argv.append("--skip-wireless")
         print("PAIRING=START; unlock the selected SRD and approve its Trust prompt if shown")
-        require_success(run(pair_argv, 360), "existing Apple and 0-Sky pairing")
+        pairing_result = run(pair_argv, 360)
+        pairing_log = private_transcript(directory, "pairing", pairing_result)
+        if pairing_result.returncode != 0:
+            raise InstallError(
+                f"existing Apple and 0-Sky pairing exited {pairing_result.returncode}. "
+                f"{pairing_failure_detail(pairing_result, args.udid)} "
+                f"Detailed private log: {pairing_log}"
+            )
         receipt = directory / "pairing-state.json"
         try:
             paired = json.loads(receipt.read_text(encoding="utf-8"))

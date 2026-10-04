@@ -104,6 +104,13 @@ identifier.
    profiles fail closed, deterministic interrupted setup resumes, and ports
    from incomplete profiles remain reserved. BridgeCore tests execute each
    regression case without deleting user state.
+9. **Pairing failures discarded the child process's root cause.** The installer
+   converted every pairing failure into exit status `2` and directed the user
+   to private instance logs without actually persisting pairing stdout/stderr.
+   **Status:** fixed. The transcript is atomically stored in an owner-only file
+   under the selected instance, while the UI receives a bounded redacted cause
+   and condition-specific recovery action. Symlinked transcript destinations
+   fail closed, and diagnostic exports retain only redacted operation output.
 
 ### Low severity
 

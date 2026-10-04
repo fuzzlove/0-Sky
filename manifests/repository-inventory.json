@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 138,
-    "required-source-or-maintenance-test": 2100,
+    "required-source-or-maintenance-test": 2101,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "b03361fcd6c711f54d6507c1433f6aa7f39e294fdc6e4cf8fcb8194b150e870f",
-      "size": 5786
+      "sha256": "68a59927d1d3cddeac5054de4ad0a5e32baf220451add51327347cf468364a3b",
+      "size": 5898
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -11457,8 +11457,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/HostTools/install.py",
-      "sha256": "f2f79b8c3772212628de8c94cd073dd34f1654aed6e1073525285668f48c3eef",
-      "size": 21481
+      "sha256": "19b63e2b6e07e3b5bd6cde9996be0d0f663abbbe64033c1eddf2176fbbcf3219",
+      "size": 25358
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -11741,6 +11741,12 @@
       "path": "bridge/Tests/HostToolsTests/test_filza_setup.py",
       "sha256": "c6600bf588c10e893b3a55c9c8602e10b60a77255d7ca550ac5259ffdabb9aca",
       "size": 5107
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "bridge/Tests/HostToolsTests/test_install_pairing_diagnostics.py",
+      "sha256": "9ee81ac22e4c692874bf1f57f9080cc5b5420fea60bb13acf889ce53f17b17fb",
+      "size": 2465
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13569,8 +13575,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "e6f6e7833cc442aa14629e422f505b26b044bba73fba28635ed80f69c42f4a73",
-      "size": 11911
+      "sha256": "d73043ee6f2057b45120c803f4f403840903f3896ef5de0416b26b81b728a02d",
+      "size": 12462
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13587,8 +13593,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "c99e560a5e53612c00d286986a4f864cb795e71e6a241867ad821f491aa2ab5a",
-      "size": 9055
+      "sha256": "59bb3ee727ea0fc5b498f9337b73c30765e0592bc0218f7ce640517bd1803c3b",
+      "size": 9721
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13641,8 +13647,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/release-notes-v1.0.0-pre.12.md",
-      "sha256": "d3ec5fa162fd23f65927c40c168de6444aa24e5254dbf0f613a94baf13c5260a",
-      "size": 1213
+      "sha256": "b5b71aff59e22dcac76bffca9fe0630c60d7bdc7595740fa719766a06a040a7d",
+      "size": 1578
     },
     {
       "category": "required-source-or-maintenance-test",
