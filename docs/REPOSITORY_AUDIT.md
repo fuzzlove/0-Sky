@@ -136,11 +136,13 @@ identifier.
 | Host runtime manifest regression tests | PASS — complete, missing-component, and traversal cases |
 | Resumable setup-state tests | PASS — private atomic progress and read-only non-persistence |
 | Repeated missing-kit release failure | PASS — failed closed and retained only one sanitized audit report |
-| Control package build | BLOCKED — `THEOS` is not configured |
+| Control package build | PASS — clean 3.5.36 arm64 rootless package using an explicit Theos checkout |
 | Public `.pkg` | BLOCKED — authorized external kit/signing inputs unavailable |
 | Signing, notarization, clean-account install, Intel runtime, live SRD matrix | NOT_EXECUTED |
 
 Machine-readable results in `SOURCE_AUDIT.json` distinguish executed tests from
 blocked hardware/signing work. A full public release remains **not ready** until
-the Universal 2 host runtime, high-severity external signed-payload blocker,
-and distribution/hardware gates are cleared.
+the Universal 2 host runtime, remaining external signed-payload findings,
+caller-owned distribution signing, notarization, and hardware gates are
+cleared. The former Control/Theos blocker is resolved; Theos is now an explicit
+input rather than a hidden Homebrew path.

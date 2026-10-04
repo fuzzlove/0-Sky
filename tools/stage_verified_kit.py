@@ -45,7 +45,9 @@ def stage(source: Path, destination: Path, *, release: bool = False,
                 raise StageError("kit manifest path escapes its root")
             if ((release or link_embed) and
                     (Path(relative).name.startswith("test_")
-                     or "tests" in Path(relative).parts)):
+                     or "tests" in Path(relative).parts
+                     or "__pycache__" in Path(relative).parts
+                     or Path(relative).suffix in {".pyc", ".pyo"})):
                 continue
             if link_embed and relative == "payloads/0-Sky-Link-1.9.0-universal.ipa":
                 continue

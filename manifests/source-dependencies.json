@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "theos": {
+    "repository": "https://github.com/theos/theos.git",
+    "commit": "dd5c14bb9d91311e221d51b5bfb8c9e5948156db",
+    "submodules": {
+      "vendor/dm.pl": "d9a3b72e274226dd2823c0a7c1d6d05099f4f51c",
+      "vendor/include": "13c1f17176d7efe6871551cd69a75b71ac4eeaf1",
+      "vendor/lib": "6f2af307568e6b8c52181d26314b0cd69ffaf188",
+      "vendor/logos": "777925d1add4ee3485a2432a6f6d5e3ded59de7b",
+      "vendor/nic": "4e7adcbeac2e4636b91e2f76341adfe4c4d0ceec",
+      "vendor/orion": "762159dc214d5aafa2edfc7554c659fc3c658b5b",
+      "vendor/orion/fishhook": "aadc161ac3b80db07a9908851839a17ba63a9eb1",
+      "vendor/swift-support": "4cf59ff04cdb2ceb27ea2228753e0497297b6182",
+      "vendor/templates": "6c3944e281c4726f1383755d0fbb642840312d28"
+    }
+  },
+  "audited_source_build_environment": {
+    "xcode": "26.6 (17F113)",
+    "iphoneos_sdk": "26.5",
+    "libarchive": "3.8.9",
+    "openssl": "3.6.4",
+    "pkgconf": "3.0.7",
+    "ldid": "2.1.5_1",
+    "dpkg": "1.23.11"
+  }
+}

@@ -18,7 +18,9 @@ or local test output from being published with the installer.
 1. Start from a clean checkout. Obtain the authorized external kit and its
    manifest separately. Verify toolchain/dependencies with
    `tools/environment_preflight.py`; inspect
-   [UNIVERSAL_BUILD_AUDIT.md](UNIVERSAL_BUILD_AUDIT.md).
+   [UNIVERSAL_BUILD_AUDIT.md](UNIVERSAL_BUILD_AUDIT.md). Supply the reviewed
+   Theos checkout explicitly with `--theos`; the build no longer derives
+   include paths by invoking Homebrew.
 2. Configure caller-owned Developer ID Application and Developer ID Installer
    identities in the keychain. Configure a `notarytool` keychain profile if
    notarizing. Keep all credentials outside the source tree and output logs.
@@ -57,8 +59,12 @@ and SHA-256 digests. `SHA256SUMS` covers the installer, audit report, and JSON
 manifest. The verifier rejects symlinks, path components, duplicate entries,
 missing files, checksum drift, and any fifth file.
 
-At present the available external kit blocks `PREPARE_KIT` with
-`FIXED_HOME_PATH` and `DERIVED_DATA_PATH` in signed Frida and PreferenceLoader
+Release staging now excludes generated `__pycache__`, `.pyc`, and `.pyo`
+artifacts, removing the only observed occurrence of the current builder's home
+path from the raw local kit. At present the kit first blocks preflight because
+it lacks `HOST_RUNTIME_MANIFEST.json`; separately executed sanitizer evidence
+shows it will then block `PREPARE_KIT` with `FIXED_HOME_PATH` and
+`DERIVED_DATA_PATH` in signed Frida and PreferenceLoader
 device binaries. The private diagnostic inventory is written by
 `python3 tools/kit_pii_report.py KIT artifacts/release-kit-pii.json` and
 contains no secret values. No

@@ -19,9 +19,19 @@ Do not commit or package that report.
 | Local-address and absolute-file URI strings | External wheels and device Python include examples, metadata, or compiled constants. | Classify each value from authoritative source; rebuild or replace where machine-specific. Do not globally allowlist patterns. |
 | Personal payment URL in Commissary | A prebuilt device application/package embeds a payment account URL. | Change its canonical source and rebuild/re-sign the device payload; verify the resulting IPA and Debian archive. |
 
-The release-candidate attempt currently stops at `PREPARE_KIT` on the Link
-payload privacy scan. This is a genuine external-input blocker. Generating a
-hash manifest for the dirty kit does not make it approved. The pipeline writes
+The raw local kit also contained one current-workstation home path in generated
+`host-mac/__pycache__/install.*.pyc`. That finding is fixed: release and Link
+staging now omit `__pycache__`, `.pyc`, and `.pyo` entries even when an input
+manifest lists them. Regression coverage verifies the output count and absence
+of those files. This does not waive the separately listed opaque third-party
+binary findings.
+
+The release-candidate attempt now stops first at `PREFLIGHT` with
+`BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID`. After that runtime input is supplied,
+the kit is also expected to stop at `PREPARE_KIT` on the Link payload privacy
+scan based on the separately executed sanitizer evidence. These are independent
+external-input blockers. Generating a hash manifest for the dirty kit does not
+make it approved. The pipeline writes
 `RELEASE_KIT_APPROVAL.json` only after PII, portability, architecture, offline
 installation, and integrity checks pass.
 
@@ -31,3 +41,8 @@ The pinned arm64 environment installs from the wheelhouse with `--no-index`,
 and static wheel coverage checks both Mac architectures. Intel execution and
 a completely offline bare-Mac install remain unverified. The existing kit
 does not include a macOS Python 3.12 runtime or Xcode/Apple host tools.
+
+The source-controlled Control blocker is no longer in this list. A clean
+3.5.36 arm64/rootless build completed with an explicit Theos checkout, and two
+independent canonical IPA staging runs produced identical bytes. Live SRD
+installation remains unexecuted.

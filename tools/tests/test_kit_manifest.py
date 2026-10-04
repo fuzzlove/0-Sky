@@ -11,7 +11,7 @@ from unittest.mock import patch
 import zipfile
 
 from tools.kit_manifest import APPROVAL_NAME, APPROVAL_STATES, REQUIRED, generate, verify
-from tools.build_release import build as build_release
+from tools.build_release import build as build_release, preflight_failure_code
 from tools.release_paths import ReleasePaths, RuntimePaths
 from tools.release_sanitize import audit
 from tools.signing_identities import Identity, parse_identities, require_identity
@@ -46,6 +46,13 @@ def fixture(root: Path) -> None:
 
 
 class KitManifestTests(unittest.TestCase):
+
+    def test_release_preflight_reports_missing_host_runtime(self) -> None:
+        payload = json.dumps({"host_runtime": {"status": "BLOCKED"},
+                              "kit": {"status": "PASS"},
+                              "toolchain": []}).encode()
+        self.assertEqual(preflight_failure_code(payload),
+                         "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID")
     @unittest.skipUnless(shutil.which("zsh") and shutil.which("python3.12"),
                          "macOS offline dependency launcher unavailable")
     def test_dependency_launcher_defaults_to_offline(self) -> None:

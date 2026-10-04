@@ -37,6 +37,25 @@ class ReleaseFailure(Exception):
         self.code = code
 
 
+def preflight_failure_code(payload: bytes) -> str:
+    """Return a stable actionable code without copying local paths to logs."""
+    try:
+        value = json.loads(payload)
+    except (TypeError, ValueError):
+        return "BLOCKED_ENVIRONMENT"
+    if value.get("host_runtime", {}).get("status") == "BLOCKED":
+        return "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID"
+    if value.get("kit", {}).get("status") == "BLOCKED":
+        return "BLOCKED_KIT_HASH_MANIFEST_INVALID"
+    failed_tools = sorted(item.get("tool", "unknown") for item in value.get("toolchain", [])
+                          if item.get("status") == "FAIL")
+    if failed_tools:
+        return "BLOCKED_TOOL_MISSING_OR_INCOMPATIBLE:" + ",".join(failed_tools)
+    if value.get("configuration", {}).get("status") == "BLOCKED":
+        return "BLOCKED_CONFIGURATION_INVALID"
+    return "BLOCKED_ENVIRONMENT"
+
+
 def execute(stage: str, argv: list[str], *, timeout: int,
             environment: dict[str, str] | None = None) -> None:
     try:
@@ -115,7 +134,7 @@ def make_deny_file(destination: Path, staging: Path, output: Path,
 
 def build(kit: Path, output: Path, mode: str, app_identity: str | None,
           installer_identity: str | None, notary_profile: str | None,
-          extra_deny: Path | None) -> int:
+          extra_deny: Path | None, theos: Path | None = None) -> int:
     if output.is_symlink() or (output.exists() and not output.is_dir()):
         print("RELEASE_GATE=FAIL stage=OUTPUT error=UNSAFE_OUTPUT_DIRECTORY", file=sys.stderr)
         return 2
@@ -177,7 +196,7 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
         except subprocess.TimeoutExpired as error:
             raise ReleaseFailure(stage, "ENVIRONMENT_TIMEOUT") from error
         if preflight.returncode:
-            raise ReleaseFailure(stage, "ENVIRONMENT_BLOCKED")
+            raise ReleaseFailure(stage, preflight_failure_code(preflight.stdout))
         discovered = json.loads(preflight.stdout)
         if discovered.get("kit", {}).get("status") != "PASS" or any(
             item.get("status") != "PASS" for item in discovered.get("toolchain", [])
@@ -189,6 +208,15 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
         execute("EULA", [sys.executable, str(ROOT / "tools/verify_eula.py")],
                 timeout=30)
         state["EULA"] = "PASS"
+        theos = (theos or (Path(os.environ["THEOS"]) if os.environ.get("THEOS") else None))
+        if theos is None or not (theos / "makefiles/common.mk").is_file():
+            raise ReleaseFailure("THEOS_PREFLIGHT", "THEOS_UNAVAILABLE")
+        theos = theos.resolve()
+        build_environment = dict(os.environ)
+        build_environment["THEOS"] = str(theos)
+        execute("THEOS_PREFLIGHT", [sys.executable,
+                str(ROOT / "tools/theos_preflight.py"), "--theos", str(theos)],
+                timeout=60, environment=build_environment)
         with tempfile.TemporaryDirectory(prefix=".0sky-release-", dir=output.parent) as temp:
             work = Path(temp)
             paths = ReleasePaths.from_work(ROOT, work)
@@ -197,12 +225,13 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             stage = "PREPARE_KIT"
             prepared = paths.kit_root
             execute(stage, [sys.executable, str(ROOT / "tools/prepare_release_kit.py"),
-                            str(kit), str(prepared), "--deny-file", str(deny)], timeout=900)
+                            str(kit), str(prepared), "--deny-file", str(deny)], timeout=900,
+                    environment=build_environment)
             execute("HOST_RUNTIME", [sys.executable,
                     str(ROOT / "tools/host_runtime_manifest.py"), str(prepared)], timeout=60)
             stage = "BUILD_UNIVERSAL_APP"
             derived = paths.build_root
-            environment = dict(os.environ)
+            environment = dict(build_environment)
             environment["ZERO_SKY_RELEASE_DENY_FILE"] = str(deny)
             execute(stage, [str(ROOT / "build.sh"), "--kit", str(prepared),
                             "--derived-data", str(derived)], timeout=1800,
@@ -340,10 +369,13 @@ def main() -> int:
     parser.add_argument("--installer-identity", default=os.environ.get("ZERO_SKY_INSTALLER_IDENTITY"))
     parser.add_argument("--notary-profile", default=os.environ.get("ZERO_SKY_NOTARY_PROFILE"))
     parser.add_argument("--deny-file", type=Path)
+    parser.add_argument("--theos", type=Path,
+                        help="reviewed Theos checkout (or set THEOS)")
     args = parser.parse_args()
     return build(args.kit.resolve(), args.output.resolve(), args.mode, args.app_identity,
                  args.installer_identity, args.notary_profile,
-                 args.deny_file.resolve() if args.deny_file else None)
+                 args.deny_file.resolve() if args.deny_file else None,
+                 args.theos.resolve() if args.theos else None)
 
 
 if __name__ == "__main__":

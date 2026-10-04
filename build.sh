@@ -15,13 +15,19 @@ while (( $# )); do
       kit=$2; shift 2 ;;
     --derived-data) [[ $# -ge 2 ]] || { echo "--derived-data requires a path" >&2; exit 64; }
       derived=$2; shift 2 ;;
+    --theos) [[ $# -ge 2 ]] || { echo "--theos requires a path" >&2; exit 64; }
+      export THEOS=$2; shift 2 ;;
     *) echo "Unknown build option: $1" >&2; exit 64 ;;
   esac
 done
+[[ -n ${THEOS:-} ]] || {
+  echo "Theos is required; pass --theos /path/to/locked/theos" >&2; exit 2;
+}
+python3 "$project_root/tools/theos_preflight.py" --theos "$THEOS"
 [[ -f "$kit/SHA256SUMS" ]] || {
   echo "Authorized kit is missing SHA256SUMS: $kit" >&2; exit 2;
 }
-if [[ ! -f "$kit/PORTABILITY.json" ]]; then
+if [[ ! -f "$kit/RELEASE_KIT_MANIFEST.json" || ! -f "$kit/RELEASE_KIT_APPROVAL.json" ]]; then
   prepared="${derived}.prepared-kit"
   echo "Preparing and sanitizing the verified external kit…"
   python3 "$project_root/tools/prepare_release_kit.py" "$kit" "$prepared"

@@ -16,7 +16,8 @@ single source-build command accepts the raw authorized kit, prepares and
 sanitizes it, then creates the local unsigned Universal 2 app:
 
 ```sh
-./build.sh --kit "/path/to/authorized kit" --derived-data "/path/to/build output"
+./build.sh --kit "/path/to/authorized kit" --theos "/path/to/theos" \
+  --derived-data "/path/to/build output"
 ```
 
 This local build is not distributable.
@@ -24,7 +25,7 @@ This local build is not distributable.
 To build a non-public release candidate, run:
 
 ```sh
-scripts/build_release.sh --mode release-candidate --kit KIT --output dist
+scripts/build_release.sh --mode release-candidate --kit KIT --theos THEOS --output dist
 ```
 
 The candidate runs the PII, kit-manifest, offline-install, architecture,
@@ -34,6 +35,7 @@ package, run:
 
 ```sh
 scripts/build_release.sh --mode distribution --kit KIT --output dist \
+  --theos THEOS \
   --app-identity APP_CERT_SHA1 \
   --installer-identity INSTALLER_CERT_SHA1 \
   --notary-profile PROFILE

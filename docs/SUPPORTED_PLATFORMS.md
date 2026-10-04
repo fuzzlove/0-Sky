@@ -10,7 +10,7 @@ signing, or entitlement acceptance.
 | Bridge Universal 2 output | macOS 15+, arm64 and x86_64 | Build and release gates require both slices in the app and every declared native host runtime component | Statically enforced; Intel runtime not executed |
 | Compiled package on clean Mac | Apple silicon and Intel | Requires complete approved host runtime, signing, notarization, and clean-account UAT | Not executed / release blocker |
 | Link | arm64 iOS/iPadOS SRD payload | Clean IPA build, identity/icon/signature structure, checksum, and sanitizer | Source artifact verified; fresh hardware deployment not executed |
-| Control | arm64 iOS/iPadOS SRD payload | 21 source compatibility/security checks | Source verified; package build blocked without THEOS |
+| Control | arm64 iOS/iPadOS SRD payload | 21 source compatibility/security checks plus clean 3.5.36 rootless package build | Source and package build verified; live deployment not executed |
 | Exact SRD evidence | iPhone 12 (`iPhone13,2`), iOS 27.0 (`24A5390f`), arm64e | Retained reproducibility manifests and prior exact-build evidence | Evidence retained; live setup not rerun in this audit |
 | Other iOS/iPadOS 17+ SRDs | Exact UDID/build/capability probe required | No complete hardware matrix available | Unverified; never inferred from version alone |
 

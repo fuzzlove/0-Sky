@@ -27,7 +27,7 @@
     }
   ],
   "executed_validation": {
-    "tools_unit_tests": "PASS: 246 run, 4 skipped for unavailable private fixtures or compiled app",
+    "tools_unit_tests": "PASS: 248 run, 3 skipped for unavailable private fixtures or compiled app",
     "host_tools_unit_tests": "PASS: 122 run, 1 skipped because the external source kit is absent",
     "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
     "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
@@ -46,12 +46,16 @@
     "homebrew_bootstrap_safety": "PASS: moving remote installer is refused and never executed",
     "privileged_update_safety": "PASS: moving latest TrollStore and ldid assets are refused",
     "host_runtime_manifest": "PASS: complete, missing-component, and traversal regression cases",
-    "resumable_setup_state": "PASS: owner-only atomic progress; read-only checks do not persist"
+    "resumable_setup_state": "PASS: owner-only atomic progress; read-only checks do not persist",
+    "control_package_build": "PASS: clean 3.5.36 arm64 iOS/rootless build with explicit Theos checkout",
+    "control_release_payload_reproducibility": "PASS: two independent deterministic IPA staging runs produced SHA-256 f698d6f4dc5b2f22d66678cc587a584166d5856d7217af5fee3093a4d5338b9c",
+    "release_cache_pruning": "PASS: release staging excluded __pycache__, .pyc, and .pyo; current builder path matches reduced from 1 to 0",
+    "theos_dependency_lock": "PASS: Theos dd5c14bb9d91311e221d51b5bfb8c9e5948156db and 9 recursive submodules verified; iPhoneOS SDK 26.5 discovered",
+    "release_blocker_diagnostics": "PASS: release candidate fails closed with BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID and leaves only a sanitized audit report"
   },
   "not_executed_or_blocked": {
-    "public_pkg_build": "BLOCKED: approved Universal 2 host runtime and authorized external kit are absent; known signed inputs contain builder paths",
-    "distribution_signing_and_notarization": "NOT_EXECUTED: publisher credentials unavailable",
-    "control_package_build": "BLOCKED: THEOS is not configured in this environment",
+    "public_pkg_build": "BLOCKED: approved Universal 2 host runtime is absent and remaining external signed inputs require source rebuild/review",
+    "distribution_signing_and_notarization": "BLOCKED: zero valid code-signing identities and no 0-sky-release notary profile are installed",
     "fresh_account_install": "NOT_EXECUTED",
     "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
     "intel_runtime_uat": "NOT_EXECUTED",
@@ -61,9 +65,9 @@
   "release_result": "BLOCKED",
   "release_blockers": [
     "supply a redistributable manifest-verified Universal 2 Python and host tool runtime",
-    "rebuild and re-sign external device payloads without developer paths",
-    "supply the authorized manifest-verified external kit",
-    "complete Developer ID signing and notarization",
+    "rebuild or source-review and explicitly approve remaining external device payload paths and fixtures",
+    "supply a release-authorized manifest-verified external kit",
+    "install caller-owned Developer ID Application/Installer identities and notary credentials",
     "execute clean-account Apple Silicon and Intel install/upgrade/uninstall UAT",
     "execute the documented exact-device SRD matrix"
   ]

@@ -173,6 +173,24 @@ class InstallerLifecycleTests(unittest.TestCase):
             self.assertEqual(stage(source, output), 10)
             self.assertFalse((output / "unlisted-private-key").exists())
 
+    def test_release_staging_omits_python_cache_artifacts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "kit", root / "output"
+            cache = source / "host-mac/__pycache__"
+            cache.mkdir(parents=True)
+            files = [source / f"asset-{index}" for index in range(10)]
+            files += [cache / "install.cpython-312.pyc", source / "host-mac/helper.pyo"]
+            for index, path in enumerate(files):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(f"fixture {index}".encode())
+            (source / "SHA256SUMS").write_text("".join(
+                f"{digest(path)}  ./{path.relative_to(source).as_posix()}\n"
+                for path in files))
+            self.assertEqual(stage(source, output, release=True), 10)
+            self.assertFalse((output / "host-mac/__pycache__").exists())
+            self.assertFalse((output / "host-mac/helper.pyo").exists())
+
     def test_sanitizer_reports_categories_without_values(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "installer.sh"
