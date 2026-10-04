@@ -72,7 +72,11 @@ public struct BridgeEnvironment: Sendable {
         var backends: [any DeviceDiscoveryBackend] = [
             CoreDeviceDiscoveryBackend(runner: runner)
         ]
-        if let python = Self.findPymobilePython(supportRoot: paths.supportRoot) {
+        let managedPython = try? paths.projectPython()
+        let discoveryPython = paths.bundledKitRoot == nil
+            ? (managedPython ?? Self.findPymobilePython(supportRoot: paths.supportRoot))
+            : managedPython
+        if let python = discoveryPython {
             backends.append(PymobileDeviceDiscoveryBackend(pythonURL: python, runner: runner))
             backends.append(RemoteXPCDiscoveryBackend(pythonURL: python, runner: runner))
         }

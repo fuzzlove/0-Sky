@@ -13,10 +13,27 @@ from unittest.mock import patch
 import warnings
 import zipfile
 
-from tools.sign_release_kit import sign_kit, sign_wheel
+from tools.sign_release_kit import rehash_sha256_manifest, sign_kit, sign_wheel
 
 
 class SignReleaseKitTests(unittest.TestCase):
+    def test_signed_submanifest_is_rehashed_without_path_escape(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            wheel = root / "wheelhouse/frida.whl"
+            wheel.parent.mkdir()
+            wheel.write_bytes(b"signed wheel")
+            manifest = root / "frida-wheelhouse.sha256"
+            manifest.write_text("0" * 64 + "  wheelhouse/frida.whl\n")
+            self.assertEqual(rehash_sha256_manifest(root, manifest), 1)
+            expected = hashlib.sha256(wheel.read_bytes()).hexdigest()
+            self.assertEqual(
+                manifest.read_text(), f"{expected}  wheelhouse/frida.whl\n"
+            )
+            manifest.write_text("0" * 64 + "  ../outside\n")
+            with self.assertRaisesRegex(ValueError, "unsafe path"):
+                rehash_sha256_manifest(root, manifest)
+
     def test_signed_wheel_record_is_rehashed(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             wheel = Path(folder) / "demo-1.0-cp312-cp312-macosx_11_0_arm64.whl"

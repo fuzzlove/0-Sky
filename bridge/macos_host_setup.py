@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 from zero_sky_user_config import (
     UserConfigError,
@@ -772,16 +773,50 @@ def setup_python(identity: Path, support: Path) -> Path:
     venv = support / "venv"
     venv.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     python = venv / "bin/python3"
-    if not python_probe(python)[0]:
-        if venv.exists():
-            raise SystemExit("existing Python environment is incomplete; preserve it for review before repair")
-        run([base_python, "-m", "venv", venv])
-        run([
-            python, "-m", "pip", "install", "--no-index", "--find-links", WHEELHOUSE,
-            "--requirement", REQUIREMENTS_LOCK,
-        ])
+    existing_ok = python_probe(python)[0]
+    expected_base = python_base_executable(base_python)
+    existing_base = python_base_executable(python) if existing_ok else None
+    bound_to_bundle = expected_base is not None and existing_base == expected_base
+    backup: Path | None = None
+    if existing_ok and bound_to_bundle:
+        log("reusing the pinned Python environment bound to the bundled runtime")
     else:
-        log("reusing the pinned Python environment")
+        if venv.exists():
+            if venv.is_symlink() or not venv.is_dir():
+                raise SystemExit(
+                    "Existing Python environment path is unsafe. Expected a private "
+                    f"directory at {venv}. Export Diagnostics and move that path aside "
+                    "manually before retrying; 0-Sky did not change it."
+                )
+            recovery = support / "recovery"
+            recovery.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(recovery, 0o700)
+            backup = recovery / f"venv-before-bundled-runtime-{time.time_ns()}"
+            if backup.exists():
+                raise SystemExit(f"Recovery path already exists: {backup}")
+            os.replace(venv, backup)
+            reason = ("used a Python outside the signed bundled runtime"
+                      if existing_ok else "was incomplete")
+            log(f"preserved the previous Python environment at {backup} because it {reason}")
+        try:
+            run([base_python, "-m", "venv", venv])
+            run([
+                python, "-m", "pip", "install", "--no-index", "--find-links", WHEELHOUSE,
+                "--requirement", REQUIREMENTS_LOCK,
+            ])
+            if not python_probe(python)[0]:
+                raise RuntimeError("new pinned Python environment failed its dependency probe")
+            if python_base_executable(python) != expected_base:
+                raise RuntimeError(
+                    "new pinned Python environment is not bound to the signed bundled runtime"
+                )
+        except Exception:
+            if venv.exists() and not venv.is_symlink():
+                shutil.rmtree(venv, ignore_errors=True)
+            if backup is not None and backup.exists():
+                os.replace(backup, venv)
+                log("restored the previous Python environment after repair failed")
+            raise
     venv.chmod(0o700)
     setup_frida_host(base_python, support)
     identity.parent.mkdir(parents=True, exist_ok=True)
@@ -792,6 +827,28 @@ def setup_python(identity: Path, support: Path) -> Path:
         ])
     identity.chmod(0o600)
     return python
+
+
+def python_base_executable(python: Path) -> Path | None:
+    """Return the interpreter that created a base Python or virtualenv."""
+    if not python.is_file():
+        return None
+    try:
+        result = subprocess.run(
+            [str(python), "-c",
+             "import pathlib,sys; print(pathlib.Path(getattr(sys, '_base_executable', sys.executable)).resolve())"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=15, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    value = result.stdout.strip()
+    if result.returncode != 0 or not value.startswith("/"):
+        return None
+    try:
+        return Path(value).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
 
 
 def choose_target(requested: str | None, python: Path | None) -> str | None:

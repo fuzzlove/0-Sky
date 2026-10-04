@@ -197,9 +197,12 @@ public struct BridgePaths: Sendable {
 
     public func projectPython() throws -> URL {
         let candidate = supportRoot.appendingPathComponent("venv/bin/python3")
-        guard FileManager.default.isExecutableFile(atPath: candidate.path) else {
+        guard managedPythonIsApproved(candidate) else {
             throw BridgeCoreError.dependencyMissing(
-                "pinned 0-Sky Python environment; install missing dependencies first"
+                "pinned 0-Sky Python environment. Open Dependencies, click "
+                + "Install All 0-Sky Requirements, wait for REQUIREMENTS=PASS, "
+                + "then return here and choose Resume. The repair uses the "
+                + "signed bundled Python and does not require Homebrew."
             )
         }
         return candidate
@@ -233,11 +236,32 @@ public struct BridgePaths: Sendable {
     }
 
     public func python(for profile: DeviceProfile) throws -> URL {
-        let candidate = instanceDirectory(profile).appendingPathComponent("venv/bin/python3")
-        guard FileManager.default.isExecutableFile(atPath: candidate.path) else {
-            throw BridgeCoreError.dependencyMissing(candidate.path)
+        let candidates = [
+            instanceDirectory(profile).appendingPathComponent("venv/bin/python3"),
+            supportRoot.appendingPathComponent("venv/bin/python3"),
+        ]
+        if let candidate = candidates.first(where: managedPythonIsApproved) {
+            return candidate
         }
-        return candidate
+        throw BridgeCoreError.dependencyMissing(
+            "an approved instance Python environment. Open Dependencies, click "
+            + "Install All 0-Sky Requirements, then retry this exact device."
+        )
+    }
+
+    private func managedPythonIsApproved(_ candidate: URL) -> Bool {
+        let fileManager = FileManager.default
+        guard fileManager.isExecutableFile(atPath: candidate.path) else { return false }
+        // Source checkouts can use their explicitly prepared venv. A packaged
+        // release must bind every managed venv to the signed bundled runtime;
+        // otherwise a stale Homebrew/python.org symlink escapes ScriptRunner's
+        // executable allowlist and makes the package machine-dependent.
+        guard let bundledKitRoot else { return true }
+        let runtime = bundledKitRoot
+            .appendingPathComponent("host-mac/runtime", isDirectory: true)
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath().path
+        return resolved == runtime || resolved.hasPrefix(runtime + "/")
     }
 
     public func hostScript(_ name: String, profile: DeviceProfile? = nil) throws -> URL {

@@ -106,6 +106,66 @@ class MacSetupTimeoutTests(unittest.TestCase):
                     side_effect=subprocess.TimeoutExpired(["python"], 10)):
             self.assertIsNone(setup.bootstrap_python())
 
+    def test_setup_preserves_and_rebuilds_healthy_external_python_environment(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            support = root / "support"
+            venv = support / "venv"
+            old_python = venv / "bin/python3"
+            old_python.parent.mkdir(parents=True)
+            old_python.write_text("old external runtime\n", encoding="utf-8")
+            old_python.chmod(0o755)
+            identity = root / "identity"
+            identity.write_text("fixture", encoding="utf-8")
+            identity.chmod(0o600)
+            base = root / "bundled/python3"
+            base.parent.mkdir()
+            base.write_text("bundled", encoding="utf-8")
+            base.chmod(0o755)
+            lock = root / "requirements-lock.txt"
+            lock.write_text("fixture==1\n", encoding="utf-8")
+            wheels = root / "wheelhouse"
+            wheels.mkdir()
+            for index in range(100):
+                (wheels / f"fixture-{index}.whl").write_bytes(b"fixture")
+
+            bundled_origin = root / "bundled/python-real"
+            external_origin = root / "external/python-real"
+            rebuilt = False
+
+            def fake_run(command, **_kwargs):
+                nonlocal rebuilt
+                values = [str(item) for item in command]
+                if values[1:3] == ["-m", "venv"]:
+                    rebuilt = True
+                    target = Path(values[3]) / "bin/python3"
+                    target.parent.mkdir(parents=True)
+                    target.write_text("new bundled runtime\n", encoding="utf-8")
+                    target.chmod(0o755)
+                return subprocess.CompletedProcess(values, 0, "", "")
+
+            def fake_base(candidate):
+                if Path(candidate) == base or rebuilt:
+                    return bundled_origin
+                return external_origin
+
+            with mock.patch.object(setup, "bootstrap_python", return_value=base), \
+                    mock.patch.object(setup, "REQUIREMENTS_LOCK", lock), \
+                    mock.patch.object(setup, "WHEELHOUSE", wheels), \
+                    mock.patch.object(setup, "python_probe", return_value=(True, {})), \
+                    mock.patch.object(setup, "python_base_executable", side_effect=fake_base), \
+                    mock.patch.object(setup, "run", side_effect=fake_run), \
+                    mock.patch.object(setup, "setup_frida_host"), \
+                    mock.patch.object(setup, "expose_frida_cli"):
+                selected = setup.setup_python(identity, support)
+
+            self.assertEqual(selected, support / "venv/bin/python3")
+            self.assertEqual(selected.read_text(), "new bundled runtime\n")
+            backups = list((support / "recovery").glob("venv-before-bundled-runtime-*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual((backups[0] / "bin/python3").read_text(),
+                             "old external runtime\n")
+
     def test_xcode_probe_timeout_is_not_accepted(self) -> None:
         with mock.patch.object(
                 setup.subprocess, "run",

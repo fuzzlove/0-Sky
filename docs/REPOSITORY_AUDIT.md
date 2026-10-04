@@ -137,6 +137,18 @@ identifier.
     mutation. A read-only run on the Intel test host verified all 19 SRDssh
     assets, native RemoteXPC, a fresh domain-3 nonce, and a live TSS ticket.
     Device mutation and end-to-end health remain explicit hardware UAT.
+13. **An upgraded Intel account could retain a healthy Homebrew-backed venv
+    that the signed app correctly refused to execute.** The dependency panel
+    reported the environment as available by existence alone, so Complete
+    Project failed with `Invalid or unapproved path` instead of repairing it.
+    Signing native Frida wheel members also changed their archive digests
+    without refreshing the nested Frida allowlist. **Status:** fixed. Packaged
+    workflows accept managed environments only when their base interpreter
+    resolves inside the signed Universal runtime. The guided offline repair
+    preserves an old or incomplete venv under the private recovery directory,
+    rebuilds from bundled Python, validates its exact base and dependencies,
+    and restores the old environment if repair fails. Release signing now
+    rehashes the path-confined Frida sub-manifest after wheel signing.
 
 ### Low severity
 

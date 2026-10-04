@@ -65,6 +65,32 @@ def confined_manifest_file(kit: Path, value: object) -> Path:
     return resolved
 
 
+def rehash_sha256_manifest(root: Path, manifest: Path) -> int:
+    """Rebind a release sub-manifest after mandatory code signing."""
+    if manifest.is_symlink() or not manifest.is_file():
+        raise ValueError("release sub-manifest is missing or unsafe")
+    rows: list[str] = []
+    count = 0
+    for raw in manifest.read_text(encoding="utf-8").splitlines():
+        if not raw.strip():
+            continue
+        try:
+            _old_digest, relative_text = raw.split(None, 1)
+        except ValueError as error:
+            raise ValueError("release sub-manifest row is malformed") from error
+        relative_text = relative_text.strip().lstrip("*").removeprefix("./")
+        relative = Path(relative_text)
+        if relative.is_absolute() or ".." in relative.parts:
+            raise ValueError("release sub-manifest contains an unsafe path")
+        path = confined_manifest_file(root, relative_text)
+        rows.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {relative_text}")
+        count += 1
+    if count < 1:
+        raise ValueError("release sub-manifest is empty")
+    manifest.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    return count
+
+
 def sign_wheel(wheel: Path, identity: str) -> int:
     original_mode = stat.S_IMODE(wheel.stat().st_mode)
     with zipfile.ZipFile(wheel) as source:
@@ -160,6 +186,12 @@ def sign_kit(kit: Path, identity: str) -> tuple[int, int]:
         if wheel.is_symlink():
             raise ValueError("wheel must not be a symlink")
         archived += sign_wheel(wheel, identity)
+    # Signing native members necessarily changes their enclosing wheel bytes.
+    # Keep the smaller Frida allowlist synchronized before the caller rehashes
+    # the full kit manifest; otherwise the signed package passes its outer
+    # integrity gate but the guided offline dependency repair fails inside.
+    frida_manifest = kit / "host-mac/frida-wheelhouse.sha256"
+    rehash_sha256_manifest(kit / "host-mac", frida_manifest)
     runtime_manifest = kit / "host-mac/HOST_RUNTIME_MANIFEST.json"
     value = json.loads(runtime_manifest.read_text(encoding="utf-8"))
     components = value.get("components", []) if isinstance(value, dict) else None

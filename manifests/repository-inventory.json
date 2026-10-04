@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 140,
-    "required-source-or-maintenance-test": 2104,
+    "required-source-or-maintenance-test": 2105,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "fb4e65095ae7b155a7cc9d03ac76e695e7795e51d797290ce791c133c08dd30c",
-      "size": 7139
+      "sha256": "8ea18025944c8ab9ebd1548c15bdf1df7c5f45b95638d5b6799caf300d07729a",
+      "size": 7270
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10767,8 +10767,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/BridgeCore/BridgeEnvironment.swift",
-      "sha256": "720f967c0ab8cda08147a4bd48d9b067cfe2ca9fdc84b73577d782fad07586ea",
-      "size": 7284
+      "sha256": "9f8ee9e799309f7f0da2dd88606b8ace28b4fedbaeb7ecae3bac92504224e9d0",
+      "size": 7474
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -10785,8 +10785,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/BridgeCore/BridgePaths.swift",
-      "sha256": "72150e561ab472b90085b2785b2736f2eec11a4aebed6c67624bb880a9bb9eb6",
-      "size": 14574
+      "sha256": "e6099375900ffea7587446cc40b770b1578d098a29a5090a490a73e78856b552",
+      "size": 15922
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -10821,8 +10821,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/BridgeCore/DependencyManager.swift",
-      "sha256": "79bfab4ccd29415612295f29dcfa54da04c48eff82b2e4f8bc0888059c532863",
-      "size": 6650
+      "sha256": "f20044ea266daf459a72f7c5ad37483f5074e8df72e5c62423679f4772563855",
+      "size": 6599
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -11709,8 +11709,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/Tests/BridgeCoreTests/main.swift",
-      "sha256": "ece9708967aeeeefc0f65f0a51097d207573f71473c88a530de25a87fad4b609",
-      "size": 76618
+      "sha256": "3d4aa617250bcd9d61a45996f5716cbfc43ccddba34cfa7c4357e91a6a2a8523",
+      "size": 77991
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -11841,8 +11841,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/macos_host_setup.py",
-      "sha256": "65f39945d5de634e3719107f671025e8dac9ce92d3a09c7f418c92283412d294",
-      "size": 43065
+      "sha256": "ddfa318edd8a377a64d661f3ef7fa3c9337ffbb897b56afac49fef7aa8aad85b",
+      "size": 45756
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13587,8 +13587,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "7152b7bb113bb93baef1b496dc4139ae93ac71517d1951cf646282f566d9f1d6",
-      "size": 14448
+      "sha256": "f36518d49b368f19ee2e221bd96bffa81d28edb7ab59aa62479afca2d0733f65",
+      "size": 15357
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13605,8 +13605,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "9952523a4922372edb748938393b449ffab6f32195b54685030e38380b796f57",
-      "size": 11437
+      "sha256": "ec6e5baffe41791b0da7b9ec506f213e5b6f8c4eefac0cd978e3745eb4fd0bb8",
+      "size": 12587
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13667,6 +13667,12 @@
       "path": "docs/release-notes-v1.0.0-pre.13.md",
       "sha256": "8642cc719ba24e1f1fd8ae9775c1998d8c6a6fbb1b6871c90ad721989c2c4476",
       "size": 2660
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/release-notes-v1.0.0-pre.14.md",
+      "sha256": "1242136b6fec27195fc40202fb73cc428a13e58a71690c9a888b7fb2a3af54f9",
+      "size": 2202
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14403,8 +14409,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/sign_release_kit.py",
-      "sha256": "d510c45bff3749ad56a97393f4fbd32042bc63aa8e0b3a32bed07ab840b2922e",
-      "size": 9060
+      "sha256": "26bf5b75e109464ca17323a3751d39daf0c955579020d83b35b0f5c95d29804e",
+      "size": 10676
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14577,8 +14583,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_macos_setup_timeouts.py",
-      "sha256": "1b1ab1fcb89393972ee2e315fb4c8643eb3dc96b7142e932ac7d5fd5b9d5b1a1",
-      "size": 6067
+      "sha256": "537a85f0967a95f69f745b0c54d65cc5f1c3a5e93548da1544059e29d164224e",
+      "size": 9071
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14655,8 +14661,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_sign_release_kit.py",
-      "sha256": "fd140b67014f5fe9a45d5a16cdcd5228b4260a094419bae4ff22d65d9e0817fe",
-      "size": 4130
+      "sha256": "d50beddaefbb04b16e19bebc0f368fed0e7c7abd270dfcc57928f5f1dcf5fee1",
+      "size": 5023
     },
     {
       "category": "required-source-or-maintenance-test",

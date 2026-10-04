@@ -100,20 +100,16 @@ public struct DependencyManager: Sendable {
                 : "Must report Python 3.12; the dependency installer performs the final check"
         ))
         let sharedPython = paths.supportRoot.appendingPathComponent("venv/bin/python3")
-        let instances = paths.supportRoot.appendingPathComponent("instances")
-        let instancePython = ((try? fileManager.contentsOfDirectory(
-            at: instances, includingPropertiesForKeys: nil,
-            options: [.skipsHiddenFiles]
-        )) ?? []).map { $0.appendingPathComponent("venv/bin/python3") }
-            .first(where: { fileManager.isExecutableFile(atPath: $0.path) })
-        let python = fileManager.isExecutableFile(atPath: sharedPython.path)
-            ? sharedPython : instancePython
+        let python = try? paths.projectPython()
+        let stale = fileManager.isExecutableFile(atPath: sharedPython.path) && python == nil
         statuses.append(DependencyStatus(
             name: "Pinned Python environment", path: python?.path, required: true,
             available: python != nil,
-            detail: python == nil
-                ? "Missing — installed offline by Install All 0-Sky Requirements"
-                : "Available"
+            detail: stale
+                ? "Repair required — the existing environment points outside the signed bundled runtime. Click Install All 0-Sky Requirements; the previous environment is preserved in the 0-Sky recovery directory."
+                : (python == nil
+                    ? "Missing — click Install All 0-Sky Requirements to install it offline from this signed app"
+                    : "Available and bound to the signed bundled Python runtime")
         ))
         let coreDevice = HostToolResolver.xcrunTool("devicectl")
         statuses.append(DependencyStatus(

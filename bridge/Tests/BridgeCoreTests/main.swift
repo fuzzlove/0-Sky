@@ -490,8 +490,35 @@ struct BridgeCoreTestRunner {
             withIntermediateDirectories: true
         )
         try expect(BridgePaths.hasCompleteKit(at: kit), "complete bundled kit rejected")
-        let resolved = try BridgePaths(repositoryRoot: nil, bundledKitRoot: kit).projectSetupKit()
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: kit.appendingPathComponent("host-mac/runtime/bin/python3").path
+        )
+        let stalePython = resumeRoot.appendingPathComponent("venv/bin/python3")
+        try FileManager.default.createDirectory(
+            at: stalePython.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: stalePython)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: stalePython.path
+        )
+        let releasePaths = BridgePaths(
+            repositoryRoot: nil, supportRoot: resumeRoot, bundledKitRoot: kit
+        )
+        let resolved = try releasePaths.projectSetupKit()
         try expect(resolved == kit, "bundled kit was not preferred")
+        do {
+            _ = try releasePaths.projectPython()
+            throw TestFailure.failed("release accepted a stale machine-local Python")
+        } catch BridgeCoreError.dependencyMissing { /* expected repair requirement */ }
+        try FileManager.default.removeItem(at: stalePython)
+        try FileManager.default.createSymbolicLink(
+            at: stalePython,
+            withDestinationURL: kit.appendingPathComponent("host-mac/runtime/bin/python3")
+        )
+        let releasePython = try releasePaths.projectPython()
+        try expect(releasePython == stalePython,
+                   "release rejected its bundled-runtime-bound managed environment")
         try FileManager.default.removeItem(
             at: kit.appendingPathComponent("host-mac/requirements-lock.txt")
         )
