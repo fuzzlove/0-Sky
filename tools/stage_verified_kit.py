@@ -23,6 +23,25 @@ def digest(path: Path) -> str:
     return value.hexdigest()
 
 
+def normalize_release_permissions(root: Path) -> None:
+    """Make immutable bundled kit content readable by the installed app user.
+
+    macOS packages install application resources as root:wheel. A mode copied
+    from a private build cache (0600/0700) therefore makes an otherwise complete
+    kit invisible to an ordinary account. Preserve whether a regular file is an
+    executable, but remove all build-host-specific permission restrictions.
+    """
+    root.chmod(0o755)
+    for item in sorted(root.rglob("*")):
+        if item.is_symlink():
+            continue
+        if item.is_dir():
+            item.chmod(0o755)
+        elif item.is_file():
+            executable = bool(item.stat().st_mode & 0o111)
+            item.chmod(0o755 if executable else 0o644)
+
+
 def stage(source: Path, destination: Path, *, release: bool = False,
           link_embed: bool = False) -> int:
     source = source.resolve(strict=True)
@@ -76,6 +95,8 @@ def stage(source: Path, destination: Path, *, release: bool = False,
                 raise StageError(f"staged kit link is invalid: {link.relative_to(temporary)}")
         (temporary / "SHA256SUMS").write_text(
             "\n".join(staged_lines) + "\n", encoding="utf-8")
+        if release:
+            normalize_release_permissions(temporary)
         previous = destination.with_name(destination.name + f".previous.{os.getpid()}")
         if previous.exists():
             raise StageError("previous kit staging directory is already present")

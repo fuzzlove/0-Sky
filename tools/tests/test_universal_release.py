@@ -153,6 +153,10 @@ class UniversalReleaseTests(unittest.TestCase):
                 {"schema_version": 1, "states": list(APPROVAL_STATES)}), encoding="utf-8")
             generate_kit_manifest(kit)
             self.assertEqual(runtime_kit_issues(app), [])
+            kit.chmod(0o700)
+            self.assertEqual(runtime_kit_issues(app),
+                             ["DEPENDENCY_KIT_NOT_USER_READABLE"])
+            kit.chmod(0o755)
             (app / "Contents/Resources/.0sky-incomplete-build").touch()
             self.assertEqual(runtime_kit_issues(app), ["INCOMPLETE_BUILD_MARKER"])
             (app / "Contents/Resources/.0sky-incomplete-build").unlink()
@@ -200,6 +204,19 @@ class UniversalReleaseTests(unittest.TestCase):
             subprocess.run(command, check=True, capture_output=True, timeout=30)
             extracted = package_payload(package, base / "expanded")
             self.assertTrue(same_tree(app, extracted))
+            inaccessible_root = base / "inaccessible-root"
+            inaccessible_app = inaccessible_root / "Applications/0SkyBridge.app"
+            private_kit = inaccessible_app / "Contents/Resources/Kit"
+            private_kit.mkdir(parents=True)
+            private_kit.chmod(0o700)
+            (private_kit / "SHA256SUMS").write_text("fixture", encoding="utf-8")
+            private_package = base / "private.pkg"
+            subprocess.run(["pkgbuild", "--root", str(inaccessible_root),
+                            "--identifier", "com.example.0sky.private", "--version", "1.0",
+                            "--install-location", "/", str(private_package)], check=True,
+                           capture_output=True, timeout=30)
+            with self.assertRaisesRegex(ValueError, "not readable"):
+                package_payload(private_package, base / "expanded-private")
             (root / "unexpected.txt").write_text("extra", encoding="utf-8")
             extra_package = base / "extra.pkg"
             command[-1] = str(extra_package)

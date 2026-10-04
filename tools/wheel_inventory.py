@@ -69,6 +69,7 @@ def write(kit: Path) -> int:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(data, stream, indent=2, sort_keys=True)
             stream.write("\n")
+        os.chmod(temporary, 0o644)
         os.replace(temporary, destination)
     finally:
         if os.path.exists(temporary):

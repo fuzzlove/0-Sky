@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "5ae3932cea1458173b1e4588dfd3f5a46d41647f90e605a3bff92730935abdda",
-      "size": 4995
+      "sha256": "a49b61fb433e214cd10fa2449a85dce90ca1e8ea469f55389e15740d5b92a885",
+      "size": 5194
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -13557,8 +13557,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "01b3da6f540d886348dfb3173d0cbe21309d8e2b9f6669989c4bbf7181364df9",
-      "size": 10042
+      "sha256": "4ea2c32952e49993733c60b8b3828fe22ef13690b0b7f25ad5f155b1995ec00a",
+      "size": 10806
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13575,8 +13575,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "841a3d894e9cc4eebd2a8eb7dcd893f0cc48ddabb593e2ac0d2e5dcf6d6ca8f8",
-      "size": 7656
+      "sha256": "854be9c7d7b111afdd30049483cdb45a21846ff35e57629b0914b15d191af6b1",
+      "size": 8218
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14187,7 +14187,7 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/pii_audit_allowlist.json",
-      "sha256": "e59d00e158b6ca6fd39e905dafd9028bbb899b12922c44fc306d19c8362e49d3",
+      "sha256": "59591f1ced67aa7ae88f412038e62a7f069dd985ab7a6663bd9ccfdeed3b4150",
       "size": 9712
     },
     {
@@ -14361,8 +14361,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/sign_release_kit.py",
-      "sha256": "4e4246c0eee557b436d005099c09330e98100accefb6ecabdebbf05c8f3b80d3",
-      "size": 8958
+      "sha256": "d510c45bff3749ad56a97393f4fbd32042bc63aa8e0b3a32bed07ab840b2922e",
+      "size": 9060
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14379,8 +14379,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/stage_verified_kit.py",
-      "sha256": "7528e0274675aab39f91ae218733bf99c294cfce0529561fbde1ccb72fdac34f",
-      "size": 4854
+      "sha256": "360692e889d2b7b369118148640375fd07484414cedf6d8a54b676c7978171b3",
+      "size": 5699
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14499,8 +14499,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_installer_lifecycle.py",
-      "sha256": "b4a54d8b7bb758da5ea2a985b84358dca22d1f4cc93dc043252d3362ae605f44",
-      "size": 12101
+      "sha256": "1fe9510fa7c4f5f80a0ad7b0f614b42fad4c5bf6340dcc1dd502ec3efffbce42",
+      "size": 12398
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14607,8 +14607,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_sign_release_kit.py",
-      "sha256": "769d9f8331c9702c105d14d5fa5671bd1af45eca20c190cb4dbc617e16f9b592",
-      "size": 4064
+      "sha256": "fd140b67014f5fe9a45d5a16cdcd5228b4260a094419bae4ff22d65d9e0817fe",
+      "size": 4130
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14637,8 +14637,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_universal_release.py",
-      "sha256": "95d77ffeb522b87d27a1fb3bb02cc09432e261fe6917bc3c265e7c37aea37772",
-      "size": 11998
+      "sha256": "e92a7e0b9922d6920427068109fc6a030f8ffe81c50c1590dc17fe089f04f183",
+      "size": 13061
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14673,14 +14673,14 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/verify_release.py",
-      "sha256": "e27930c2b563ad84737c9794aaf8e3f948f90d9b48814d3268ca6b521b7aac53",
-      "size": 30045
+      "sha256": "4a340b7ab9316f6f1f5fdabb79e707fbd71369b13bbe1da05da5379c9d29aaee",
+      "size": 31404
     },
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/wheel_inventory.py",
-      "sha256": "23a88f3f5a80c88e6556eb1c5c59e8e3f2dccb6ad529c577faf8b8a2afbe1b27",
-      "size": 3804
+      "sha256": "f89db1caad1fc8233a65fd20a653ecd3e3e37d3ad6778aef32853f8c3c602d71",
+      "size": 3839
     }
   ],
   "schema": 1,

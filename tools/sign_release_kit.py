@@ -66,6 +66,7 @@ def confined_manifest_file(kit: Path, value: object) -> Path:
 
 
 def sign_wheel(wheel: Path, identity: str) -> int:
+    original_mode = stat.S_IMODE(wheel.stat().st_mode)
     with zipfile.ZipFile(wheel) as source:
         infos = source.infolist()
         names = [item.filename for item in infos]
@@ -136,6 +137,7 @@ def sign_wheel(wheel: Path, identity: str) -> int:
                         clone.internal_attr = info.internal_attr
                         clone.external_attr = info.external_attr
                         destination.writestr(clone, data)
+                temporary.chmod(original_mode)
                 os.replace(temporary, wheel)
             finally:
                 if temporary.exists():

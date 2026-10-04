@@ -51,6 +51,16 @@ pending non-ignored file and uses these categories:
    plus built-in `dpkg-deb`, exact-device USB discovery, and USB forwarding
    helpers. The packaged installer accepts only this verified runtime and never
    substitutes Homebrew or developer Python. **Resolved.**
+5. **The first experimental Universal 2 package preserved owner-only modes
+   from the build cache.** `pkgbuild --ownership recommended` correctly made
+   the payload root-owned, but the kit root remained `0700` and several assets
+   remained `0600`; a normal installed user therefore saw a false incomplete-
+   kit error. **Status:** fixed by canonical release-mode normalization to
+   `0755` directories/executables and `0644` data before manifest generation.
+   Wheel repacking preserves its outer mode, and both staged-app and package-
+   BOM verification now reject any kit resource an ordinary installed account
+   cannot traverse or read. Regression tests cover private input modes and the
+   exact root-owned package failure.
 
 No credential value was printed or copied. The tracked-source PII gate found
 no unallowlisted credential, private key, fixed home path, or physical device
@@ -146,7 +156,7 @@ identifier.
 | Resumable setup-state tests | PASS — private atomic progress and read-only non-persistence |
 | Repeated missing-kit release failure | PASS — failed closed and retained only one sanitized audit report |
 | Control package build | PASS — clean 3.5.36 arm64 rootless package using an explicit Theos checkout |
-| Signed/notarized Universal 2 `.pkg` | PASS — canonical distribution build, Developer ID app/installer signing, notary acceptance, staple validation, four-file manifest, and independent package-only verification |
+| Signed/notarized Universal 2 `.pkg` | PASS — canonical distribution build, Developer ID app/installer signing, notary acceptance, staple validation, user-readable root-owned kit, four-file manifest, and independent package-only verification |
 | Clean-account install, Intel runtime, live SRD matrix | NOT_EXECUTED |
 
 Machine-readable results in `SOURCE_AUDIT.json` distinguish executed tests from

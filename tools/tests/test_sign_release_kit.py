@@ -42,6 +42,7 @@ class SignReleaseKitTests(unittest.TestCase):
             self.assertEqual(rows["demo/native.so"][1], "sha256=" + encoded)
             self.assertEqual(rows["demo/native.so"][2], str(len(native)))
             self.assertEqual(rows[record_name][1:], ["", ""])
+            self.assertEqual(wheel.stat().st_mode & 0o777, 0o644)
 
     def test_wheel_traversal_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

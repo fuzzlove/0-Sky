@@ -184,12 +184,17 @@ class InstallerLifecycleTests(unittest.TestCase):
             for index, path in enumerate(files):
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_bytes(f"fixture {index}".encode())
+            files[0].chmod(0o600)
+            files[1].chmod(0o700)
             (source / "SHA256SUMS").write_text("".join(
                 f"{digest(path)}  ./{path.relative_to(source).as_posix()}\n"
                 for path in files))
             self.assertEqual(stage(source, output, release=True), 10)
             self.assertFalse((output / "host-mac/__pycache__").exists())
             self.assertFalse((output / "host-mac/helper.pyo").exists())
+            self.assertEqual(output.stat().st_mode & 0o777, 0o755)
+            self.assertEqual((output / "asset-0").stat().st_mode & 0o777, 0o644)
+            self.assertEqual((output / "asset-1").stat().st_mode & 0o777, 0o755)
 
     def test_sanitizer_reports_categories_without_values(self):
         with tempfile.TemporaryDirectory() as temporary:

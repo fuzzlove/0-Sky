@@ -107,11 +107,36 @@ def runtime_kit_issues(app: Path) -> list[str]:
         return ["DEPENDENCY_KIT_INCOMPLETE"]
     if any(not (scripts / relative).is_file() for relative in REQUIRED_APP_SCRIPTS):
         return ["DEPENDENCY_INSTALLER_MISSING"]
+    if kit_access_issues(kit):
+        return ["DEPENDENCY_KIT_NOT_USER_READABLE"]
     issues = verify_kit_manifest(kit)
     try:
         verify_host_runtime(kit)
     except (OSError, RuntimeManifestError, subprocess.SubprocessError):
         issues.append("HOST_RUNTIME_INVALID")
+    return issues
+
+
+def mode_allows_installed_user(mode: int) -> bool:
+    """Whether root-owned package content can be consumed by a normal account."""
+    if stat.S_ISDIR(mode):
+        return mode & 0o005 == 0o005
+    if stat.S_ISREG(mode):
+        if mode & 0o004 != 0o004:
+            return False
+        return not mode & 0o111 or mode & 0o001 == 0o001
+    return True
+
+
+def kit_access_issues(kit: Path) -> list[str]:
+    if not kit.is_dir():
+        return ["KIT_ROOT_MISSING"]
+    issues: list[str] = []
+    for item in [kit, *kit.rglob("*")]:
+        if item.is_symlink():
+            continue
+        if not mode_allows_installed_user(item.stat().st_mode):
+            issues.append(item.relative_to(kit).as_posix() if item != kit else ".")
     return issues
 
 
@@ -283,10 +308,15 @@ def package_payload(package: Path, destination: Path) -> Path:
         parts = raw.split("\t")
         if len(parts) != 4:
             raise ValueError("package ownership manifest malformed")
-        _, mode, user_id, group_id = parts
-        if user_id != "0" or group_id != "0" or int(mode, 8) & (
+        relative, mode, user_id, group_id = parts
+        numeric_mode = int(mode, 8)
+        if user_id != "0" or group_id != "0" or numeric_mode & (
             stat.S_IWOTH | stat.S_ISUID | stat.S_ISGID):
             raise ValueError("package ownership or permissions unsafe")
+        kit_prefix = "./Applications/0SkyBridge.app/Contents/Resources/Kit"
+        if (relative == kit_prefix or relative.startswith(kit_prefix + "/")) and not (
+                mode_allows_installed_user(numeric_mode)):
+            raise ValueError("package kit is not readable by the installed app user")
     payload = destination / "Payload"
     app = payload / "Applications/0SkyBridge.app"
     if not app.is_dir():
@@ -363,9 +393,12 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
         errors.append("UNEXPECTED_DEVELOPMENT_FILE")
     bad_modes = [item for item in app.rglob("*") if not item.is_symlink()
                  and item.stat().st_mode & (stat.S_IWOTH | stat.S_ISUID | stat.S_ISGID)]
-    values["Permissions"] = "FAIL" if bad_modes else "PASS"
+    inaccessible_kit = kit_access_issues(app / "Contents/Resources/Kit")
+    values["Permissions"] = "FAIL" if bad_modes or inaccessible_kit else "PASS"
     if bad_modes:
         errors.append("UNSAFE_PERMISSIONS")
+    if inaccessible_kit:
+        errors.append("BUNDLED_KIT_NOT_USER_READABLE")
     native = [item for item in all_files if is_macho(item)]
     mac_native: list[Path] = []
     mac_arches: dict[str, set[str]] = {}
