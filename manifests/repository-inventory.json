@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 140,
-    "required-source-or-maintenance-test": 2107,
+    "required-source-or-maintenance-test": 2108,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "1bc48fc7bc5354616e2c8ad81348491e741e6ed7c63904e48c60b2d81335a8e7",
-      "size": 7591
+      "sha256": "1321daac5fd3a72473d8d3b7b9f20bfad69185d568b851ee40de230e3127a120",
+      "size": 7661
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10881,8 +10881,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/BridgeCore/IOSComponentSetupManager.swift",
-      "sha256": "9969942f434851c22d0cf629859f1cbfca1df8a8a4c7f6b21b9d3fab0f46868d",
-      "size": 10549
+      "sha256": "04b80dc94e8398d25f043a816920d7a17036d8707f35a5df499d4c74aecf2842",
+      "size": 11416
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -11709,8 +11709,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/Tests/BridgeCoreTests/main.swift",
-      "sha256": "3d4aa617250bcd9d61a45996f5716cbfc43ccddba34cfa7c4357e91a6a2a8523",
-      "size": 77991
+      "sha256": "731a6948866e37ae14780cf5036751c889fe538770043e462a551cc880fa8bc2",
+      "size": 78871
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13587,8 +13587,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "ba00cc5e55637d1f13c0fda67cca1f2ef6db23eabbde54b5998b29f695b03a6d",
-      "size": 16966
+      "sha256": "49bb7062352d9ce63699be02143bc40d02a73da50eb7e9d6ea3f2736049b211c",
+      "size": 17635
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13605,8 +13605,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "421e1912d271079c51d80d4015548b9cd6645cc8f412fccda891fa294c3a11e9",
-      "size": 13900
+      "sha256": "383bf1148a5e9937adcbf8e622d050a9a01bb006661a21040d2c2fbd6f4426d1",
+      "size": 14559
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13685,6 +13685,12 @@
       "path": "docs/release-notes-v1.0.0-pre.16.md",
       "sha256": "e1fe643b5cd46355f4eb501eaeb459e847f9d0f11eaaa7b82efc306f60c6dff5",
       "size": 1830
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/release-notes-v1.0.0-pre.17.md",
+      "sha256": "2443a230f9ab9b9ae5e9883c7fa3f14ccd21fa46002c9f2900a1e62f705d1ec7",
+      "size": 1716
     },
     {
       "category": "required-source-or-maintenance-test",

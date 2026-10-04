@@ -456,6 +456,23 @@ struct BridgeCoreTestRunner {
                    "complete iOS Project plan omitted a required component")
         try expect(complete.preservesNewerPackages,
                    "complete iOS Project plan would replace newer packages")
+        let ios27Arguments = try IOSComponentSetupManager.completeProjectControllerArguments(
+            device: SkyDevice(
+                udid: "00000000-0000000000000001", osVersion: "27.0",
+                usbConnected: true
+            )
+        )
+        try expect(ios27Arguments == ["--udid", "00000000-0000000000000001",
+                                      "--pair-remotexpc"],
+                   "iOS 27 setup omitted the guided Paired Macs fallback")
+        let ios26Arguments = try IOSComponentSetupManager.completeProjectControllerArguments(
+            device: SkyDevice(
+                udid: "00000000-0000000000000001", osVersion: "26.0",
+                usbConnected: true
+            )
+        )
+        try expect(ios26Arguments == ["--udid", "00000000-0000000000000001"],
+                   "iOS 26 setup incorrectly enabled the iOS 27 Paired Macs flow")
         // The public repository is deliberately source-only. Distribution
         // payload resolution is covered by installer verification; here we
         // assert that a source checkout fails closed instead of inventing or

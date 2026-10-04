@@ -169,6 +169,15 @@ identifier.
     profile, rejects LaunchAgent/profile disagreement, and fails before
     allocation on unsafe or wrong-device state. Tests cover a busy saved port,
     another profile's idle reserved port, and endpoint mismatch.
+16. **The packaged Complete Project action did not enable the supported iOS 27
+    Paired Macs recovery.** Live Intel testing passed profile migration and
+    saved-port recovery, then timed out in `PreferredRsdTunnel`; rerunning could
+    only repeat the timeout even though the controller already implemented a
+    bounded device-initiated pair-host flow. **Status:** fixed. The Swift setup
+    manager now adds `--pair-remotexpc` for an explicitly selected device on
+    iOS 27 or later, retains the existing exact-UDID verification after pairing,
+    and leaves iOS 26 on its validated path. BridgeCore regression assertions
+    cover both OS-family argument sets.
 
 ### Low severity
 
