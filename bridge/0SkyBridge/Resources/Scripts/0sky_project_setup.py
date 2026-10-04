@@ -105,6 +105,23 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def safe_manifest_entry(root: Path, path: Path) -> bool:
+    """Accept regular files and only relative links contained by the kit."""
+    if not path.is_file():
+        return False
+    if not path.is_symlink():
+        return True
+    try:
+        target = Path(os.readlink(path))
+        if target.is_absolute() or ".." in target.parts:
+            return False
+        resolved_root = root.resolve(strict=True)
+        resolved_target = path.resolve(strict=True)
+        return resolved_root in resolved_target.parents
+    except (OSError, RuntimeError):
+        return False
+
+
 def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = None,
         capture: bool = False, input_data: bytes | None = None,
         log_file: Path | None = None) -> subprocess.CompletedProcess:
@@ -271,17 +288,10 @@ def verify_manifest() -> int:
         expected, raw = line.split(None, 1)
         relative = raw.strip().lstrip("*").removeprefix("./")
         path = KIT / relative
-        # The minimal SRDssh payload deliberately uses one relative `sh ->
-        # toybox` applet link. Accept only that exact, non-traversing link;
-        # every other manifest entry must remain a regular file.
-        approved_link = (
-            relative == "srdssh/payload-root/usr/bin/sh"
-            and path.is_symlink()
-            and os.readlink(path) == "toybox"
-        )
-        if (not path.is_file()
-                or (path.is_symlink() and not approved_link)
-                or sha256(path) != expected):
+        # The Universal Python runtime and SRD payload intentionally contain
+        # relative applet/entry-point links. Accept them only when they cannot
+        # traverse and resolve to a manifest-bound file inside this kit.
+        if not safe_manifest_entry(KIT, path) or sha256(path) != expected:
             raise PoCError(f"kit integrity check failed: {relative}")
         count += 1
     if count < 10:
@@ -1339,6 +1349,7 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
             detail = (first.stdout + first.stderr).decode("utf-8", "replace")
             raise PoCError("Dropbear/Procursus stage failed after supported transport fallbacks:\n" + detail[-6000:])
         if args.check:
+            report["stage_results"]["dropbear-procursus"] = "passed"
             report.update(passed=True, check_only=True)
             return report
 

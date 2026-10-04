@@ -119,6 +119,24 @@ identifier.
     the confirmed Complete Project stage directly; that audited controller
     establishes SRDssh/Procursus first and only then converges host pairing and
     device components. Existing-device pairing remains a separate operation.
+11. **The complete-project integrity gate rejected valid bundled-runtime
+    symlinks.** Live Intel `--check` stopped at the Universal Python
+    `2to3 -> 2to3-3.12` entry point even though both target bytes and link were
+    package-verified. **Status:** fixed. The controller accepts only relative,
+    non-traversing links whose strict resolution stays inside the verified kit;
+    the target bytes must still match the manifest hash. Absolute, escaping,
+    broken, and mismatched links fail closed. Regression tests cover all cases.
+12. **Release preparation replaced the only fresh-SRD bootstrap with a
+    fail-closed compatibility placeholder.** The signed package therefore
+    could validate its embedded kit but could never install SRDssh on a new
+    target. A second stale source checksum also rejected the bundled public
+    key before RemoteXPC preflight. **Status:** fixed. The reviewed exact-UDID
+    SRDssh bootstrap and Cryptex installer are now source-controlled release
+    overrides, remain bound by the generated kit manifest, select the measured
+    iOS 26/27 GenericDmg slot, and retain live nonce/TSS authorization before
+    mutation. A read-only run on the Intel test host verified all 19 SRDssh
+    assets, native RemoteXPC, a fresh domain-3 nonce, and a live TSS ticket.
+    Device mutation and end-to-end health remain explicit hardware UAT.
 
 ### Low severity
 

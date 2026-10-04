@@ -49,6 +49,8 @@ OVERRIDES = {
     "automation/CrypStoreAutomation/native-install/build_and_install.sh": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/build_and_install.sh",
     "runtime-generation/build_and_install.sh": ROOT / "bridge/KitScripts/runtime-generation/build_and_install.sh",
     "srdssh/rekey_image.py": ROOT / "bridge/KitScripts/srdssh/rekey_image.py",
+    "srdssh/bootstrap.py": ROOT / "bridge/KitScripts/srdssh/bootstrap.py",
+    "srdssh/install_cryptex_native.py": ROOT / "bridge/KitScripts/srdssh/install_cryptex_native.py",
     "automation/tools/srd-runtime-manager/sync_runtime_cryptex.py": ROOT / "bridge/KitScripts/automation/tools/srd-runtime-manager/sync_runtime_cryptex.py",
 }
 
@@ -142,12 +144,12 @@ def apply_portability_overrides(kit: Path) -> None:
         slot = "./" + relative
         rows = [row for row in rows if row.split(None, 1)[-1] != slot]
         rows.append(f"{digest(target)}  {slot}")
-    # Old vendor entry points are retained only in the verified input kit.
-    # Release-facing wrappers delegate to the canonical compatibility engine.
+    # Obsolete vendor entry points are retained only in the verified input
+    # kit. Release-facing wrappers delegate to the compatibility engine. The
+    # source-controlled SRDssh bootstrap and installer above are canonical
+    # transactional adapters and must remain executable for fresh devices.
     guard = ROOT / "bridge/HostTools/compatibility_guard.py"
     for relative in (
-        "srdssh/bootstrap.py",
-        "srdssh/install_cryptex_native.py",
         "filza/install_cryptex_native.py",
         "automation/CrypStoreAutomation/crypstore_keeper.py",
         "automation/CrypStoreAutomation/sileo-package-bridge-v8.py",

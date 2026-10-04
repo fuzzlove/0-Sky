@@ -14,6 +14,16 @@ during live Intel testing.
   applications, services, and health checks.
 - Setup guidance distinguishes pairing an already prepared SRD from preparing
   a fresh SRD, eliminating the circular `pairing exited 2` workflow.
+- The controller now accepts manifest-hashed relative links only when they
+  resolve inside the verified kit. This fixes the Intel preflight rejection of
+  legitimate Universal Python entry points such as `2to3 -> 2to3-3.12`, while
+  absolute, escaping, and broken links remain blocked.
+- Release preparation no longer replaces the canonical SRDssh bootstrap and
+  Cryptex installer with compatibility placeholders. Both reviewed adapters
+  are source-controlled, manifest-bound, exact-device scoped, and choose the
+  validated GenericDmg slot for iOS 26 or iOS 27.
+- Corrected the stale bundled-public-key checksum that previously stopped a
+  fresh setup before RemoteXPC authorization.
 
 ## Retained pre.12 fixes
 
@@ -31,7 +41,11 @@ during live Intel testing.
 ## Evidence boundary
 
 Read-only live inspection was executed on a MacBookPro16,1 (`x86_64`) running
-macOS 26.5.2. The signed Universal 2 app, readable embedded kit, USB discovery,
-and Apple developer services were verified. The old action ordering and
-incomplete duplicate profiles were reproduced. A complete pre.13 installation
-on that Intel Mac and fresh SRD remains hardware UAT, not yet claimed as passed.
+macOS 26.5.2 with an iPhone12,8 on iOS 27.0. The signed Universal 2 app,
+readable embedded kit, USB discovery, Apple developer services, all 19 SRDssh
+assets, native RemoteXPC, a 48-byte domain-3 nonce, and live Apple TSS ticket
+authorization were verified without device mutation. The old action ordering,
+incomplete duplicate profiles, overly narrow symlink gate, disabled SRDssh
+adapter, and stale key hash were reproduced. A complete pre.13 installation
+and post-install health check on that Intel Mac and fresh SRD remain hardware
+UAT, not yet claimed as passed.

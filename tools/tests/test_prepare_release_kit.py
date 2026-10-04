@@ -23,7 +23,6 @@ class PrepareReleaseKitTests(unittest.TestCase):
             target.write_text("print('old')\n", encoding="utf-8")
             manifest = kit / "SHA256SUMS"
             retired = (
-                "srdssh/bootstrap.py", "srdssh/install_cryptex_native.py",
                 "filza/install_cryptex_native.py",
                 "automation/CrypStoreAutomation/crypstore_keeper.py",
                 "automation/CrypStoreAutomation/sileo-package-bridge-v8.py",

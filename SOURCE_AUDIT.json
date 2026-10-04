@@ -27,7 +27,7 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 282 run, 3 skipped for unavailable private paid fixtures",
+        "tools_unit_tests": "PASS: 289 run, 3 skipped for unavailable private paid fixtures; includes contained runtime symlink acceptance, SRDssh release-adapter preservation, iOS 26/27 image-slot selection, and absolute, traversal, and broken-link rejection",
         "host_tools_unit_tests": "PASS: 126 run, 1 skipped because the external source kit is absent; includes private pairing transcript permissions, redacted actionable pairing errors, and symlink rejection",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
@@ -61,12 +61,12 @@
         "distribution_signing_and_notarization": "PASS: Developer ID app/installer signing, hardened runtime, entitlements, notary acceptance, and staple validation",
         "independent_release_verification": "PASS: four-file allowlist and checksums, extracted package, signatures, architectures, kit, privacy, Gatekeeper, and staple; FINAL_RESULT=PASS",
         "release_sanitizer": "PASS: zero blockers; reviewed upstream/debug findings summarized as advisories; public test fixtures exact-hash bound",
-        "intel_setup_failure_diagnosis": "PASS (read-only live inspection): fresh SRD was USB-visible, while the Set Up New Device action invoked host pairing before SRDssh existed; incomplete primary and preserved previous profiles explained pairing exit 2 and duplicate-UUID state"
+        "intel_setup_failure_diagnosis": "PASS (read-only live inspection): fresh SRD was USB-visible; old setup ordering invoked host pairing before SRDssh; incomplete primary and preserved previous profiles explained pairing exit 2 and duplicate-UUID state; corrected pre.13 controller verified 3771 kit entries, all 19 SRDssh assets, native exact-device RemoteXPC, a 48-byte domain-3 nonce, and a live Apple TSS ticket without device mutation"
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",
         "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
-        "intel_runtime_uat": "PARTIAL: on MacBookPro16,1 x86_64 macOS 26.5.2, installed pre.11 app signature, Universal 2 slices, readable embedded kit, exact-device USB discovery, and developer services were observed; complete pre.13 fresh-SRD setup remains pending",
+        "intel_runtime_uat": "PARTIAL: on MacBookPro16,1 x86_64 macOS 26.5.2, installed pre.11 app signature, Universal 2 slices, readable embedded kit, exact-device USB discovery, developer services, corrected pre.13 manifest verification, native RemoteXPC, domain-3 nonce, and live TSS authorization were observed; device mutation and complete pre.13 post-install health remain pending",
         "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
         "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
         "publication": "NOT_EXECUTED: release artifacts were not pushed, uploaded, or published"
