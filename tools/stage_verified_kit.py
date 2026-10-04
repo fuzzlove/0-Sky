@@ -69,9 +69,10 @@ def stage(source: Path, destination: Path, *, release: bool = False,
             staged_lines.append(parts[0] + "  ./" + relative)
         if count < 10:
             raise StageError("kit manifest is incomplete")
+        temporary_resolved = temporary.resolve()
         for link in temporary.rglob("*"):
             if link.is_symlink() and (not link.resolve().exists()
-                                      or temporary not in link.resolve().parents):
+                                      or temporary_resolved not in link.resolve().parents):
                 raise StageError(f"staged kit link is invalid: {link.relative_to(temporary)}")
         (temporary / "SHA256SUMS").write_text(
             "\n".join(staged_lines) + "\n", encoding="utf-8")

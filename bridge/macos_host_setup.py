@@ -58,11 +58,6 @@ WHEELHOUSE = KIT / "host-mac/wheelhouse"
 BUNDLED_BIN = KIT / "host-mac/runtime/bin"
 FRIDA_VERSION = "17.18.0"
 FRIDA_TOOLS_VERSION = "14.10.4"
-FRIDA_COMMANDS = (
-    "frida", "frida-apk", "frida-compile", "frida-create", "frida-discover",
-    "frida-join", "frida-kill", "frida-ls", "frida-ls-devices", "frida-pm",
-    "frida-ps", "frida-pull", "frida-push", "frida-rm", "frida-trace",
-)
 INITIAL_CONFIG = user_config_defaults(ROOT)
 DEFAULT_SUPPORT = Path(INITIAL_CONFIG["paths"]["support"])
 DEFAULT_IDENTITY = Path(INITIAL_CONFIG["paths"]["ssh_identity"])
@@ -74,17 +69,22 @@ BREW_FORMULAS = {
     # Keep the versioned interpreter explicit.  Apple's /usr/bin/python3 is
     # only a bootstrap convenience and is not the runtime used by 0-Sky.
     "python3.12": "python@3.12",
-    "dpkg": "dpkg",
     "iproxy": "libusbmuxd",
-    "zstd": "zstd",
     "dpkg-deb": "dpkg",
-    "ldid": "ldid",
+    "idevice_id": "libimobiledevice",
 }
 
+BUNDLED_RUNTIME_REPAIR = (
+    "Downloaded app: delete the incomplete 0SkyBridge.app, re-download the complete "
+    "four-file release, verify SHA256SUMS, and reinstall its .pkg. Do not install "
+    "Homebrew as a substitute. Source kit: from the repository run `python3 "
+    "tools/build_host_runtime.py '/absolute/path/to/a-writable-kit-copy'`, then "
+    "rebuild the app; never modify a signed app bundle in place."
+)
+
 COMMANDS = (
-    "shasum", "ssh", "ssh-keygen", "iproxy", "nc", "lsof",
-    "tar", "zstd", "make", "xcrun", "clang", "codesign", "lipo",
-    "hdiutil", "plutil", "launchctl", "ditto", "dpkg", "dpkg-deb", "ldid",
+    "shasum", "ssh", "ssh-keygen", "iproxy", "idevice_id", "nc", "lsof",
+    "tar", "codesign", "hdiutil", "plutil", "launchctl", "ditto", "dpkg-deb",
 )
 
 APPLE_TOOLS = (
@@ -186,6 +186,14 @@ def verify_sha256_manifest(manifest: Path, root: Path) -> tuple[bool, str]:
     return (checked > 0, f"{checked} pinned files")
 
 
+def file_sha256(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
+
+
 def activate_bundled_runtime() -> bool:
     """Admit only manifest-hashed tools from the immutable application kit."""
     manifest = KIT / "host-mac/HOST_RUNTIME_MANIFEST.json"
@@ -195,25 +203,51 @@ def activate_bundled_runtime() -> bool:
         raise SystemExit("the bundled host runtime is incomplete or unsafe")
     try:
         value = json.loads(manifest.read_text(encoding="utf-8"))
+        if value.get("schema") != 2 or value.get("platform") != "macOS":
+            raise ValueError("unsupported manifest schema")
         components = value["components"]
-        required = {"python3", "dpkg", "dpkg-deb", "iproxy", "idevice_id", "zstd", "ldid"}
+        required = {"python3", "dpkg-deb", "iproxy", "idevice_id"}
         seen: set[str] = set()
         kit_root = KIT.resolve(strict=True)
+
+        def confined(relative: str, *, executable: bool = False) -> Path:
+            candidate = Path(relative)
+            path = KIT / candidate
+            resolved = path.resolve(strict=True)
+            if (candidate.is_absolute() or ".." in candidate.parts or path.is_symlink()
+                    or kit_root not in resolved.parents or not path.is_file()
+                    or (executable and not os.access(path, os.X_OK))):
+                raise ValueError("unsafe runtime path")
+            return path
+
         for component in components:
             name = str(component["name"])
-            path = KIT / str(component["path"])
-            resolved = path.resolve(strict=True)
-            if (name in seen or path.is_symlink()
-                    or kit_root not in resolved.parents or not path.is_file()
-                    or not os.access(path, os.X_OK)
-                    or hashlib.sha256(path.read_bytes()).hexdigest() != component["sha256"]
-                    or platform.machine().lower() not in component["architectures"]):
+            path = confined(str(component["path"]), executable=True)
+            architectures = set(component["architectures"])
+            license_path = confined(str(component["license"]))
+            notices = component.get("notices", [])
+            if not isinstance(notices, list):
                 raise ValueError("invalid component")
+            for notice in notices:
+                confined(str(notice))
+            if (name in seen or file_sha256(path) != component["sha256"]
+                    or architectures != {"arm64", "x86_64"}
+                    or not license_path.is_file()):
+                raise ValueError("invalid component")
+            payloads = component.get("payloads")
+            if name == "python3":
+                if not isinstance(payloads, dict) or set(payloads) != {"arm64", "x86_64"}:
+                    raise ValueError("Python architecture payloads are incomplete")
+                for architecture, payload in payloads.items():
+                    binary = confined(str(payload["path"]), executable=True)
+                    if file_sha256(binary) != payload.get("sha256"):
+                        raise ValueError(f"invalid Python payload: {architecture}")
             seen.add(name)
         if not required.issubset(seen):
             raise ValueError("missing component")
     except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
-        raise SystemExit("the bundled host runtime failed manifest validation") from error
+        raise SystemExit("The bundled host runtime failed manifest validation. "
+                         + BUNDLED_RUNTIME_REPAIR) from error
     os.environ["PATH"] = os.pathsep.join(
         [str(BUNDLED_BIN), *os.environ.get("PATH", "").split(os.pathsep)]
     )
@@ -249,36 +283,10 @@ def frida_probe(support: Path) -> tuple[bool, str]:
 
 
 def expose_frida_cli(support: Path, directories: tuple[Path, ...] | None = None) -> int:
-    """Expose managed commands in an existing writable Homebrew bin safely."""
-    directories = directories or (Path("/opt/homebrew/bin"), Path("/usr/local/bin"))
-    destination_root = next((path for path in directories
-                             if path.is_dir() and os.access(path, os.W_OK)), None)
-    if destination_root is None:
-        log("Managed Frida is ready; no writable command directory was available")
-        return 0
-    managed_root = (support / "tools").resolve()
-    current_bin = support / "tools/frida-current/bin"
-    created = 0
-    for name in FRIDA_COMMANDS:
-        source = current_bin / name
-        if not source.is_file():
-            continue
-        destination = destination_root / name
-        if destination.is_symlink():
-            try:
-                owned = managed_root in destination.resolve(strict=False).parents
-            except OSError:
-                owned = False
-            if not owned:
-                log(f"Preserving non-0-Sky command link: {destination}")
-                continue
-            destination.unlink()
-        elif destination.exists():
-            log(f"Preserving existing command: {destination}")
-            continue
-        destination.symlink_to(source)
-        created += 1
-    return created
+    """Keep managed commands private instead of modifying a global bin directory."""
+    del directories  # retained for source compatibility with older callers/tests
+    log(f"Managed Frida commands are ready below {support / 'tools/frida-current/bin'}")
+    return 0
 
 
 def python_candidates(requested: Path | None, support: Path) -> list[Path]:
@@ -547,21 +555,21 @@ def host_checks(sdk: str, requested_python: Path | None, support: Path,
     for name in COMMANDS:
         path = find_command(name)
         formula = BREW_FORMULAS.get(name)
-        fix = f"brew install {formula}" if formula else "install Xcode or the macOS command-line tools"
+        fix = (BUNDLED_RUNTIME_REPAIR
+               if formula else
+               (f"Required macOS command /usr/bin/{name} is unavailable. Install all pending "
+                "macOS updates in System Settings > General > Software Update. If it remains "
+                "missing, reinstall the current macOS release from macOS Recovery, then rerun "
+                "this check; 0-Sky will not download a replacement system binary."))
         checks.append(Check("PASS" if path else "FAIL", f"command {name}", path or "not found", fix))
     for path in APPLE_TOOLS:
         checks.append(Check(
             "PASS" if path.is_file() else "FAIL", path.name, str(path),
-            "install/enable Apple's Security Research Device host tools",
+            ("Install the Apple Security Research Device host tools issued for this authorized "
+             "SRD and exact OS build, then restart the Mac and rerun setup. Obtain them only "
+             "from the Apple Security Research Device program portal/instructions associated "
+             "with this device; 0-Sky cannot redistribute or synthesize these Apple files."),
         ))
-    xcode_env, sdk_path = xcode_environment(sdk)
-    detail = sdk_path
-    if xcode_env and xcode_env.get("DEVELOPER_DIR"):
-        detail += f" (DEVELOPER_DIR={xcode_env['DEVELOPER_DIR']})"
-    checks.append(Check(
-        "PASS" if xcode_env else "FAIL", f"Xcode SDK {sdk}", detail or "not found",
-        "install full Xcode containing the requested iPhoneOS SDK",
-    ))
     free = shutil.disk_usage(ROOT).free
     free_gib = free / (1024 ** 3)
     checks.append(Check(
@@ -582,7 +590,7 @@ def host_checks(sdk: str, requested_python: Path | None, support: Path,
     checks.append(Check(
         "PASS" if base_python else "FAIL", "offline Python runtime",
         str(base_python) if base_python else "Python 3.12 not found",
-        "brew install python@3.12",
+        BUNDLED_RUNTIME_REPAIR,
     ))
     wheel_count = len(list(WHEELHOUSE.glob("*.whl"))) if WHEELHOUSE.is_dir() else 0
     checks.append(Check(
@@ -751,9 +759,16 @@ def setup_frida_host(base_python: Path, support: Path) -> Path:
 def setup_python(identity: Path, support: Path) -> Path:
     base_python = bootstrap_python()
     if base_python is None:
-        raise SystemExit("Python 3.12 is required (Homebrew: brew install python@3.12)")
+        raise SystemExit("Required component missing: bundled Python 3.12 runtime. "
+                         + BUNDLED_RUNTIME_REPAIR)
     if not REQUIREMENTS_LOCK.is_file() or len(list(WHEELHOUSE.glob("*.whl"))) < 100:
-        raise SystemExit("the bundled offline Python dependency set is incomplete")
+        raise SystemExit(
+            "Required component missing: the offline Python wheelhouse or its lockfile is "
+            "incomplete. Downloaded app: reinstall the complete verified four-file release. "
+            "Source build: supply the authorized kit containing host-mac/wheelhouse and "
+            "host-mac/requirements-lock.txt; these proprietary release assets are not fetched "
+            "from PyPI during installation."
+        )
     venv = support / "venv"
     venv.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     python = venv / "bin/python3"
@@ -837,11 +852,13 @@ def print_checks(checks: list[Check], as_json: bool) -> None:
     for item in checks:
         print(f"[{item.status:4}] {item.name}: {item.detail}")
         if item.fix and item.status == "FAIL":
-            print(f"       fix: {item.fix}")
+            print("       required action:")
+            for line in item.fix.splitlines():
+                print(f"         {line}")
 
 
 def main() -> int:
-    activate_bundled_runtime()
+    bundled_runtime = activate_bundled_runtime()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, help="per-user 0-Sky configuration file")
     parser.add_argument("--init-config", action="store_true", help="create or refresh secure configuration for the current user")
@@ -849,9 +866,9 @@ def main() -> int:
     parser.add_argument("--setup", action="store_true",
                         help="install tools/Python and install or repair all three per-device LaunchAgents")
     parser.add_argument("--install-tools", action="store_true",
-                        help="install only missing Homebrew command dependencies")
+                        help="source-developer compatibility only: install missing tools with an existing Homebrew")
     parser.add_argument("--fix-missing", action="store_true",
-                        help="install missing host tools and the pinned offline Python environment; no device required")
+                        help="verify the bundled host runtime and repair the pinned per-user Python environment; no device required")
     parser.add_argument("--install-homebrew", action="store_true",
                         help="deprecated compatibility flag; moving remote bootstrap scripts are refused")
     parser.add_argument("--setup-python", action="store_true",
@@ -903,9 +920,14 @@ def main() -> int:
     if not 1 <= args.port <= 65535 or not 1 <= args.remote_port <= 65535:
         raise SystemExit("--port and --remote-port must be between 1 and 65535")
 
-    if args.setup or args.install_tools or args.fix_missing:
+    if args.install_tools:
+        # Compatibility path for source developers only. Packaged releases use
+        # the hash-verified embedded runtime and never require Homebrew or CLT.
         request_command_line_tools()
         install_tools(allow_homebrew_install=args.install_homebrew)
+    elif (args.setup or args.fix_missing) and not bundled_runtime:
+        raise SystemExit("Required component missing: bundled host runtime. "
+                         + BUNDLED_RUNTIME_REPAIR)
     selected = select_python(args.python, support)
     if args.setup or args.setup_python or args.fix_missing:
         selected = setup_python(identity, support)

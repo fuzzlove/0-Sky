@@ -3,7 +3,9 @@
 Run diagnostics before making changes:
 
 ```sh
-python3 tools/environment_preflight.py --mode development --skip-device
+python3 tools/environment_preflight.py --human --mode development \
+  --kit "/absolute/path/to/authorized kit" \
+  --theos "/absolute/path/to/locked/theos" --skip-device
 python3 tools/pii_audit.py .
 ```
 
@@ -12,6 +14,10 @@ Preflight is read-only; setup and repair are explicit operations.
 
 | Symptom | Meaning | Action |
 | --- | --- | --- |
+| Doctor reports `xcrun` or `xcodebuild` missing/incompatible | Full Xcode is absent, unfinished, or not selected. | Install Xcode from the Mac App Store, open it once, then run `sudo xcode-select -s /Applications/Xcode.app/Contents/Developer`, `sudo xcodebuild -license accept`, and `xcodebuild -version`. |
+| Doctor reports Python missing | A source-build interpreter is not on `PATH`; this does not mean binary-release users need Python. | Install the universal2 macOS package from <https://www.python.org/downloads/macos/> or run `brew install python@3.12`; open a new Terminal and run `python3 --version`. |
+| Doctor reports locked Theos missing | The required clean checkout and recursive submodules were not selected. | Run the three exact clone/checkout/submodule commands printed by `--human`, then rerun with `--theos '/absolute/path/to/theos'`. |
+| `LIBARCHIVE_NOT_RESOLVED` or `OPENSSL_NOT_RESOLVED` | The Control source-build headers are absent or `pkg-config` cannot find them. | Run `brew install libarchive openssl@3 pkgconf ldid dpkg`, then export `LIBARCHIVE_PREFIX="$(brew --prefix libarchive)"` and `PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"` in the same Terminal. |
 | `EXTERNAL_KIT_MISSING` | A source checkout lacks the private, manifest-verified kit. | Obtain the authorized kit separately. Do not copy an old installed app's kit into the source tree. |
 | `ENVIRONMENT_BLOCKED` or missing Python 3.12 | Required host tools or the pinned runtime are unavailable. | In Bridge choose **Install All 0-Sky Requirements**, then rerun preflight. |
 | `HOST_RUNTIME=FAIL` | The package lacks a required Universal 2 Python/tool binary, license, or matching hash. | Replace the complete four-file release; do not install Homebrew as a substitute for a broken public package. |

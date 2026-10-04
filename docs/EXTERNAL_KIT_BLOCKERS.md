@@ -26,12 +26,11 @@ manifest lists them. Regression coverage verifies the output count and absence
 of those files. This does not waive the separately listed opaque third-party
 binary findings.
 
-The release-candidate attempt now stops first at `PREFLIGHT` with
-`BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID`. After that runtime input is supplied,
-the kit is also expected to stop at `PREPARE_KIT` on the Link payload privacy
-scan based on the separately executed sanitizer evidence. These are independent
-external-input blockers. Generating a hash manifest for the dirty kit does not
-make it approved. The pipeline writes
+The former host-runtime blocker is resolved: the canonical pipeline assembles
+the pinned arm64/x86_64 CPython runtime and compatibility helpers, verifies its
+manifest, and retains its license notices. The candidate now reaches the full
+`PREPARE_KIT` privacy scan and stops on the external payload findings above.
+Generating a hash manifest for the dirty kit does not make it approved. The pipeline writes
 `RELEASE_KIT_APPROVAL.json` only after PII, portability, architecture, offline
 installation, and integrity checks pass.
 
@@ -39,8 +38,10 @@ The current wheel inventory contains 117 artifacts and 743 declared dependency
 edges; three wheels do not declare license metadata in their package records.
 The pinned arm64 environment installs from the wheelhouse with `--no-index`,
 and static wheel coverage checks both Mac architectures. Intel execution and
-a completely offline bare-Mac install remain unverified. The existing kit
-does not include a macOS Python 3.12 runtime or Xcode/Apple host tools.
+a completely offline bare-Mac install remain unverified. The prepared kit now
+receives the self-contained macOS Python 3.12 runtime; Xcode and Apple SRD host
+assets remain builder- or program-supplied inputs and are not redistributed as
+device payloads.
 
 The source-controlled Control blocker is no longer in this list. A clean
 3.5.36 arm64/rootless build completed with an explicit Theos checkout, and two

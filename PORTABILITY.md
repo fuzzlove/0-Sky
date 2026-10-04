@@ -37,14 +37,17 @@ port 2222 default is only a proposal; it is not a hard-coded device endpoint.
 
 ## Discovery and capability checks
 
-Run `python3 tools/environment_preflight.py --mode development --skip-device`
-for a read-only host check. Add `--udid EXACT_UDID` to check one connected SRD;
+Run `python3 tools/environment_preflight.py --human --mode development --kit KIT
+--theos /absolute/path/to/locked/theos --skip-device` for a read-only source-build
+host check with exact remediation commands. Add `--udid EXACT_UDID` to check one connected SRD;
 no first-device fallback is used. `--mode release --kit PATH` additionally
 requires a verified kit and configured signing input. Results distinguish
 READY, DEGRADED, and BLOCKED, and redact host identity and device UDID.
 
-The host tool resolver uses PATH, standard macOS paths, and known Homebrew
-locations as search candidates. It checks Python 3.12's version. CoreDevice
+The optional diagnostic tool resolver uses PATH and standard/developer paths.
+Mandatory compiled-release tools are accepted only from the manifest-verified
+application runtime; Homebrew cannot mask an incomplete bundle. It checks the
+bundled Python 3.12 version. CoreDevice
 and debugger tools are located through the active `xcrun`/developer directory,
 which respects `DEVELOPER_DIR` and `xcode-select`. The preflight reports
 process/native architecture, including Rosetta. Optional device tools degrade

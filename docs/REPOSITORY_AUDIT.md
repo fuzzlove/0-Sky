@@ -41,10 +41,12 @@ pending non-ignored file and uses these categories:
    application feature.
 4. **Compiled installs previously depended on developer-installed Python and
    Homebrew tools.** **Status:** the package contract now requires a complete
-   Universal 2 host runtime with versions, licenses, requirements, destinations
-   and hashes in `HOST_RUNTIME_MANIFEST.json`; runtime discovery prefers it.
-   No conforming external runtime is available locally, so the public package
-   remains blocked instead of falling back to a developer workstation.
+   dual-architecture host runtime with versions, licenses, requirements,
+   destinations and hashes in `HOST_RUNTIME_MANIFEST.json`. The source-controlled
+   runtime builder now assembles pinned arm64 and x86_64 CPython 3.12 payloads
+   plus built-in `dpkg-deb`, exact-device USB discovery, and USB forwarding
+   helpers. The packaged installer accepts only this verified runtime and never
+   substitutes Homebrew or developer Python. **Resolved.**
 
 No credential value was printed or copied. The tracked-source PII gate found
 no unallowlisted credential, private key, fixed home path, or physical device
@@ -123,7 +125,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 246 run, 4 skipped for unavailable private fixtures/compiled app |
+| Tool/release unit tests | PASS — 259 run, 3 skipped for unavailable private fixtures/compiled app |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 122 run, 1 skipped for absent external source kit |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
@@ -134,6 +136,9 @@ identifier.
 | Python compile, 23 non-vendored shell syntax checks, local Markdown links, inventory reproducibility | PASS |
 | Homebrew bootstrap safety | PASS — moving remote installer is refused and never executed |
 | Host runtime manifest regression tests | PASS — complete, missing-component, and traversal cases |
+| Host runtime assembly | PASS — pinned CPython 3.12.14 arm64/x86_64 archives rebuilt from verified cache; four components and retained licenses validated |
+| Host runtime functional probes | PASS on Apple Silicon — Python 3.12.14, USB helper version commands, Debian field query and extraction |
+| Human prerequisite doctor | PASS — missing Xcode, Python, Theos, native libraries, runtime, signing, and notarization states print exact install/repair commands |
 | Resumable setup-state tests | PASS — private atomic progress and read-only non-persistence |
 | Repeated missing-kit release failure | PASS — failed closed and retained only one sanitized audit report |
 | Control package build | PASS — clean 3.5.36 arm64 rootless package using an explicit Theos checkout |
@@ -142,7 +147,7 @@ identifier.
 
 Machine-readable results in `SOURCE_AUDIT.json` distinguish executed tests from
 blocked hardware/signing work. A full public release remains **not ready** until
-the Universal 2 host runtime, remaining external signed-payload findings,
-caller-owned distribution signing, notarization, and hardware gates are
-cleared. The former Control/Theos blocker is resolved; Theos is now an explicit
-input rather than a hidden Homebrew path.
+the remaining external signed-payload findings, caller-owned distribution
+signing/notarization, and hardware gates are cleared. The former host-runtime
+and Control/Theos implementation blockers are resolved; the remaining blockers
+are external artifacts, credentials, and unavailable hardware validation.

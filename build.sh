@@ -4,6 +4,17 @@
 set -euo pipefail
 
 project_root=$(cd "$(dirname "$0")" && pwd)
+if ! command -v python3 >/dev/null 2>&1; then
+  cat >&2 <<'EOF'
+BUILD=BLOCKED requirement=python3
+Required action:
+  Install the universal2 Python 3 package from https://www.python.org/downloads/macos/
+  or run `brew install python`, open a new Terminal, verify `python3 --version`,
+  then rerun this build. This interpreter is a source-build tool only; end users
+  receive the pinned Python runtime inside 0SkyBridge.app.
+EOF
+  exit 2
+fi
 derived="${ZERO_SKY_DERIVED_DATA:-$project_root/.build/release}"
 kit="${ZERO_SKY_KIT_SOURCE:-$project_root/bridge/0SkyBridge/Resources/Scripts/kit}"
 project="$project_root/bridge/0SkyBridge.xcodeproj"
@@ -21,11 +32,31 @@ while (( $# )); do
   esac
 done
 [[ -n ${THEOS:-} ]] || {
-  echo "Theos is required; pass --theos /path/to/locked/theos" >&2; exit 2;
+  cat >&2 <<'EOF'
+BUILD=BLOCKED requirement=locked-theos
+Required action:
+  git clone --recursive https://github.com/theos/theos.git '/absolute/path/to/theos'
+  git -C '/absolute/path/to/theos' checkout dd5c14bb9d91311e221d51b5bfb8c9e5948156db
+  git -C '/absolute/path/to/theos' submodule update --init --recursive
+  Rerun this command with: --theos '/absolute/path/to/theos'
+Use a new checkout; do not reset a Theos tree that contains uncommitted work.
+EOF
+  exit 2;
 }
 python3 "$project_root/tools/theos_preflight.py" --theos "$THEOS"
 [[ -f "$kit/SHA256SUMS" ]] || {
-  echo "Authorized kit is missing SHA256SUMS: $kit" >&2; exit 2;
+  cat >&2 <<EOF
+BUILD=BLOCKED requirement=authorized-kit
+The selected kit is missing its signed inventory: $kit/SHA256SUMS
+Required action:
+  Obtain the complete authorized offline kit from the project release owner,
+  copy it to a writable directory outside this repository, and rerun with:
+    --kit '/absolute/path/to/authorized kit'
+The source repository cannot download Apple SRD assets, signed device payloads,
+pairing material, or publisher-only dependencies, and an installed app's kit
+must not be copied back into a release build.
+EOF
+  exit 2;
 }
 if [[ ! -f "$kit/RELEASE_KIT_MANIFEST.json" || ! -f "$kit/RELEASE_KIT_APPROVAL.json" ]]; then
   prepared="${derived}.prepared-kit"

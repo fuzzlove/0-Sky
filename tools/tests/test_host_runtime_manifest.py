@@ -68,6 +68,28 @@ class HostRuntimeManifestTests(unittest.TestCase):
             with self.assertRaisesRegex(runtime.RuntimeManifestError, "unsafe"):
                 runtime.verify(root, inspect_binaries=False)
 
+    def test_architecture_payload_hash_is_verified(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            manifest = self.make_kit(root)
+            value = json.loads(manifest.read_text())
+            payloads = {}
+            for architecture in ("arm64", "x86_64"):
+                path = root / f"host-mac/runtime/python/{architecture}/python3"
+                path.parent.mkdir(parents=True)
+                path.write_bytes(architecture.encode())
+                payloads[architecture] = {
+                    "path": path.relative_to(root).as_posix(),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+            value["schema"] = 2
+            value["components"][0]["payloads"] = payloads
+            manifest.write_text(json.dumps(value), encoding="utf-8")
+            runtime.verify(root, inspect_binaries=False)
+            (root / payloads["arm64"]["path"]).write_bytes(b"changed")
+            with self.assertRaisesRegex(runtime.RuntimeManifestError, "hash mismatch"):
+                runtime.verify(root, inspect_binaries=False)
+
 
 if __name__ == "__main__":
     unittest.main()

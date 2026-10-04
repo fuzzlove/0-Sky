@@ -22,23 +22,39 @@ class MacSetupTimeoutTests(unittest.TestCase):
             kit = Path(folder)
             binary = kit / "host-mac/runtime/bin"
             binary.mkdir(parents=True)
+            license_path = kit / "host-mac/runtime/licenses/test.txt"
+            license_path.parent.mkdir(parents=True)
+            license_path.write_text("fixture license\n", encoding="utf-8")
             components = []
-            for name in ("python3", "dpkg", "dpkg-deb", "iproxy", "idevice_id", "zstd", "ldid"):
+            for name in ("python3", "dpkg-deb", "iproxy", "idevice_id"):
                 path = binary / name
                 path.write_text("#!/bin/sh\n", encoding="utf-8")
                 path.chmod(0o755)
                 components.append({"name": name,
                                    "path": path.relative_to(kit).as_posix(),
                                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                                   "architectures": [setup.platform.machine().lower()]})
+                                   "architectures": ["arm64", "x86_64"],
+                                   "license": license_path.relative_to(kit).as_posix()})
+            payloads = {}
+            for architecture in ("arm64", "x86_64"):
+                path = kit / f"host-mac/runtime/python/{architecture}/python/bin/python3.12"
+                path.parent.mkdir(parents=True)
+                path.write_text("#!/bin/sh\n", encoding="utf-8")
+                path.chmod(0o755)
+                payloads[architecture] = {
+                    "path": path.relative_to(kit).as_posix(),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+            components[0]["payloads"] = payloads
             manifest = kit / "host-mac/HOST_RUNTIME_MANIFEST.json"
-            manifest.write_text(json.dumps({"components": components}), encoding="utf-8")
+            manifest.write_text(json.dumps({"schema": 2, "platform": "macOS",
+                                            "components": components}), encoding="utf-8")
             with mock.patch.object(setup, "KIT", kit), \
                     mock.patch.object(setup, "BUNDLED_BIN", binary), \
                     mock.patch.dict(setup.os.environ, {"PATH": "/usr/bin"}):
                 self.assertTrue(setup.activate_bundled_runtime())
                 self.assertEqual(setup.os.environ["PATH"].split(":")[0], str(binary))
-                (binary / "ldid").write_text("changed", encoding="utf-8")
+                (binary / "dpkg-deb").write_text("changed", encoding="utf-8")
                 with self.assertRaisesRegex(SystemExit, "manifest validation"):
                     setup.activate_bundled_runtime()
 
@@ -54,6 +70,14 @@ class MacSetupTimeoutTests(unittest.TestCase):
                      "Install 0-Sky Dependencies.command").read_text(encoding="utf-8")
         self.assertNotIn("raw.githubusercontent.com/Homebrew/install", installer)
         self.assertIn("moving bootstrap script", installer)
+        self.assertNotIn("brew\" install", installer)
+        self.assertIn("tools/build_host_runtime.py", installer)
+        self.assertIn("Expected path:", installer)
+
+    def test_runtime_repair_message_explains_binary_and_source_paths(self) -> None:
+        self.assertIn("four-file release", setup.BUNDLED_RUNTIME_REPAIR)
+        self.assertIn("tools/build_host_runtime.py", setup.BUNDLED_RUNTIME_REPAIR)
+        self.assertIn("Do not install Homebrew", setup.BUNDLED_RUNTIME_REPAIR)
 
     def test_python_dependency_probe_timeout_is_a_failed_probe(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

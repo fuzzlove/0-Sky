@@ -36,6 +36,16 @@ procedure in [`RELEASE.md`](RELEASE.md). See
 and [`docs/SUPPORTED_PLATFORMS.md`](docs/SUPPORTED_PLATFORMS.md) for the
 evidence-scoped compatibility matrix.
 
+Before building, run the human-readable doctor. Every missing mandatory item
+is printed with the exact installation or repair command; it never reports only
+"dependency missing":
+
+```sh
+python3 tools/environment_preflight.py --human --mode development \
+  --kit "/absolute/path/to/authorized kit" \
+  --theos "/absolute/path/to/locked/theos" --skip-device
+```
+
 ## Screenshots
 
 The root-filesystem image is a public redacted copy with the operator name and
@@ -62,9 +72,9 @@ device, signing, and runtime requirements. Each component also has its own
 README with exact build commands.
 
 The binary Bridge release provides **Install All 0-Sky Requirements** in the
-GUI. Its guided Terminal installer provisions native Python 3.12,
-`dpkg`/`dpkg-deb`, USB/build tools, and the isolated pinned runtime instead of
-requiring end users to assemble those prerequisites manually.
+GUI. Its guided installer uses the embedded, hash-verified Intel/Apple-silicon
+Python 3.12 runtime plus built-in `dpkg-deb`, USB listing, and USB forwarding
+compatibility helpers. It does not require Homebrew or a developer Python.
 
 ## Quick source checks
 
@@ -88,9 +98,10 @@ for version discovery; a downloadable artifact is acceptable only when its
 tags do not imply that a binary installer passed distribution signing,
 notarization, clean-machine, or hardware tests.
 
-No verified installer can currently be produced from the locally available
-external kit because signed device payloads retain builder paths. The release
-gate correctly blocks publication until those inputs are rebuilt and verified.
+A complete development candidate can assemble its host runtime automatically.
+Public distribution still requires reviewed replacement device payloads plus
+the publisher's Developer ID and notarization credentials; the release gate
+prints those external actions explicitly and does not claim success early.
 
 ## Security and privacy
 

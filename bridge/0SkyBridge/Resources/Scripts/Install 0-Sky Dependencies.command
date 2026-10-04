@@ -38,11 +38,14 @@ case $(/usr/bin/uname -m) in
   arm64|x86_64) print "Mac architecture: $(/usr/bin/uname -m)" ;;
   *) print -u2 "This installer supports Intel x86_64 and Apple silicon arm64 Macs."; exit 2 ;;
 esac
-print "This guided installer adds every required macOS component for 0-Sky."
-print "Required host packages include Python 3.12, dpkg/dpkg-deb, USB tools,"
-print "and the pinned offline 0-Sky Python environment."
+print "This guided installer verifies the self-contained 0-Sky host runtime,"
+print "then creates a private, pinned Python environment for this Mac account."
+print "The signed application supplies Python 3.12, dpkg-deb, USB discovery,"
+print "USB forwarding, and the offline Python dependency wheelhouse."
 if [[ $ONLINE -eq 1 ]]; then
-  print "Online mode: missing packages may be installed by an existing Homebrew."
+  print "Note: --online is retained only for compatibility. This release does not"
+  print "install Homebrew, execute a moving bootstrap script, or substitute network"
+  print "downloads for a damaged bundle."
 else
   print "Offline mode: no package indexes, Homebrew, curl, or downloads will be used."
 fi
@@ -67,6 +70,7 @@ fi
 if [[ -z "$NATIVE" ]]; then
   for required in SHA256SUMS PORTABILITY.json RELEASE_KIT_APPROVAL.json \
     RELEASE_KIT_MANIFEST.json WHEEL_INVENTORY.json \
+    host-mac/HOST_RUNTIME_MANIFEST.json \
     host-mac/install.py host-mac/pair.py \
     host-mac/requirements-lock.txt payloads/0-Sky-Link-1.9.0-universal.ipa; do
     if [[ ! -r "$KIT/$required" ]]; then
@@ -88,79 +92,36 @@ fi
 
 PYTHON=""
 if [[ -z "$NATIVE" ]]; then
-  for candidate in \
-    "$KIT/host-mac/runtime/bin/python3" \
-    "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" \
-    "/opt/homebrew/bin/python3.12" "/usr/local/bin/python3.12"; do
+  for candidate in "$KIT/host-mac/runtime/bin/python3"; do
     if [[ -x "$candidate" ]]; then PYTHON="$candidate"; break; fi
   done
-  if [[ -z "$PYTHON" ]] && command -v python3.12 >/dev/null 2>&1; then
-    PYTHON=$(command -v python3.12)
-  fi
 
   if [[ -z "$PYTHON" ]]; then
-    if [[ $ONLINE -eq 0 ]]; then
-      print -u2 "A local Python 3.12 runtime is required for offline installation."
-      print -u2 "Supply a verified Python 3.12 installer or rerun this command with --online."
-      print "Press Return to close."
-      read -r
-      exit 3
-    fi
-    print "The verified bundled Python 3.12 runtime is missing."
-    BREW=""
-    for candidate in "/opt/homebrew/bin/brew" "/usr/local/bin/brew"; do
-      if [[ -x "$candidate" ]]; then BREW="$candidate"; break; fi
-    done
-    if [[ -z "$BREW" ]]; then
-      print -u2 "Homebrew is not installed."
-      print -u2 "0-Sky will not download and execute Homebrew's moving bootstrap script."
-      print -u2 "Install Homebrew separately from https://brew.sh, review its requested"
-      print -u2 "privileges, then run this installer again with --online."
-      exit 4
-    fi
-    if [[ -z "$BREW" ]]; then
-      print -u2 "Homebrew did not provide a usable brew executable."
-      exit 4
-    fi
-
-    print
-    print "Installing missing compatibility tools for this development build…"
-    if ! "$BREW" install python@3.12 dpkg libusbmuxd zstd ldid; then
-      print -u2 "One or more required Homebrew packages could not be installed."
-      exit 5
-    fi
-    for candidate in \
-      "/opt/homebrew/bin/python3.12" "/usr/local/bin/python3.12" \
-      "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"; do
-      if [[ -x "$candidate" ]]; then PYTHON="$candidate"; break; fi
-    done
-    if [[ -z "$PYTHON" ]]; then
-      print -u2 "Python 3.12 is still unavailable after installation."
-      exit 5
-    fi
+    print -u2 "Required component missing: bundled Python 3.12 runtime."
+    print -u2 "Expected path: $KIT/host-mac/runtime/bin/python3"
+    print -u2 "How to repair a downloaded app: delete this copy of 0SkyBridge.app,"
+    print -u2 "re-download the complete verified four-file release, verify SHA256SUMS,"
+    print -u2 "and reinstall its .pkg. Do not install Homebrew as a substitute."
+    print -u2 "How to repair a source kit: from the 0-Sky repository run:"
+    print -u2 "  python3 tools/build_host_runtime.py '/absolute/path/to/a-writable-kit-copy'"
+    print -u2 "Then rebuild the application; do not copy files into a signed app."
+    print "Press Return to close."
+    read -r
+    exit 3
   fi
 fi
 
 if [[ -n "$NATIVE" ]]; then
-  if [[ $ONLINE -eq 1 ]]; then
-    "$NATIVE" --fix-missing --install-homebrew --requirements-only
-  else
-    "$NATIVE" --setup-python --requirements-only
-  fi
+  "$NATIVE" --setup-python --requirements-only
 else
-  if [[ $ONLINE -eq 1 ]]; then
-    ZERO_SKY_KIT="$KIT" PYTHONDONTWRITEBYTECODE=1 \
-      "$PYTHON" "$SETUP" --fix-missing --install-homebrew --requirements-only
-  else
-    ZERO_SKY_KIT="$KIT" PYTHONDONTWRITEBYTECODE=1 \
-      "$PYTHON" "$SETUP" --setup-python --requirements-only
-  fi
+  ZERO_SKY_KIT="$KIT" PYTHONDONTWRITEBYTECODE=1 \
+    "$PYTHON" "$SETUP" --setup-python --requirements-only
 fi
 result_status=$?
 
 print
 if [[ $result_status -eq 0 ]]; then
-  print "0-Sky requirements are ready, including Python 3.12 and dpkg."
+  print "0-Sky requirements are ready, including the private Python environment."
   print "You can return to 0-Sky Bridge."
 else
   print "Setup stopped with status $result_status. The message above identifies the remaining item."

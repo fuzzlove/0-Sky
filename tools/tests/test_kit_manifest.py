@@ -11,7 +11,7 @@ from unittest.mock import patch
 import zipfile
 
 from tools.kit_manifest import APPROVAL_NAME, APPROVAL_STATES, REQUIRED, generate, verify
-from tools.build_release import build as build_release, preflight_failure_code
+from tools.build_release import build as build_release, preflight_failure_code, remediation_for
 from tools.release_paths import ReleasePaths, RuntimePaths
 from tools.release_sanitize import audit
 from tools.signing_identities import Identity, parse_identities, require_identity
@@ -47,6 +47,19 @@ def fixture(root: Path) -> None:
 
 class KitManifestTests(unittest.TestCase):
 
+    def test_notary_blocker_prints_exact_credential_setup(self) -> None:
+        action = remediation_for("BLOCKED_MISSING_NOTARY_PROFILE")
+        self.assertIn("xcrun notarytool store-credentials", action)
+        self.assertIn("--notary-profile 0-sky-release", action)
+
+    def test_privacy_blocker_explains_each_artifact_class(self) -> None:
+        action = remediation_for("EXIT_2:FIXED_HOME_PATH,PRIVATE_KEY,PERSONAL_PAYMENT")
+        self.assertIn("kit_pii_report.py", action)
+        self.assertIn("native or signed", action)
+        self.assertIn("wheel/DEB", action)
+        self.assertIn("payment/personal URLs", action)
+        self.assertIn("never globally allowlist", action)
+
     def test_release_preflight_reports_missing_host_runtime(self) -> None:
         payload = json.dumps({"host_runtime": {"status": "BLOCKED"},
                               "kit": {"status": "PASS"},
@@ -67,12 +80,18 @@ class KitManifestTests(unittest.TestCase):
             kit = root / "kit"
             for relative in ("SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
                              "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+                             "host-mac/HOST_RUNTIME_MANIFEST.json",
                              "host-mac/install.py", "host-mac/pair.py",
                              "host-mac/requirements-lock.txt",
                              "payloads/0-Sky-Link-1.9.0-universal.ipa"):
                 item = kit / relative
                 item.parent.mkdir(parents=True, exist_ok=True)
                 item.write_text("fixture", encoding="utf-8")
+            runtime_python = kit / "host-mac/runtime/bin/python3"
+            runtime_python.parent.mkdir(parents=True)
+            runtime_python.write_text(
+                f"#!/bin/sh\nexec {shutil.which('python3.12')} \"$@\"\n", encoding="utf-8")
+            runtime_python.chmod(0o755)
             (kit / "host-mac/wheelhouse").mkdir()
             process = subprocess.run(["/bin/zsh", str(launcher)], input="\n", text=True,
                                      capture_output=True, timeout=30, check=False)

@@ -1,8 +1,10 @@
 import Foundation
 
 public enum HostToolResolver {
-    /// PATH is consulted first. Standard macOS and Homebrew locations are
-    /// search candidates for GUI launches with a deliberately small PATH.
+    /// PATH is consulted first. Standard and common developer-tool locations
+    /// are search candidates for optional diagnostics launched from the GUI.
+    /// Mandatory packaged runtime components are resolved directly from Kit
+    /// and never accepted from these fallbacks.
     public static func executable(
         _ name: String,
         searchPath: String? = ProcessInfo.processInfo.environment["PATH"],
@@ -50,58 +52,52 @@ public enum HostToolResolver {
 }
 
 public struct DependencyManager: Sendable {
-    public static let requiredHomebrewFormulae = [
-        "python@3.12", "dpkg", "libusbmuxd", "zstd", "ldid",
-        "autoconf", "automake", "pkgconf",
-    ]
-
-    public static let hostPythonCandidates = [
-        "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3",
-        "/opt/homebrew/bin/python3.12",
-        "/usr/local/bin/python3.12",
+    public static let bundledRuntimeComponents = [
+        "python3", "dpkg-deb", "iproxy", "idevice_id",
     ]
 
     public init() {}
 
     public func inspect(paths: BridgePaths) -> [DependencyStatus] {
         let fileManager = FileManager.default
-        let candidates: [(String, String, Bool)] = [
-            ("Xcode CLI Tools", "xcrun", true),
-            ("SSH", "ssh", true),
-            ("launchctl", "launchctl", true),
-            ("dpkg", "dpkg", true),
-            ("dpkg-deb", "dpkg-deb", true),
-            ("iproxy", "iproxy", true),
-            ("ldid", "ldid", true),
-            ("zstd", "zstd", true),
-            ("Homebrew", "brew", false),
+        let bundledCandidates: [(String, String)] = [
+            ("Bundled Python 3.12", "python3"),
+            ("Bundled Debian extractor", "dpkg-deb"),
+            ("Bundled USB forwarder", "iproxy"),
+            ("Bundled USB device discovery", "idevice_id"),
         ]
-        var statuses = candidates.map { name, command, required in
+        var statuses = bundledCandidates.map { name, command in
             let bundled = paths.bundledKitRoot?
                 .appendingPathComponent("host-mac/runtime/bin/\(command)")
-            let path = bundled.flatMap {
+            let path: String? = bundled.flatMap {
                 fileManager.isExecutableFile(atPath: $0.path) ? $0.path : nil
-            } ?? HostToolResolver.executable(command)
+            }
             return DependencyStatus(
-                name: name, path: path, required: required,
+                name: name, path: path, required: true,
                 available: path != nil,
-                detail: path != nil ? "Verified bundled runtime or discovered system tool" : (required
-                    ? "Missing — select Install All 0-Sky Requirements"
-                    : "Not installed; the dependency installer can add it when needed")
+                detail: path != nil
+                    ? "Present in the application; the installer verifies its manifest hash"
+                    : "Missing from the application — reinstall the complete verified package"
             )
         }
-        let pythonCandidates = [paths.bundledHostPython()?.path,
-                                HostToolResolver.executable("python3.12"),
-                                Self.hostPythonCandidates.first(where: { fileManager.isExecutableFile(atPath: $0) })]
-            .compactMap { $0 }
-        let hostPython = pythonCandidates.first {
-            HostToolResolver.output($0, arguments: ["--version"])?.hasPrefix("Python 3.12.") == true
+        for (name, command) in [("macOS SSH", "ssh"), ("macOS service manager", "launchctl")] {
+            let path = HostToolResolver.executable(command)
+            statuses.append(DependencyStatus(
+                name: name, path: path, required: true, available: path != nil,
+                detail: path != nil
+                    ? "Provided by macOS"
+                    : "Required macOS component missing — install macOS updates or repair macOS"
+            ))
         }
+        let hostPython = paths.bundledHostPython()?.path
         statuses.append(DependencyStatus(
-            name: "Python 3.12 for 0-Sky", path: hostPython, required: true,
-            available: hostPython != nil,
-            detail: hostPython == nil ? "Python 3.12 was not found or failed its version check"
-                : "Version-checked Python 3.12"
+            name: "Bundled Python version", path: hostPython, required: true,
+            available: hostPython.flatMap {
+                HostToolResolver.output($0, arguments: ["--version"])
+            }?.hasPrefix("Python 3.12.") == true,
+            detail: hostPython == nil
+                ? "Bundled Python is absent; reinstall the complete verified package"
+                : "Must report Python 3.12; the dependency installer performs the final check"
         ))
         let sharedPython = paths.supportRoot.appendingPathComponent("venv/bin/python3")
         let instances = paths.supportRoot.appendingPathComponent("instances")
@@ -124,7 +120,7 @@ public struct DependencyManager: Sendable {
             name: "CoreDevice/devicectl", path: coreDevice, required: false,
             available: coreDevice != nil,
             detail: coreDevice == nil
-                ? "Optional devicectl executable is unavailable; usbmux fallback remains active"
+                ? "Optional Xcode devicectl is unavailable; bundled usbmux discovery remains active"
                 : "Available"
         ))
         let kit = try? paths.hostScript("pair.py")

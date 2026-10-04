@@ -3,9 +3,15 @@
 The Mac product is `0SkyBridge.app` for macOS 15 or newer. Xcode must provide
 the macOS SDK and both `arm64` and `x86_64` slices. Python 3.12, the Apple
 command-line tools, and an independently obtained authorized kit with
-`SHA256SUMS` are required. Use `python3 tools/environment_preflight.py --mode
-development --kit KIT --skip-device` to discover the current toolchain; the
-report redacts the hostname and user-specific support path.
+`SHA256SUMS` are required. Use the human-readable doctor to discover the
+current toolchain; the report redacts the hostname and user-specific support
+path and prints a complete install/repair sequence for every missing item:
+
+```sh
+python3 tools/environment_preflight.py --human --mode development \
+  --kit "/absolute/path/to/authorized kit" \
+  --theos "/absolute/path/to/locked/theos" --skip-device
+```
 
 Build source/tests from any working directory using repository-relative
 scripts. The kit, signing identities, notarization profile, DerivedData,
@@ -72,9 +78,12 @@ The dependency command defaults to offline mode and selects the manifest-
 verified Universal 2 Python 3.12 and host tools below
 `Kit/host-mac/runtime/bin`. `HOST_RUNTIME_MANIFEST.json` records versions,
 licenses, runtime requirements, destinations, architectures, and hashes. A kit
-without that complete runtime fails the release build; development-only online
-repair may use an already-installed Homebrew but never downloads or executes a
-moving Homebrew bootstrap script.
+without that complete runtime is repaired by the canonical source/release build
+from the pinned, SHA-256-verified archive lock. The installed application never
+uses Homebrew or developer Python as a fallback. For a disconnected builder,
+pre-populate `.build/host-runtime-cache` and run
+`python3 tools/build_host_runtime.py KIT --offline`; a missing cache item prints
+its exact URL, destination, expected hash, and verification command.
 
 Run `python3 -m unittest discover -s tools/tests -q`,
 `(cd bridge && swift run BridgeCoreTests)`, and the host-tool tests described

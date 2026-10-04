@@ -47,6 +47,29 @@ class EnvironmentPreflightTests(unittest.TestCase):
             self.assertEqual(result["kit"]["status"], "BLOCKED")
             self.assertEqual(result["status"], "BLOCKED")
 
+    def test_missing_theos_prints_complete_install_sequence(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            result = preflight.report(mode="development", kit=Path(folder) / "missing-kit",
+                                      environment={}, discover_device=False)
+        self.assertEqual(result["theos"]["status"], "BLOCKED")
+        action = result["theos"]["remediation"]
+        self.assertIn("git clone --recursive", action)
+        self.assertIn("dd5c14bb9d91311e221d51b5bfb8c9e5948156db", action)
+        self.assertIn("submodule update --init --recursive", action)
+
+    def test_human_report_prints_exact_repair_command(self) -> None:
+        value = {"status": "BLOCKED", "toolchain": [{"tool": "xcodebuild",
+                 "status": "FAIL", "remediation":
+                 "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"}],
+                 "kit": {"status": "PASS"}, "host_runtime": {"status": "REPAIRABLE",
+                 "remediation": "python3 tools/build_host_runtime.py KIT"},
+                 "theos": {"status": "BLOCKED", "remediation": "git clone --recursive URL"}}
+        rendered = preflight.human_report(value)
+        self.assertIn("Required action:", rendered)
+        self.assertIn("sudo xcode-select", rendered)
+        self.assertIn("python3 tools/build_host_runtime.py", rendered)
+        self.assertIn("git clone --recursive", rendered)
+
 
 if __name__ == "__main__":
     unittest.main()

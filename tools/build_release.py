@@ -56,6 +56,54 @@ def preflight_failure_code(payload: bytes) -> str:
     return "BLOCKED_ENVIRONMENT"
 
 
+def remediation_for(code: str) -> str:
+    if "NOTARY_PROFILE" in code:
+        return ("Create an app-specific password at appleid.apple.com, then store the profile with "
+                "`xcrun notarytool store-credentials 0-sky-release --apple-id YOUR_APPLE_ID "
+                "--team-id YOUR_TEAM_ID --password YOUR_APP_SPECIFIC_PASSWORD`; rerun with "
+                "--notary-profile 0-sky-release")
+    if "NOT_ACCEPTED" in code or "NOTARIZE" in code:
+        return ("Run `xcrun notarytool history --keychain-profile 0-sky-release` to obtain the "
+                "submission ID, then `xcrun notarytool log SUBMISSION_ID --keychain-profile "
+                "0-sky-release`; correct every reported signing or bundle issue and rebuild")
+    if "EXTERNAL_KIT_MISSING" in code or "KIT_HASH_MANIFEST_INVALID" in code:
+        return ("Obtain the complete authorized offline kit from the release owner, copy it to a "
+                "writable directory outside the repository, confirm it contains SHA256SUMS, then "
+                "rerun with --kit '/absolute/path/to/authorized kit'. Do not copy pairing records, "
+                "device credentials, or an installed app's kit into the source tree")
+    if "SIGNING_IDENTITY" in code:
+        return ("Import valid Developer ID Application and Developer ID Installer certificates "
+                "into the login keychain; list SHA-1 fingerprints with `security find-identity "
+                "-v -p codesigning`, then pass --app-identity and --installer-identity")
+    if code == "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID" or "HOST_RUNTIME_SOURCE_MISSING" in code:
+        return ("Run `python3 tools/build_host_runtime.py /absolute/path/to/a-writable-kit-copy`; "
+                "the command prints the exact pinned archive URL, cache destination, expected "
+                "SHA-256, and verification command when an input is unavailable; the canonical "
+                "build normally performs this repair automatically")
+    privacy_categories = ("FIXED_HOME_PATH", "DERIVED_DATA_PATH", "ABSOLUTE_FILE_URI",
+                          "MOUNTED_VOLUME_PATH", "LOCAL_IP_ADDRESS", "PRIVATE_KEY",
+                          "EMBEDDED_PASSWORD", "PERSONAL_PAYMENT")
+    if any(category in code for category in privacy_categories):
+        return ("Run `python3 tools/kit_pii_report.py KIT artifacts/release-kit-pii.json` and keep "
+                "that mode-0600 report outside Git. For every native or signed finding, correct "
+                "the canonical source/build prefix maps, rebuild, re-sign, and update SHA256SUMS. "
+                "For wheel/DEB examples or test fixtures, replace them with a minimal reproducible "
+                "source build that omits non-runtime tests; never globally allowlist the pattern. "
+                "Remove payment/personal URLs in canonical source and rebuild. Then rerun "
+                "the release command")
+    if "THEOS" in code:
+        return ("Run `git clone --recursive https://github.com/theos/theos.git "
+                "'/absolute/path/to/theos'`, `git -C '/absolute/path/to/theos' checkout "
+                "dd5c14bb9d91311e221d51b5bfb8c9e5948156db`, and `git -C "
+                "'/absolute/path/to/theos' submodule update --init --recursive`; then rerun with "
+                "--theos '/absolute/path/to/theos'. Preserve any existing modified checkout")
+    if "TOOL_MISSING_OR_INCOMPATIBLE" in code or "TOOL_MISSING:" in code:
+        return ("Run `python3 tools/environment_preflight.py --human --mode release "
+                "--kit /absolute/path/to/kit --skip-device` and perform each printed command")
+    return ("Run `python3 tools/environment_preflight.py --human --mode development "
+            "--kit /absolute/path/to/kit --skip-device`, correct the first non-PASS item, and retry")
+
+
 def execute(stage: str, argv: list[str], *, timeout: int,
             environment: dict[str, str] | None = None) -> None:
     try:
@@ -168,6 +216,8 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
                     installer_identity, "Developer ID Installer", identities)
             except RuntimeError as error:
                 raise ReleaseFailure("SIGNING_PREFLIGHT", str(error)) from error
+            if not notary_profile:
+                raise ReleaseFailure("SIGNING_PREFLIGHT", "BLOCKED_MISSING_NOTARY_PROFILE")
         elif mode == "development" and app_identity:
             try:
                 app_identity = require_identity(app_identity, "Apple Development", identities)
@@ -188,19 +238,28 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             raise ReleaseFailure(stage, "TOOL_MISSING:" + ",".join(missing))
         if not kit.is_dir() or not (kit / "SHA256SUMS").is_file():
             raise ReleaseFailure(stage, "EXTERNAL_KIT_MISSING")
+        theos = (theos or (Path(os.environ["THEOS"]) if os.environ.get("THEOS") else None))
+        if theos is None or not (theos / "makefiles/common.mk").is_file():
+            raise ReleaseFailure("THEOS_PREFLIGHT", "THEOS_UNAVAILABLE")
+        theos = theos.resolve()
         try:
             preflight = subprocess.run(
                 [sys.executable, str(ROOT / "tools/environment_preflight.py"),
-                 "--mode", "development", "--kit", str(kit), "--skip-device"],
+                 "--mode", "development", "--kit", str(kit),
+                 "--theos", str(theos), "--skip-device"],
                 cwd=ROOT, capture_output=True, timeout=90, check=False)
         except subprocess.TimeoutExpired as error:
             raise ReleaseFailure(stage, "ENVIRONMENT_TIMEOUT") from error
         if preflight.returncode:
-            raise ReleaseFailure(stage, preflight_failure_code(preflight.stdout))
+            code = preflight_failure_code(preflight.stdout)
+            if code == "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID":
+                print("[REPAIR] PREFLIGHT pinned host runtime will be assembled", flush=True)
+            else:
+                raise ReleaseFailure(stage, code)
         discovered = json.loads(preflight.stdout)
         if discovered.get("kit", {}).get("status") != "PASS" or any(
             item.get("status") != "PASS" for item in discovered.get("toolchain", [])
-            if item.get("tool") in {"xcrun", "xcodebuild", "python3.12", "ssh"}
+            if item.get("tool") in {"xcrun", "xcodebuild", "python3", "ssh"}
         ):
             raise ReleaseFailure(stage, "DEPENDENCY_BLOCKED")
         state["Tool discovery"] = state["Architecture discovery"] = "PASS"
@@ -208,10 +267,6 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
         execute("EULA", [sys.executable, str(ROOT / "tools/verify_eula.py")],
                 timeout=30)
         state["EULA"] = "PASS"
-        theos = (theos or (Path(os.environ["THEOS"]) if os.environ.get("THEOS") else None))
-        if theos is None or not (theos / "makefiles/common.mk").is_file():
-            raise ReleaseFailure("THEOS_PREFLIGHT", "THEOS_UNAVAILABLE")
-        theos = theos.resolve()
         build_environment = dict(os.environ)
         build_environment["THEOS"] = str(theos)
         execute("THEOS_PREFLIGHT", [sys.executable,
@@ -343,7 +398,8 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             code = type(error).__name__.upper()
         if stage == "VERIFY_RELEASE" and report.is_file():
             with report.open("a", encoding="utf-8") as stream:
-                stream.write(f"FIRST_FAILING_STAGE={stage}\nSANITIZED_ERROR={code}\n")
+                stream.write(f"FIRST_FAILING_STAGE={stage}\nSANITIZED_ERROR={code}\n"
+                             f"REQUIRED_ACTION={remediation_for(code)}\n")
         else:
             if "FIXED_HOME_PATH" in code:
                 state["Developer HOME leak"] = state["Developer username leak"] = "FAIL"
@@ -351,10 +407,12 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             if code.startswith("BLOCKED_"):
                 text = text.replace("FINAL_RESULT=FAIL", "FINAL_RESULT=BLOCKED")
             report.write_text(text +
-                              f"\nFIRST_FAILING_STAGE={stage}\nSANITIZED_ERROR={code}\n",
+                              f"\nFIRST_FAILING_STAGE={stage}\nSANITIZED_ERROR={code}\n"
+                              f"REQUIRED_ACTION={remediation_for(code)}\n",
                               encoding="utf-8")
         status = "BLOCKED" if code.startswith("BLOCKED_") else "FAIL"
         print(f"RELEASE_GATE={status} stage={stage} error={code}", file=sys.stderr)
+        print(f"NEXT_STEP={remediation_for(code)}", file=sys.stderr)
         return 2
 
 

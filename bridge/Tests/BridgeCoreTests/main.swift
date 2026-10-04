@@ -110,14 +110,9 @@ struct BridgeCoreTestRunner {
     }
 
     private static func completeDependencyRequirements() async throws {
-        let formulae = Set(DependencyManager.requiredHomebrewFormulae)
-        try expect(formulae.contains("python@3.12"),
-                   "the guided installer omitted the required Python runtime")
-        try expect(formulae.contains("dpkg"),
-                   "the guided installer omitted dpkg")
-        try expect(DependencyManager.hostPythonCandidates.allSatisfy {
-            $0.contains("3.12")
-        }, "a non-3.12 interpreter was accepted as the 0-Sky host runtime")
+        let components = Set(DependencyManager.bundledRuntimeComponents)
+        try expect(components == Set(["python3", "dpkg-deb", "iproxy", "idevice_id"]),
+                   "the guided installer omitted a self-contained runtime component")
     }
 
     private static func licenseAgreementMetadata() async throws {
@@ -457,6 +452,8 @@ struct BridgeCoreTestRunner {
         for relative in ["SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
                          "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
                          "host-mac/HOST_RUNTIME_MANIFEST.json",
+                         "host-mac/runtime/bin/python3", "host-mac/runtime/bin/dpkg-deb",
+                         "host-mac/runtime/bin/iproxy", "host-mac/runtime/bin/idevice_id",
                          "host-mac/install.py", "host-mac/pair.py",
                          "host-mac/requirements-lock.txt",
                          "payloads/0-Sky-Link-1.9.0-universal.ipa"] {

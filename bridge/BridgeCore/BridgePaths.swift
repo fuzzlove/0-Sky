@@ -30,6 +30,8 @@ public struct BridgePaths: Sendable {
             "SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
             "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
             "host-mac/HOST_RUNTIME_MANIFEST.json",
+            "host-mac/runtime/bin/python3", "host-mac/runtime/bin/dpkg-deb",
+            "host-mac/runtime/bin/iproxy", "host-mac/runtime/bin/idevice_id",
             "host-mac/install.py", "host-mac/pair.py",
             "host-mac/requirements-lock.txt", "payloads/0-Sky-Link-1.9.0-universal.ipa",
         ]

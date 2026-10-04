@@ -31,9 +31,10 @@ that it is a public release. Its audit result is deliberately `BLOCKED`.
 3. Open **0-Sky Bridge**, review the EULA, and choose **Install All 0-Sky
    Requirements**. A release package uses its bundled, manifest-verified
    Universal 2 Python and host tools; it does not require developer Python or
-   Homebrew. Development builds may use an existing Homebrew after explicit
-   review, but 0-Sky never downloads and executes Homebrew's moving bootstrap
-   script. Pinned Python dependencies remain in 0-Sky-owned environments.
+   Homebrew. Maintainers compiling Control from source install the documented
+   build libraries separately, but the application dependency installer never
+   downloads or uses Homebrew as a runtime fallback. Pinned Python dependencies
+   remain in 0-Sky-owned per-user environments.
 4. Connect and unlock the authorized SRD over USB. Approve Apple's Trust prompt,
    select that device in Bridge, and run setup. Bridge binds the profile and
    USB forwarding to the selected device's exact UDID; it never silently uses

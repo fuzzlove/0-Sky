@@ -10,7 +10,7 @@ import re
 import subprocess
 
 
-REQUIRED = {"python3", "dpkg", "dpkg-deb", "iproxy", "idevice_id", "zstd", "ldid"}
+REQUIRED = {"python3", "dpkg-deb", "iproxy", "idevice_id"}
 ARCHITECTURES = {"arm64", "x86_64"}
 
 
@@ -44,7 +44,7 @@ def verify(root: Path, *, inspect_binaries: bool = True) -> dict[str, object]:
         value = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError) as error:
         raise RuntimeManifestError("invalid host runtime manifest") from error
-    if value.get("schema") != 1 or value.get("platform") != "macOS":
+    if value.get("schema") not in {1, 2} or value.get("platform") != "macOS":
         raise RuntimeManifestError("unsupported host runtime manifest schema or platform")
     components = value.get("components")
     if not isinstance(components, list):
@@ -59,6 +59,11 @@ def verify(root: Path, *, inspect_binaries: bool = True) -> dict[str, object]:
         seen.add(name)
         path = _confined(root, str(component.get("path", "")))
         license_path = _confined(root, str(component.get("license", "")))
+        notices = component.get("notices", [])
+        if not isinstance(notices, list) or not all(isinstance(item, str) for item in notices):
+            raise RuntimeManifestError(f"invalid host runtime notices: {name}")
+        for notice in notices:
+            _confined(root, notice)
         expected = component.get("sha256")
         architectures = set(component.get("architectures", []))
         if (not re.fullmatch(r"[0-9a-f]{64}", str(expected))
@@ -72,6 +77,16 @@ def verify(root: Path, *, inspect_binaries: bool = True) -> dict[str, object]:
             raise RuntimeManifestError(f"invalid host runtime component: {name}")
         if not path.stat().st_mode & 0o111:
             raise RuntimeManifestError(f"host runtime component is not executable: {name}")
+        if inspect_binaries:
+            try:
+                probe = subprocess.run([str(path), "--version"], capture_output=True,
+                                       text=True, timeout=15, check=False)
+            except (OSError, subprocess.TimeoutExpired) as error:
+                raise RuntimeManifestError(
+                    f"host runtime component version probe failed: {name}") from error
+            if probe.returncode:
+                raise RuntimeManifestError(
+                    f"host runtime component version probe failed: {name}")
         if inspect_binaries and component["verification"] == "sha256+lipo":
             result = subprocess.run(
                 ["/usr/bin/lipo", "-archs", str(path)], capture_output=True,
@@ -79,10 +94,27 @@ def verify(root: Path, *, inspect_binaries: bool = True) -> dict[str, object]:
             )
             if result.returncode or set(result.stdout.split()) != ARCHITECTURES:
                 raise RuntimeManifestError(f"host runtime component is not Universal 2: {name}")
+        payloads = component.get("payloads")
+        if payloads is not None:
+            if set(payloads) != ARCHITECTURES:
+                raise RuntimeManifestError(f"runtime architecture payloads are incomplete: {name}")
+            for architecture, payload in payloads.items():
+                if not isinstance(payload, dict):
+                    raise RuntimeManifestError(f"invalid runtime architecture payload: {name}")
+                binary = _confined(root, str(payload.get("path", "")))
+                if digest(binary) != payload.get("sha256"):
+                    raise RuntimeManifestError(f"runtime architecture payload hash mismatch: {name}")
+                if inspect_binaries:
+                    result = subprocess.run(["/usr/bin/lipo", "-archs", str(binary)],
+                                            capture_output=True, text=True, timeout=10,
+                                            check=False)
+                    if result.returncode or result.stdout.split() != [architecture]:
+                        raise RuntimeManifestError(
+                            f"runtime architecture payload mismatch: {name}:{architecture}")
     missing = REQUIRED - seen
     if missing:
         raise RuntimeManifestError("missing host runtime components: " + ", ".join(sorted(missing)))
-    return {"schema": 1, "components": len(components), "architectures": sorted(ARCHITECTURES)}
+    return {"schema": value["schema"], "components": len(components), "architectures": sorted(ARCHITECTURES)}
 
 
 def main() -> int:

@@ -22,8 +22,9 @@ or local test output from being published with the installer.
    Theos checkout explicitly with `--theos`; the build no longer derives
    include paths by invoking Homebrew.
 2. Configure caller-owned Developer ID Application and Developer ID Installer
-   identities in the keychain. Configure a `notarytool` keychain profile if
-   notarizing. Keep all credentials outside the source tree and output logs.
+   identities in the keychain. Public distribution also requires a `notarytool`
+   keychain profile; the build now blocks before compilation when it is absent.
+   Keep all credentials outside the source tree and output logs.
 3. Run the documented build command in [BUILDING.md](BUILDING.md). The pipeline
    fails closed on invalid kit hashes, signed payload PII, EULA mismatch,
    missing Mac architecture slices, incomplete Python wheel coverage,
@@ -51,8 +52,9 @@ package including nested IPA/ZIP native bytes, verifies the EULA, inspects
 every Mac Mach-O and its Developer ID/hardened-runtime signature, and checks
 for unexpected debug entitlements. If notarization is configured, the
 pipeline waits for acceptance, staples the package, and validates the ticket.
-Without a profile, the report says `NOT_EXECUTED` for notarization and
-stapling; it never claims those steps passed.
+Without a profile, a distribution build stops at `SIGNING_PREFLIGHT` and prints
+the exact `xcrun notarytool store-credentials` command; it never emits an
+unnotarized package as a public release.
 
 `RELEASE_MANIFEST.json` records the product version, build, mode, roles, sizes,
 and SHA-256 digests. `SHA256SUMS` covers the installer, audit report, and JSON
@@ -61,9 +63,9 @@ missing files, checksum drift, and any fifth file.
 
 Release staging now excludes generated `__pycache__`, `.pyc`, and `.pyo`
 artifacts, removing the only observed occurrence of the current builder's home
-path from the raw local kit. At present the kit first blocks preflight because
-it lacks `HOST_RUNTIME_MANIFEST.json`; separately executed sanitizer evidence
-shows it will then block `PREPARE_KIT` with `FIXED_HOME_PATH` and
+path from the raw local kit. A missing `HOST_RUNTIME_MANIFEST.json` is now
+repaired reproducibly by the pinned dual-architecture runtime builder. The kit
+then correctly blocks `PREPARE_KIT` with `FIXED_HOME_PATH` and
 `DERIVED_DATA_PATH` in signed Frida and PreferenceLoader
 device binaries. The private diagnostic inventory is written by
 `python3 tools/kit_pii_report.py KIT artifacts/release-kit-pii.json` and

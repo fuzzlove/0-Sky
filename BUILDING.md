@@ -36,7 +36,8 @@ Preflight and build are each one repository-relative command. `build.sh`
 prepares, sanitizes, and verifies a raw authorized kit automatically:
 
 ```sh
-python3 tools/environment_preflight.py --mode development --kit "/path/to/authorized kit" --skip-device
+python3 tools/environment_preflight.py --human --mode development \
+  --kit "/path/to/authorized kit" --theos "/path/to/locked/theos" --skip-device
 ./build.sh --kit "/path/to/authorized kit" --theos "/path/to/theos" \
   --derived-data "/path/to/build output"
 ```

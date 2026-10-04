@@ -123,6 +123,8 @@ public struct BridgeEnvironment: Sendable {
     }
 
     private static func findPymobilePython(supportRoot: URL) -> URL? {
+        let shared = supportRoot.appendingPathComponent("venv/bin/python3")
+        if FileManager.default.isExecutableFile(atPath: shared.path) { return shared }
         let instances = supportRoot.appendingPathComponent("instances")
         let directories = (try? FileManager.default.contentsOfDirectory(
             at: instances, includingPropertiesForKeys: nil,
@@ -131,9 +133,6 @@ public struct BridgeEnvironment: Sendable {
         for directory in directories.sorted(by: { $0.path < $1.path }) {
             let candidate = directory.appendingPathComponent("venv/bin/python3")
             if FileManager.default.isExecutableFile(atPath: candidate.path) { return candidate }
-        }
-        if let discovered = HostToolResolver.executable("python3") {
-            return URL(fileURLWithPath: discovered)
         }
         return nil
     }

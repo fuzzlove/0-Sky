@@ -203,7 +203,7 @@ def include_offline_python(root: pathlib.Path,
         "python3.9_3.9.9-1_iphoneos-arm64.deb",
         "python3_3.9.9-1_iphoneos-arm64.deb",
     ]
-    tools, tool_environment = host_tool_environment(("dpkg-deb", "zstd"))
+    tools, tool_environment = host_tool_environment(("dpkg-deb",))
     dpkg_deb = tools["dpkg-deb"]
     with tempfile.TemporaryDirectory(prefix="0sky-python-", dir=root.parent) as temporary:
         stage = pathlib.Path(temporary)
@@ -682,11 +682,9 @@ def read_companion_entitlements(binary: pathlib.Path) -> dict | None:
     entitlement blob with an entitlement-free signature.  Always measure the
     effective set before accepting a reviewed helper.
     """
-    ldid = find_host_tool("ldid")
-    if ldid is None:
-        raise RuntimeError("ldid is required to verify the reviewed Crane helper")
     extracted = subprocess.run(
-        [ldid, "-e", str(binary)], stdin=subprocess.DEVNULL,
+        ["/usr/bin/codesign", "--display", "--entitlements", ":-", str(binary)],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
     if extracted.returncode or not extracted.stdout.strip():
         return None

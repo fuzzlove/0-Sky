@@ -151,16 +151,14 @@ public actor ScriptRunner {
             URL(fileURLWithPath: "/usr/bin"),
             URL(fileURLWithPath: "/bin"),
             URL(fileURLWithPath: "/usr/sbin"),
-            URL(fileURLWithPath: "/opt/homebrew/bin"),
-            // Homebrew entry points (including venv interpreters) resolve
-            // through /opt/homebrew/bin into versioned Cellar directories.
-            // Canonical-path validation must approve that immutable tool root
-            // or every pinned 0-Sky virtual environment is rejected solely
-            // because it is a symlink.
-            URL(fileURLWithPath: "/opt/homebrew/Cellar"),
             FileManager.default.homeDirectoryForCurrentUser
                 .appendingPathComponent("Library/Application Support/0-Sky"),
         ]
+        if let resources = Bundle.main.resourceURL {
+            // A venv created by the dependency installer may resolve its
+            // interpreter symlink into this immutable, signed runtime.
+            roots.append(resources.appendingPathComponent("Kit/host-mac/runtime"))
+        }
         if let developerTool = HostToolResolver.xcrunTool("devicectl") {
             roots.append(URL(fileURLWithPath: developerTool).deletingLastPathComponent())
         }

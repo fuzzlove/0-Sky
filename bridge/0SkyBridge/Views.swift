@@ -291,7 +291,7 @@ struct DependencyCard: View {
                 }
             }
             if model.hasMissingDependencies {
-                Text("One guided installer adds Homebrew Python 3.12, dpkg, USB tooling, and the pinned offline 0-Sky environment.")
+                Text("One guided installer verifies the bundled Python 3.12 and USB tools, then creates the pinned offline 0-Sky environment. No Homebrew installation is required.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Install All 0-Sky Requirements") {
@@ -1220,7 +1220,7 @@ struct SetupAssistantView: View {
             if step == 1 && model.hasMissingDependencies {
                 Button("Install All 0-Sky Requirements") { model.installMissingDependencies() }
                     .buttonStyle(.borderedProminent)
-                Text("Installs Python 3.12, dpkg, USB tools, and the isolated 0-Sky Python environment. Terminal keeps Apple and Homebrew prompts visible.")
+                Text("Verifies the app's bundled Python 3.12, Debian extractor, and USB tools, then creates the isolated 0-Sky Python environment. Terminal shows every required action; Homebrew is not required.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if step == 7 {
@@ -1321,7 +1321,7 @@ struct SetupAssistantView: View {
     private var instruction: String {
         switch step {
         case 0: "0-Sky Bridge requires macOS 15 or later and Apple developer services for SRD workflows."
-        case 1: "Select Install Missing Dependencies to add only missing Homebrew tools and the pinned offline Python environment. Installed components are preserved."
+        case 1: "Select Install All 0-Sky Requirements. It verifies the self-contained runtime and repairs only the pinned per-user environment. If the app bundle is incomplete, it explains exactly how to reinstall or rebuild it."
         case 2: "The app inspects instance-scoped USB, worker, bridge, and Bluetooth services."
         case 3: "Connect and unlock an authorized iPhone or iPad. Discovery runs continuously."
         case 4: "Approve this Mac using Apple's normal Trust This Computer and Developer Paired Macs workflows."

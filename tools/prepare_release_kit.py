@@ -18,6 +18,7 @@ try:
     from .stage_control_payload import stage as stage_control_payload
     from .verify_release import architecture_of, platform_of, wheel_coverage
     from .host_runtime_manifest import verify as verify_host_runtime
+    from .build_host_runtime import RuntimeBuildError, build as build_host_runtime
 except ImportError:
     from kit_manifest import (APPROVAL_NAME, APPROVAL_STATES,
                               generate as generate_kit_manifest, verify as verify_kit_manifest)
@@ -25,6 +26,7 @@ except ImportError:
     from stage_control_payload import stage as stage_control_payload
     from verify_release import architecture_of, platform_of, wheel_coverage
     from host_runtime_manifest import verify as verify_host_runtime
+    from build_host_runtime import RuntimeBuildError, build as build_host_runtime
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -211,6 +213,9 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
         candidate = work / "release-kit"
         count = stage(source, candidate, release=True)
         apply_portability_overrides(candidate)
+        if not (candidate / "host-mac/HOST_RUNTIME_MANIFEST.json").is_file():
+            print("HOST_RUNTIME_BUILD=START pinned dual-architecture runtime", flush=True)
+            build_host_runtime(candidate, ROOT / ".build/host-runtime-cache")
         verify_host_runtime(candidate)
         staged_control = stage_control_payload(candidate, build=False)
         if staged_control["sha256"] != digest(embedded / "packages/Commissary-Universal.ipa"):
@@ -231,7 +236,9 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
         if deny_file:
             scan += ["--deny-file", str(deny_file.resolve(strict=True))]
         subprocess.run(scan, timeout=120, check=True)
-        python312 = shutil.which("python3.12")
+        python312 = str(candidate / "host-mac/runtime/bin/python3")
+        if not Path(python312).is_file():
+            python312 = shutil.which("python3.12") or ""
         if not python312:
             raise RuntimeError("Python 3.12 is required for the offline install test")
         subprocess.run([sys.executable, str(ROOT / "tools/test_offline_install.py"),
@@ -273,6 +280,13 @@ def main() -> int:
         parser.error("source and output must be different directories")
     try:
         prepare(args.source, args.output, deny_file=args.deny_file)
+    except RuntimeBuildError as error:
+        print(json.dumps({"category": "host-runtime-source-missing",
+                          "detail": error.detail}), file=sys.stderr)
+        print("REQUIRED_ACTION:", file=sys.stderr)
+        for line in error.remediation.splitlines():
+            print(f"  {line}", file=sys.stderr)
+        return 2
     except subprocess.CalledProcessError as error:
         operation = Path(error.cmd[1] if len(error.cmd) > 1 else error.cmd[0]).name
         print(f"RELEASE_KIT=FAIL operation={operation} exit={error.returncode}",

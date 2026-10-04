@@ -22,8 +22,8 @@ Universal 2 Python/host-tool runtime file; missing components fail closed with
    or effective-date mismatch blocks release. Preserve the legal text unless
    the authorized document owner supplies a revision. The EULA version is
    independent of the app version.
-2. Run `python3 tools/environment_preflight.py --mode release --kit KIT
-   --skip-device`. A missing signing input is BLOCKED. A configured input is
+2. Run `python3 tools/environment_preflight.py --human --mode release --kit KIT
+   --theos /absolute/path/to/locked/theos --skip-device`. A missing signing input is BLOCKED. A configured input is
    only a preflight signal; verify the actual certificate, entitlements, and
    provisioning on the final artifacts.
 3. Run `python3 tools/prepare_release_kit.py KIT RELEASE_KIT`. Pass
