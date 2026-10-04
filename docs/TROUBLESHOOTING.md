@@ -14,6 +14,7 @@ Preflight is read-only; setup and repair are explicit operations.
 | --- | --- | --- |
 | `EXTERNAL_KIT_MISSING` | A source checkout lacks the private, manifest-verified kit. | Obtain the authorized kit separately. Do not copy an old installed app's kit into the source tree. |
 | `ENVIRONMENT_BLOCKED` or missing Python 3.12 | Required host tools or the pinned runtime are unavailable. | In Bridge choose **Install All 0-Sky Requirements**, then rerun preflight. |
+| `HOST_RUNTIME=FAIL` | The package lacks a required Universal 2 Python/tool binary, license, or matching hash. | Replace the complete four-file release; do not install Homebrew as a substitute for a broken public package. |
 | More than one USB device is visible | Automatic selection would be ambiguous. | Disconnect other devices or explicitly select/pass the exact UDID. |
 | Trust or pairing fails | Apple trust, project pairing, SSH, and worker state are separate checks. | Unlock the selected SRD, approve Trust, verify Xcode device support, and rerun the exact-device check. Do not copy another device's profile. |
 | SSH port is occupied | The requested local port belongs to another listener. | Stop the verified stale per-device forward or choose another local port. Never terminate an unidentified listener. |
@@ -23,6 +24,7 @@ Preflight is read-only; setup and repair are explicit operations.
 | `RELEASE_MANIFEST=FAIL` | A release file is missing, extra, symlinked, or has changed bytes. | Re-download/rebuild the complete four-file set. Do not replace only the package. |
 | Candidate audit ends `BLOCKED` | Development/release-candidate signing is not a public distribution result. | Use a distribution build with verified Developer ID signatures and notarization. |
 | Sanitization reports a signed binary path | The signed input contains builder data. | Correct its build configuration, rebuild, and verify its signature. Do not strip or patch a signed binary. |
+| Control reports “Verified update required” | A moving upstream `latest` asset has no release-bound checksum. | Upgrade using a complete manifest-verified 0-Sky release instead of the disabled privileged self-updater. |
 
 ## Private logs and state
 

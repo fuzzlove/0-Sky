@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import hashlib
 import json
 import os
 import plistlib
@@ -19,6 +20,7 @@ from tools.verify_release import (
     REQUIRED_APP_SCRIPTS, package_payload, report_text,
     runtime_kit_issues, same_tree, wheel_coverage,
 )
+from tools.host_runtime_manifest import REQUIRED as REQUIRED_HOST_RUNTIME
 
 
 class UniversalReleaseTests(unittest.TestCase):
@@ -77,6 +79,29 @@ class UniversalReleaseTests(unittest.TestCase):
                 executable.parent.mkdir(parents=True, exist_ok=True)
                 executable.write_text("fixture", encoding="utf-8")
                 executable.chmod(0o755)
+            runtime_license = kit / "host-mac/runtime/LICENSE.txt"
+            runtime_license.parent.mkdir(parents=True, exist_ok=True)
+            runtime_license.write_text("fixture license", encoding="utf-8")
+            runtime_components = []
+            for name in sorted(REQUIRED_HOST_RUNTIME):
+                executable = kit / "host-mac/runtime/bin" / name
+                executable.parent.mkdir(parents=True, exist_ok=True)
+                executable.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+                executable.chmod(0o755)
+                runtime_components.append({
+                    "name": name,
+                    "path": executable.relative_to(kit).as_posix(),
+                    "sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
+                    "architectures": ["arm64", "x86_64"],
+                    "version": "fixture",
+                    "license": runtime_license.relative_to(kit).as_posix(),
+                    "runtime_requirements": [],
+                    "destination": "application-bundled",
+                    "verification": "sha256+script",
+                })
+            (kit / "host-mac/HOST_RUNTIME_MANIFEST.json").write_text(json.dumps({
+                "schema": 1, "platform": "macOS", "components": runtime_components,
+            }), encoding="utf-8")
             (kit / APPROVAL_NAME).write_text(json.dumps(
                 {"schema_version": 1, "states": list(APPROVAL_STATES)}), encoding="utf-8")
             generate_kit_manifest(kit)

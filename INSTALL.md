@@ -29,15 +29,31 @@ that it is a public release. Its audit result is deliberately `BLOCKED`.
    the package installs `0SkyBridge.app` in `/Applications`; the package has no
    installer scripts and does not modify the SRD.
 3. Open **0-Sky Bridge**, review the EULA, and choose **Install All 0-Sky
-   Requirements**. The guided dependency step explains any Homebrew privilege
-   request, installs pinned Python dependencies into 0-Sky-owned virtual
-   environments, and leaves unrelated global Python packages alone.
+   Requirements**. A release package uses its bundled, manifest-verified
+   Universal 2 Python and host tools; it does not require developer Python or
+   Homebrew. Development builds may use an existing Homebrew after explicit
+   review, but 0-Sky never downloads and executes Homebrew's moving bootstrap
+   script. Pinned Python dependencies remain in 0-Sky-owned environments.
 4. Connect and unlock the authorized SRD over USB. Approve Apple's Trust prompt,
    select that device in Bridge, and run setup. Bridge binds the profile and
    USB forwarding to the selected device's exact UDID; it never silently uses
    the first connected device.
 5. Re-run the health check. Treat missing exact-build assets, pairing, root SSH,
    or worker proof as blockers rather than bypassing them.
+
+The primary UI action is **Set Up Bridge and SRD**. **Repair** reruns only
+supported convergence checks, **Resume** re-enters an interrupted persisted
+stage, **Diagnostics** produces a redacted report, and device removal previews
+an exact-device host-side uninstall. The setup controller also supports a
+headless exact-device resume:
+
+```sh
+"/Applications/0SkyBridge.app/Contents/Resources/Kit/host-mac/runtime/bin/python3" \
+  "/Applications/0SkyBridge.app/Contents/Resources/Scripts/0sky_project_setup.py" \
+  --setup --resume --udid EXACT_UDID
+```
+
+See the evidence-scoped [compatibility matrix](docs/SUPPORTED_PLATFORMS.md).
 
 There is currently no verified public binary installer built from the local
 external kit described in [RELEASE.md](RELEASE.md). Signed payloads containing

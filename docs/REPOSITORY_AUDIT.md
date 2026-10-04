@@ -33,6 +33,18 @@ pending non-ignored file and uses these categories:
 2. **Distribution signing, notarization, clean Intel runtime testing, and the
    exact supported SRD matrix require external credentials/hardware.**
    **Status:** accurately reported as unavailable, never promoted to PASS.
+3. **The Control fork retained upstream privileged self-update paths that
+   downloaded moving `latest` TrollStore and ldid assets without release-bound
+   checksums.** **Status:** fixed; those paths now fail closed with actionable
+   UI and direct users to the manifest-verified 0-Sky release/dependency
+   workflow. User-requested IPA URL installation remains a separate, explicit
+   application feature.
+4. **Compiled installs previously depended on developer-installed Python and
+   Homebrew tools.** **Status:** the package contract now requires a complete
+   Universal 2 host runtime with versions, licenses, requirements, destinations
+   and hashes in `HOST_RUNTIME_MANIFEST.json`; runtime discovery prefers it.
+   No conforming external runtime is available locally, so the public package
+   remains blocked instead of falling back to a developer workstation.
 
 No credential value was printed or copied. The tracked-source PII gate found
 no unallowlisted credential, private key, fixed home path, or physical device
@@ -57,6 +69,15 @@ identifier.
    now the user entry point; source building and release engineering remain
    separate. Repair, upgrade, reversible uninstall, privilege requests, and
    exact-device selection are documented.
+6. **The optional setup path downloaded and executed Homebrew's moving `HEAD`
+   installer without a pinned digest.** Automatic Homebrew bootstrapping is now
+   refused. Users install it separately after reviewing the upstream privilege
+   request; 0-Sky only invokes an already-installed `brew` executable.
+7. **Long device setup recorded only a final report.** Each exact-device run
+   now persists owner-only atomic stage status, attempt count, last completed
+   stage, current failure, and resume origin. Reruns re-converge idempotent
+   preconditions; `--resume` requires one explicit UDID, and read-only checks
+   never create progress state.
 
 ### Low severity
 
@@ -102,15 +123,18 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 238 run, 4 skipped for unavailable private fixtures/compiled app |
+| Tool/release unit tests | PASS — 246 run, 4 skipped for unavailable private fixtures/compiled app |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 122 run, 1 skipped for absent external source kit |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
-| Control compatibility tests | PASS — 20 run |
+| Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
 | BridgeCore tests | PASS — 33/33 |
 | Bridge Swift release source build | PASS |
 | Link clean source build, checksum, identity/icon/signature, sanitizer | PASS |
 | EULA and source PII gates | PASS |
 | Python compile, 23 non-vendored shell syntax checks, local Markdown links, inventory reproducibility | PASS |
+| Homebrew bootstrap safety | PASS — moving remote installer is refused and never executed |
+| Host runtime manifest regression tests | PASS — complete, missing-component, and traversal cases |
+| Resumable setup-state tests | PASS — private atomic progress and read-only non-persistence |
 | Repeated missing-kit release failure | PASS — failed closed and retained only one sanitized audit report |
 | Control package build | BLOCKED — `THEOS` is not configured |
 | Public `.pkg` | BLOCKED — authorized external kit/signing inputs unavailable |
@@ -118,5 +142,5 @@ identifier.
 
 Machine-readable results in `SOURCE_AUDIT.json` distinguish executed tests from
 blocked hardware/signing work. A full public release remains **not ready** until
-the high-severity external signed-payload blocker and distribution/hardware
-gates are cleared.
+the Universal 2 host runtime, high-severity external signed-payload blocker,
+and distribution/hardware gates are cleared.

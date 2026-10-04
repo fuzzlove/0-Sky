@@ -77,16 +77,21 @@ public struct DependencyManager: Sendable {
             ("Homebrew", "brew", false),
         ]
         var statuses = candidates.map { name, command, required in
-            let path = HostToolResolver.executable(command)
+            let bundled = paths.bundledKitRoot?
+                .appendingPathComponent("host-mac/runtime/bin/\(command)")
+            let path = bundled.flatMap {
+                fileManager.isExecutableFile(atPath: $0.path) ? $0.path : nil
+            } ?? HostToolResolver.executable(command)
             return DependencyStatus(
                 name: name, path: path, required: required,
                 available: path != nil,
-                detail: path != nil ? "Discovered from PATH or a standard tool directory" : (required
+                detail: path != nil ? "Verified bundled runtime or discovered system tool" : (required
                     ? "Missing — select Install All 0-Sky Requirements"
                     : "Not installed; the dependency installer can add it when needed")
             )
         }
-        let pythonCandidates = [HostToolResolver.executable("python3.12"),
+        let pythonCandidates = [paths.bundledHostPython()?.path,
+                                HostToolResolver.executable("python3.12"),
                                 Self.hostPythonCandidates.first(where: { fileManager.isExecutableFile(atPath: $0) })]
             .compactMap { $0 }
         let hostPython = pythonCandidates.first {

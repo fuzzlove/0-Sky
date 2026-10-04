@@ -22,9 +22,11 @@ except ImportError:
 
 try:
     from .kit_manifest import verify as verify_kit_manifest
+    from .host_runtime_manifest import RuntimeManifestError, verify as verify_host_runtime
     from .release_sanitize import audit, load_deny_patterns
 except ImportError:
     from kit_manifest import verify as verify_kit_manifest
+    from host_runtime_manifest import RuntimeManifestError, verify as verify_host_runtime
     from release_sanitize import audit, load_deny_patterns
 
 
@@ -43,6 +45,7 @@ REQUIRED_MAC_BINARIES = {
 REQUIRED_KIT_FILES = (
     "SHA256SUMS", "RELEASE_KIT_MANIFEST.json", "PORTABILITY.json", "host-mac/install.py",
     "host-mac/pair.py", "host-mac/requirements-lock.txt",
+    "host-mac/HOST_RUNTIME_MANIFEST.json",
     "payloads/0-Sky-Link-1.9.0-universal.ipa",
 )
 REQUIRED_APP_SCRIPTS = (
@@ -89,7 +92,12 @@ def runtime_kit_issues(app: Path) -> list[str]:
         return ["DEPENDENCY_KIT_INCOMPLETE"]
     if any(not (scripts / relative).is_file() for relative in REQUIRED_APP_SCRIPTS):
         return ["DEPENDENCY_INSTALLER_MISSING"]
-    return verify_kit_manifest(kit)
+    issues = verify_kit_manifest(kit)
+    try:
+        verify_host_runtime(kit)
+    except (OSError, RuntimeManifestError, subprocess.SubprocessError):
+        issues.append("HOST_RUNTIME_INVALID")
+    return issues
 
 
 def platform_of(path: Path) -> str:
@@ -263,7 +271,7 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
            ) -> tuple[dict[str, str], list[str]]:
     values: dict[str, str] = {key: "NOT_EXECUTED" for key in (
         "Main executable", "arm64", "x86_64", "Universal 2", "Nested binaries checked",
-        "Python wheel coverage",
+        "Python wheel coverage", "Bundled host runtime",
         "Application", "Installer", "Dependency kit", "EULA", "Permissions", "Code signature",
         "Hardened runtime", "Entitlements", "Gatekeeper assessment", "Notarization",
         "Stapling", "Signing team consistency", "Developer username leak", "Developer HOME leak", "Hostname leak",
@@ -285,6 +293,9 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
     values["Application"] = "PASS"
     kit_errors = runtime_kit_issues(app)
     values["Dependency kit"] = "FAIL" if kit_errors else "PASS"
+    values["Bundled host runtime"] = (
+        "FAIL" if "HOST_RUNTIME_INVALID" in kit_errors else "PASS"
+    )
     errors.extend(kit_errors)
     values["Tool discovery"] = "PASS" if all(shutil.which(tool) for tool in
         ("xcrun", "codesign", "spctl", "pkgutil")) else "FAIL"
@@ -432,7 +443,7 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
 
 def report_text(values: dict[str, str], errors: list[str], *, candidate: bool = False) -> str:
     groups = {
-        "ARCHITECTURE": ("Main executable", "arm64", "x86_64", "Universal 2", "Nested binaries checked", "Python wheel coverage"),
+        "ARCHITECTURE": ("Main executable", "arm64", "x86_64", "Universal 2", "Nested binaries checked", "Python wheel coverage", "Bundled host runtime"),
         "PACKAGING": ("Application", "Installer", "Dependency kit", "EULA", "Permissions"),
         "SECURITY": ("Code signature", "Hardened runtime", "Entitlements",
                      *("Entitlements " + name for name in ENTITLEMENT_TARGETS),

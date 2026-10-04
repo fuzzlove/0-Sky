@@ -19,6 +19,10 @@ from typing import Mapping
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "bridge"))
 from zero_sky_user_config import UserConfigError, config_path, load  # noqa: E402
+try:
+    from .host_runtime_manifest import RuntimeManifestError, verify as verify_host_runtime
+except ImportError:
+    from host_runtime_manifest import RuntimeManifestError, verify as verify_host_runtime
 
 
 def command(argv: list[str], timeout: int = 8) -> tuple[int | None, str]:
@@ -175,12 +179,18 @@ def report(*, mode: str, kit: Path | None = None, udid: str | None = None,
     device = inspect_device(udid, xcrun if isinstance(xcrun, str) else None) if discover_device else {
         "status": "DEGRADED", "selected": bool(udid), "remediation": "Device discovery skipped"}
     kit_result = inspect_kit(source)
+    try:
+        runtime_detail = verify_host_runtime(source.resolve(strict=True))
+        host_runtime: dict[str, object] = {"status": "PASS", **runtime_detail}
+    except (OSError, RuntimeManifestError, subprocess.SubprocessError) as error:
+        host_runtime = {"status": "BLOCKED", "remediation": str(error)}
     signing = bool(env.get("ZERO_SKY_SIGNING_IDENTITY"))
     security = {"status": "PASS" if signing else ("BLOCKED" if mode == "release" else "DEGRADED"),
                 "signing_identity_configured": signing,
                 "remediation": None if signing else "Configure caller-owned signing identity for release"}
     statuses = [item["status"] for item in tools if item["tool"] not in {"iproxy", "idevice_id"}]
-    statuses += [configuration["status"], security["status"], kit_result["status"]]
+    statuses += [configuration["status"], security["status"], kit_result["status"],
+                 host_runtime["status"]]
     if udid:
         statuses.append(device["status"])
     _, translated_value = command(["/usr/sbin/sysctl", "-n", "sysctl.proc_translated"], 2)
@@ -196,6 +206,7 @@ def report(*, mode: str, kit: Path | None = None, udid: str | None = None,
                    "application_support": configuration.get("support", "<unavailable>")},
         "toolchain": tools, "device": device,
         "configuration": configuration, "kit": kit_result,
+        "host_runtime": host_runtime,
         "security": security, "status": overall,
     }
 

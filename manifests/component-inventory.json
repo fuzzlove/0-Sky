@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "distribution": "0-Sky",
+  "components": [
+    {
+      "name": "0-Sky Bridge",
+      "platform": "macOS 15+",
+      "architectures": ["arm64", "x86_64"],
+      "version": "1.0.0",
+      "license": "bridge/0SkyBridge/Resources/Legal/EULA.md",
+      "runtime_requirements": ["Apple SRD host services", "macOS launchd"],
+      "installation_destination": "/Applications/0SkyBridge.app",
+      "verification": "codesign strict verification, lipo slice verification, package manifest SHA-256"
+    },
+    {
+      "name": "0-Sky Bridge Service",
+      "platform": "macOS 15+",
+      "architectures": ["arm64", "x86_64"],
+      "version": "1.0.0",
+      "license": "bridge/0SkyBridge/Resources/Legal/EULA.md",
+      "runtime_requirements": ["per-user launchd session"],
+      "installation_destination": "inside 0SkyBridge.app; registered per user",
+      "verification": "designated requirement, code hash pin, lipo slices, XPC protocol validation"
+    },
+    {
+      "name": "0-Sky Privileged Helper",
+      "platform": "macOS 15+",
+      "architectures": ["arm64", "x86_64"],
+      "version": "1.0.0",
+      "license": "bridge/0SkyBridge/Resources/Legal/EULA.md",
+      "runtime_requirements": ["ServiceManagement user approval"],
+      "installation_destination": "inside 0SkyBridge.app; registered only for bounded privileged operations",
+      "verification": "designated requirement, audit token validation, strict input allowlist, lipo slices"
+    },
+    {
+      "name": "Bundled host runtime",
+      "platform": "macOS 15+",
+      "architectures": ["arm64", "x86_64"],
+      "version": "declared by host-mac/HOST_RUNTIME_MANIFEST.json",
+      "license": "per-component license paths in HOST_RUNTIME_MANIFEST.json",
+      "runtime_requirements": ["none outside declared macOS system frameworks"],
+      "installation_destination": "0SkyBridge.app/Contents/Resources/Kit/host-mac/runtime",
+      "verification": "kit SHA-256 plus host runtime manifest and Universal 2 slice gate"
+    },
+    {
+      "name": "0-Sky Link",
+      "platform": "iOS/iPadOS SRD; exact build capability-gated",
+      "architectures": ["arm64"],
+      "version": "1.9.0",
+      "license": "LICENSES.md and bridge/0SkyBridge/Resources/Legal/EULA.md",
+      "runtime_requirements": ["authorized SRD", "verified 0-Sky device runtime"],
+      "installation_destination": "selected SRD application container",
+      "verification": "IPA identity/icon/signature check, payload SHA-256, post-install launch and reachability"
+    },
+    {
+      "name": "0-Sky Control",
+      "platform": "iOS/iPadOS SRD; exact build capability-gated",
+      "architectures": ["arm64"],
+      "version": "3.5.36 source; release payload version recorded by kit manifest",
+      "license": "control/LICENSE",
+      "runtime_requirements": ["authorized SRD", "verified local device bridge"],
+      "installation_destination": "selected SRD application container",
+      "verification": "release payload SHA-256, bundle identity, executable/signature, post-install process and API health"
+    },
+    {
+      "name": "Device runtime and payload set",
+      "platform": "iOS/iPadOS SRD",
+      "architectures": ["arm64", "arm64e where required by exact payload"],
+      "version": "per RELEASE_KIT_MANIFEST.json and compatibility profile",
+      "license": "LICENSES.md plus kit-provided upstream notices",
+      "runtime_requirements": ["exact UDID", "matching OS build", "SRD research personalization capabilities"],
+      "installation_destination": "selected SRD /var/jb, app container, or named research Cryptex as declared",
+      "verification": "kit SHA-256, compatibility profile, platform/Mach-O inspection, exact-build and post-install health gates"
+    }
+  ]
+}

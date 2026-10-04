@@ -27,10 +27,10 @@
     }
   ],
   "executed_validation": {
-    "tools_unit_tests": "PASS: 238 run, 4 skipped for unavailable private fixtures or compiled app",
+    "tools_unit_tests": "PASS: 246 run, 4 skipped for unavailable private fixtures or compiled app",
     "host_tools_unit_tests": "PASS: 122 run, 1 skipped because the external source kit is absent",
     "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
-    "control_source_compatibility_tests": "PASS: 20 run",
+    "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
     "bridge_core_tests": "PASS: 33/33",
     "bridge_release_source_build": "PASS",
     "link_source_build": "PASS",
@@ -42,10 +42,14 @@
     "shell_syntax": "PASS: 23 non-vendored tracked shell entry points checked",
     "markdown_local_links": "PASS",
     "repository_inventory_reproducibility": "PASS",
-    "release_failure_path_idempotency": "PASS: repeated missing-kit build produced one sanitized audit report"
+    "release_failure_path_idempotency": "PASS: repeated missing-kit build produced one sanitized audit report",
+    "homebrew_bootstrap_safety": "PASS: moving remote installer is refused and never executed",
+    "privileged_update_safety": "PASS: moving latest TrollStore and ldid assets are refused",
+    "host_runtime_manifest": "PASS: complete, missing-component, and traversal regression cases",
+    "resumable_setup_state": "PASS: owner-only atomic progress; read-only checks do not persist"
   },
   "not_executed_or_blocked": {
-    "public_pkg_build": "BLOCKED: authorized external kit is absent and known signed inputs contain builder paths",
+    "public_pkg_build": "BLOCKED: approved Universal 2 host runtime and authorized external kit are absent; known signed inputs contain builder paths",
     "distribution_signing_and_notarization": "NOT_EXECUTED: publisher credentials unavailable",
     "control_package_build": "BLOCKED: THEOS is not configured in this environment",
     "fresh_account_install": "NOT_EXECUTED",
@@ -56,6 +60,7 @@
   },
   "release_result": "BLOCKED",
   "release_blockers": [
+    "supply a redistributable manifest-verified Universal 2 Python and host tool runtime",
     "rebuild and re-sign external device payloads without developer paths",
     "supply the authorized manifest-verified external kit",
     "complete Developer ID signing and notarization",

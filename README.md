@@ -32,7 +32,9 @@ device payloads, the offline wheelhouse, and publisher credentials remain
 external. Developers should use [`BUILDING.md`](BUILDING.md); release engineers
 should use only [`scripts/build_release.sh`](scripts/build_release.sh) and the
 procedure in [`RELEASE.md`](RELEASE.md). See
-[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for repair and uninstall.
+[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for repair and uninstall,
+and [`docs/SUPPORTED_PLATFORMS.md`](docs/SUPPORTED_PLATFORMS.md) for the
+evidence-scoped compatibility matrix.
 
 ## Screenshots
 

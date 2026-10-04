@@ -98,6 +98,11 @@ public actor IOSComponentSetupManager {
         let python = try paths.projectPython()
         let controller = try paths.projectSetupController()
         let kit = try paths.projectSetupKit()
+        let hostRuntimeBin = kit.appendingPathComponent("host-mac/runtime/bin").path
+        let runtimeEnvironment = [
+            "ZERO_SKY_KIT_ROOT": kit.path,
+            "PATH": "\(hostRuntimeBin):/usr/bin:/bin:/usr/sbin:/sbin",
+        ]
         let correlation = UUID()
         await events.publish(BridgeEvent(
             event: .iosComponentSetupStarted, deviceID: udid,
@@ -115,7 +120,7 @@ public actor IOSComponentSetupManager {
                         identifier: "ios-components.complete-project.\(udid)",
                         executableURL: python,
                         arguments: [controller.path, "--udid", udid],
-                        environment: ["ZERO_SKY_KIT_ROOT": kit.path],
+                        environment: runtimeEnvironment,
                         // The bundled Scripts directory is intentionally not a general-purpose
                         // execution root. Run the audited controller from the verified Kit root;
                         // Python still resolves its adjacent configuration module via argv[0].
@@ -161,6 +166,7 @@ public actor IOSComponentSetupManager {
         }
         let python = try paths.python(for: device)
         let installer = try paths.hostScript("bootstrap_device.py", profile: device)
+        let kit = try paths.projectSetupKit()
         var arguments = [
             installer.path,
             "--support", paths.supportRoot.path,
@@ -195,6 +201,9 @@ public actor IOSComponentSetupManager {
                         identifier: "ios-components.\(selection.rawValue.lowercased()).\(device.instanceName)",
                         executableURL: python,
                         arguments: setupArguments,
+                        environment: [
+                            "PATH": "\(kit.appendingPathComponent("host-mac/runtime/bin").path):/usr/bin:/bin:/usr/sbin:/sbin"
+                        ],
                         workingDirectory: installer.deletingLastPathComponent(),
                         timeout: .seconds(1_800)
                     ),

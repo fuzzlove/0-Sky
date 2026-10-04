@@ -17,12 +17,14 @@ try:
     from .stage_verified_kit import digest, stage
     from .stage_control_payload import stage as stage_control_payload
     from .verify_release import architecture_of, platform_of, wheel_coverage
+    from .host_runtime_manifest import verify as verify_host_runtime
 except ImportError:
     from kit_manifest import (APPROVAL_NAME, APPROVAL_STATES,
                               generate as generate_kit_manifest, verify as verify_kit_manifest)
     from stage_verified_kit import digest, stage
     from stage_control_payload import stage as stage_control_payload
     from verify_release import architecture_of, platform_of, wheel_coverage
+    from host_runtime_manifest import verify as verify_host_runtime
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -209,6 +211,7 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
         candidate = work / "release-kit"
         count = stage(source, candidate, release=True)
         apply_portability_overrides(candidate)
+        verify_host_runtime(candidate)
         staged_control = stage_control_payload(candidate, build=False)
         if staged_control["sha256"] != digest(embedded / "packages/Commissary-Universal.ipa"):
             raise RuntimeError("Link and release kit have different Control payload bytes")

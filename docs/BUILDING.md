@@ -11,10 +11,15 @@ Build source/tests from any working directory using repository-relative
 scripts. The kit, signing identities, notarization profile, DerivedData,
 configuration, and output directory are inputs, never source edits. A local
 build path layout comes from `tools/release_paths.py`; installed Swift code
-uses `BridgePaths` and bundle resources rather than the source checkout. A local
-unsigned build is available through `./build.sh --kit PREPARED_KIT
---derived-data OUTPUT`, after `tools/prepare_release_kit.py` has produced a
-sanitized prepared kit. This local build is not distributable.
+uses `BridgePaths` and bundle resources rather than the source checkout. The
+single source-build command accepts the raw authorized kit, prepares and
+sanitizes it, then creates the local unsigned Universal 2 app:
+
+```sh
+./build.sh --kit "/path/to/authorized kit" --derived-data "/path/to/build output"
+```
+
+This local build is not distributable.
 
 To build a non-public release candidate, run:
 
@@ -61,12 +66,13 @@ The prepared kit contains `RELEASE_KIT_APPROVAL.json`,
 the Link payload, full kit PII scan, architecture checks, and an isolated
 `pip --no-index` install pass. The app build independently verifies the
 manifest and scans the kit again before embedding it.
-The dependency command defaults to offline mode. It requires an existing
-verified macOS Python 3.12 interpreter and host command-line tools, then uses
-only the bundled wheelhouse. `--online` explicitly enables the older
-interactive Homebrew path. The current kit does **not** bundle a Mac Python
-3.12 runtime, so a completely offline bare-Mac installation remains blocked
-until that runtime and its provenance are included in the approved payload.
+The dependency command defaults to offline mode and selects the manifest-
+verified Universal 2 Python 3.12 and host tools below
+`Kit/host-mac/runtime/bin`. `HOST_RUNTIME_MANIFEST.json` records versions,
+licenses, runtime requirements, destinations, architectures, and hashes. A kit
+without that complete runtime fails the release build; development-only online
+repair may use an already-installed Homebrew but never downloads or executes a
+moving Homebrew bootstrap script.
 
 Run `python3 -m unittest discover -s tools/tests -q`,
 `(cd bridge && swift run BridgeCoreTests)`, and the host-tool tests described

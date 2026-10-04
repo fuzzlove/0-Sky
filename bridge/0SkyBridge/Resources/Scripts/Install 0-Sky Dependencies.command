@@ -42,7 +42,7 @@ print "This guided installer adds every required macOS component for 0-Sky."
 print "Required host packages include Python 3.12, dpkg/dpkg-deb, USB tools,"
 print "and the pinned offline 0-Sky Python environment."
 if [[ $ONLINE -eq 1 ]]; then
-  print "Online mode: Homebrew's official installer remains interactive."
+  print "Online mode: missing packages may be installed by an existing Homebrew."
 else
   print "Offline mode: no package indexes, Homebrew, curl, or downloads will be used."
 fi
@@ -89,6 +89,7 @@ fi
 PYTHON=""
 if [[ -z "$NATIVE" ]]; then
   for candidate in \
+    "$KIT/host-mac/runtime/bin/python3" \
     "/Library/Frameworks/Python.framework/Versions/3.12/bin/python3" \
     "/opt/homebrew/bin/python3.12" "/usr/local/bin/python3.12"; do
     if [[ -x "$candidate" ]]; then PYTHON="$candidate"; break; fi
@@ -105,40 +106,17 @@ if [[ -z "$NATIVE" ]]; then
       read -r
       exit 3
     fi
-    print "Python 3.12 is not installed. Bootstrapping the required runtime now."
-    if ! /usr/bin/xcrun --find clang >/dev/null 2>&1; then
-      print "Apple Command Line Tools must finish installing first."
-      /usr/bin/xcode-select --install 2>/dev/null || true
-      print "Finish Apple's installer, then double-click this file again."
-      print "Press Return to close."
-      read -r
-      exit 3
-    fi
-
+    print "The verified bundled Python 3.12 runtime is missing."
     BREW=""
     for candidate in "/opt/homebrew/bin/brew" "/usr/local/bin/brew"; do
       if [[ -x "$candidate" ]]; then BREW="$candidate"; break; fi
     done
     if [[ -z "$BREW" ]]; then
-      print "Homebrew is not installed. Opening its official interactive installer…"
-      TEMP_ROOT=$(/usr/bin/mktemp -d "/tmp/0sky-homebrew.XXXXXX") || exit 4
-      cleanup_bootstrap() { /bin/rm -rf "$TEMP_ROOT"; }
-      trap cleanup_bootstrap EXIT INT TERM
-      if ! /usr/bin/curl --fail --location --show-error --silent \
-        --proto '=https' --tlsv1.2 \
-        'https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh' \
-        --output "$TEMP_ROOT/install.sh"; then
-        print -u2 "Could not download Homebrew's official installer."
-        exit 4
-      fi
-      /bin/chmod 0700 "$TEMP_ROOT/install.sh"
-      if ! /bin/bash "$TEMP_ROOT/install.sh"; then
-        print -u2 "Homebrew installation did not complete."
-        exit 4
-      fi
-      for candidate in "/opt/homebrew/bin/brew" "/usr/local/bin/brew"; do
-        if [[ -x "$candidate" ]]; then BREW="$candidate"; break; fi
-      done
+      print -u2 "Homebrew is not installed."
+      print -u2 "0-Sky will not download and execute Homebrew's moving bootstrap script."
+      print -u2 "Install Homebrew separately from https://brew.sh, review its requested"
+      print -u2 "privileges, then run this installer again with --online."
+      exit 4
     fi
     if [[ -z "$BREW" ]]; then
       print -u2 "Homebrew did not provide a usable brew executable."
@@ -146,8 +124,8 @@ if [[ -z "$NATIVE" ]]; then
     fi
 
     print
-    print "Installing the complete 0-Sky host requirement set…"
-    if ! "$BREW" install python@3.12 dpkg libusbmuxd zstd ldid autoconf automake pkgconf; then
+    print "Installing missing compatibility tools for this development build…"
+    if ! "$BREW" install python@3.12 dpkg libusbmuxd zstd ldid; then
       print -u2 "One or more required Homebrew packages could not be installed."
       exit 5
     fi

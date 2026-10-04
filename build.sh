@@ -18,10 +18,17 @@ while (( $# )); do
     *) echo "Unknown build option: $1" >&2; exit 64 ;;
   esac
 done
-[[ -f "$kit/SHA256SUMS" && -f "$kit/PORTABILITY.json" ]] || {
-  echo "Prepared release kit is missing; run tools/prepare_release_kit.py, then pass --kit PATH" >&2; exit 2;
+[[ -f "$kit/SHA256SUMS" ]] || {
+  echo "Authorized kit is missing SHA256SUMS: $kit" >&2; exit 2;
 }
+if [[ ! -f "$kit/PORTABILITY.json" ]]; then
+  prepared="${derived}.prepared-kit"
+  echo "Preparing and sanitizing the verified external kit…"
+  python3 "$project_root/tools/prepare_release_kit.py" "$kit" "$prepared"
+  kit=$prepared
+fi
 python3 "$project_root/tools/verify_prepared_kit.py" "$kit"
+python3 "$project_root/tools/host_runtime_manifest.py" "$kit"
 python3 "$project_root/tools/kit_manifest.py" verify "$kit"
 python3 "$project_root/tools/wheel_inventory.py" "$kit" --verify
 preflight_scan=(python3 "$project_root/tools/release_sanitize.py" "$kit")

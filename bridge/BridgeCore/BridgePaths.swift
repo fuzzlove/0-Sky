@@ -29,6 +29,7 @@ public struct BridgePaths: Sendable {
         let requiredFiles = [
             "SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
             "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+            "host-mac/HOST_RUNTIME_MANIFEST.json",
             "host-mac/install.py", "host-mac/pair.py",
             "host-mac/requirements-lock.txt", "payloads/0-Sky-Link-1.9.0-universal.ipa",
         ]
@@ -200,6 +201,12 @@ public struct BridgePaths: Sendable {
             )
         }
         return candidate
+    }
+
+    public func bundledHostPython() -> URL? {
+        guard let bundledKitRoot else { return nil }
+        let candidate = bundledKitRoot.appendingPathComponent("host-mac/runtime/bin/python3")
+        return FileManager.default.isExecutableFile(atPath: candidate.path) ? candidate : nil
     }
 
     public static func detectRepositoryRoot(from start: URL = URL(

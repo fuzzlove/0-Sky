@@ -22,8 +22,18 @@ BLUETOOTH_FALLBACK = ROOT.parent / "TrollStore" / "TSBluetoothFallback.m"
 INFO_PLIST = ROOT / "Resources" / "Info.plist"
 CONTROL = ROOT / "control"
 MAKEFILE = ROOT / "Makefile"
+UPDATE_CONTROLLER = ROOT.parent / "Shared" / "TSListControllerShared.m"
+INSTALLATION_CONTROLLER = ROOT.parent / "TrollStore" / "TSInstallationController.m"
 
 class DeviceCompatibilityTests(unittest.TestCase):
+    def test_privileged_updates_do_not_use_unverified_latest_assets(self):
+        updater = UPDATE_CONTROLLER.read_text()
+        installer = INSTALLATION_CONTROLLER.read_text()
+        self.assertNotIn("releases/latest/download/TrollStore.tar", updater)
+        self.assertNotIn("releases/latest/download/ldid", installer)
+        self.assertIn("Verified update required", updater)
+        self.assertIn("Verified ldid required", installer)
+
     def test_declares_iphone_and_ipad(self):
         info = plistlib.loads(INFO_PLIST.read_bytes())
         self.assertEqual(info["CFBundleIdentifier"], "com.liquidsky.CrypStore")

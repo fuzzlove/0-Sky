@@ -36,17 +36,20 @@ struct DashboardView: View {
                     DependencyCard(model: model)
                 }
                 HStack {
-                    Button("Fix Bridge") { model.fixBridge() }
+                    Button("Set Up Bridge and SRD") { model.openSetupAssistant(step: 0) }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
+                        .disabled(model.isBusy)
+                    Button("Repair") { model.fixBridge() }
+                        .controlSize(.large)
                         .disabled(model.isBusy || model.selectedDevice == nil)
-                    Button("Reconnect") { model.reconnect() }
+                    if model.iosSetupError != nil {
+                        Button("Resume") { model.openSetupAssistant(step: 7) }
+                            .controlSize(.large)
+                            .disabled(model.isBusy || model.selectedDevice == nil)
+                    }
+                    Button("Diagnostics") { model.runDiagnostics() }
                         .controlSize(.large)
-                    Button("Run Diagnostics") { model.runDiagnostics() }
-                        .controlSize(.large)
-                    Button("Set Up iOS Components") { model.openSetupAssistant(step: 7) }
-                        .controlSize(.large)
-                        .disabled(model.selectedDevice == nil)
                     Spacer()
                     Text(DiagnosticRedactor.redact(model.statusMessage)).foregroundStyle(.secondary)
                 }
@@ -1208,7 +1211,7 @@ struct SetupAssistantView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Welcome to 0-Sky Bridge").font(.largeTitle.bold())
+            Text("Set Up Bridge and SRD").font(.largeTitle.bold())
             ProgressView(value: Double(step + 1), total: Double(steps.count))
             Text("Step \(step + 1) of \(steps.count)")
                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -1226,9 +1229,11 @@ struct SetupAssistantView: View {
                         Label(component, systemImage: "shippingbox")
                             .font(.callout)
                     }
-                    Button(model.selectedHasProfile
-                           ? "Install Complete 0-Sky iOS Project…"
-                           : "Enroll New Device and Install Complete Project…") {
+                    Button(model.iosSetupError != nil
+                           ? "Resume Verified Setup…"
+                           : (model.selectedHasProfile
+                              ? "Install Complete 0-Sky iOS Project…"
+                              : "Enroll New Device and Install Complete Project…")) {
                         confirmIOSComponentSetup = true
                     }
                     .buttonStyle(.borderedProminent)

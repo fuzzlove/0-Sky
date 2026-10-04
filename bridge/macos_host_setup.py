@@ -9,9 +9,9 @@ The macOS companion consists of three per-device LaunchAgents:
 
 By default this program is read-only. Use ``--fix-missing`` for host
 dependencies without a connected device, or ``--setup`` to also install/repair
-the per-device companion. Homebrew itself is installed only with the explicit
-``--install-homebrew`` opt-in. Nothing here installs to an iPhone or iPad or
-bypasses Apple's SRD, pairing, Cryptex, nonce, or TSS checks.
+the per-device companion. It never downloads and executes a moving, unverified
+Homebrew installer. Nothing here installs to an iPhone or iPad or bypasses
+Apple's SRD, pairing, Cryptex, nonce, or TSS checks.
 """
 from __future__ import annotations
 
@@ -55,6 +55,7 @@ REQUIREMENTS_LOCK = KIT / "host-mac/requirements-lock.txt"
 FRIDA_REQUIREMENTS_LOCK = KIT / "host-mac/frida-requirements-lock.txt"
 FRIDA_WHEELHOUSE_HASHES = KIT / "host-mac/frida-wheelhouse.sha256"
 WHEELHOUSE = KIT / "host-mac/wheelhouse"
+BUNDLED_BIN = KIT / "host-mac/runtime/bin"
 FRIDA_VERSION = "17.18.0"
 FRIDA_TOOLS_VERSION = "14.10.4"
 FRIDA_COMMANDS = (
@@ -78,16 +79,12 @@ BREW_FORMULAS = {
     "zstd": "zstd",
     "dpkg-deb": "dpkg",
     "ldid": "ldid",
-    "autoreconf": "autoconf",
-    "automake": "automake",
-    "pkg-config": "pkgconf",
 }
 
 COMMANDS = (
-    "python3", "python3.12", "shasum", "ssh", "ssh-keygen", "iproxy", "nc", "lsof",
+    "shasum", "ssh", "ssh-keygen", "iproxy", "nc", "lsof",
     "tar", "zstd", "make", "xcrun", "clang", "codesign", "lipo",
     "hdiutil", "plutil", "launchctl", "ditto", "dpkg", "dpkg-deb", "ldid",
-    "autoreconf", "automake", "pkg-config",
 )
 
 APPLE_TOOLS = (
@@ -189,6 +186,40 @@ def verify_sha256_manifest(manifest: Path, root: Path) -> tuple[bool, str]:
     return (checked > 0, f"{checked} pinned files")
 
 
+def activate_bundled_runtime() -> bool:
+    """Admit only manifest-hashed tools from the immutable application kit."""
+    manifest = KIT / "host-mac/HOST_RUNTIME_MANIFEST.json"
+    if not BUNDLED_BIN.exists() and not manifest.exists():
+        return False
+    if manifest.is_symlink() or not manifest.is_file() or BUNDLED_BIN.is_symlink():
+        raise SystemExit("the bundled host runtime is incomplete or unsafe")
+    try:
+        value = json.loads(manifest.read_text(encoding="utf-8"))
+        components = value["components"]
+        required = {"python3", "dpkg", "dpkg-deb", "iproxy", "idevice_id", "zstd", "ldid"}
+        seen: set[str] = set()
+        kit_root = KIT.resolve(strict=True)
+        for component in components:
+            name = str(component["name"])
+            path = KIT / str(component["path"])
+            resolved = path.resolve(strict=True)
+            if (name in seen or path.is_symlink()
+                    or kit_root not in resolved.parents or not path.is_file()
+                    or not os.access(path, os.X_OK)
+                    or hashlib.sha256(path.read_bytes()).hexdigest() != component["sha256"]
+                    or platform.machine().lower() not in component["architectures"]):
+                raise ValueError("invalid component")
+            seen.add(name)
+        if not required.issubset(seen):
+            raise ValueError("missing component")
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise SystemExit("the bundled host runtime failed manifest validation") from error
+    os.environ["PATH"] = os.pathsep.join(
+        [str(BUNDLED_BIN), *os.environ.get("PATH", "").split(os.pathsep)]
+    )
+    return True
+
+
 def frida_probe(support: Path) -> tuple[bool, str]:
     root = support / "tools/frida-current"
     python = root / "bin/python"
@@ -258,6 +289,7 @@ def python_candidates(requested: Path | None, support: Path) -> list[Path]:
         values.append(Path(os.environ["SRD_PYTHON"]).expanduser())
     values.extend([
         support / "venv/bin/python3",
+        BUNDLED_BIN / "python3",
         Path("/opt/homebrew/bin/python3.13"),
         Path("/opt/homebrew/bin/python3"),
         Path("/usr/local/bin/python3"),
@@ -288,6 +320,7 @@ def select_python(requested: Path | None, support: Path) -> Path | None:
 
 def bootstrap_python() -> Path | None:
     candidates = [
+        BUNDLED_BIN / "python3",
         Path("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"),
         Path("/opt/homebrew/bin/python3.12"),
         Path("/usr/local/bin/python3.12"),
@@ -592,6 +625,7 @@ def find_command(name: str) -> str | None:
     """Find a command even before a fresh Homebrew install updates PATH."""
     candidates = [
         shutil.which(name),
+        str(BUNDLED_BIN / name) if (BUNDLED_BIN / name).is_file() else None,
         f"/opt/homebrew/bin/{name}",
         f"/usr/local/bin/{name}",
     ]
@@ -607,31 +641,16 @@ def locate_brew() -> Path | None:
 
 
 def install_homebrew() -> Path:
-    """Run Homebrew's official interactive installer after explicit opt-in."""
+    """Refuse moving remote bootstrap scripts; accept an existing brew only."""
     existing = locate_brew()
     if existing:
         return existing
-    curl = Path("/usr/bin/curl")
-    bash = Path("/bin/bash")
-    if not curl.is_file() or not bash.is_file():
-        raise SystemExit("macOS curl and bash are required to install Homebrew")
-    with tempfile.TemporaryDirectory(prefix="0sky-homebrew-") as directory:
-        installer = Path(directory) / "install.sh"
-        log("Downloading the official interactive Homebrew installer over HTTPS")
-        run([
-            curl, "--fail", "--location", "--show-error", "--silent",
-            "--proto", "=https", "--tlsv1.2",
-            "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh",
-            "--output", installer,
-        ])
-        installer.chmod(0o700)
-        run([bash, installer])
-    brew = locate_brew()
-    if brew is None:
-        raise SystemExit(
-            "Homebrew installation did not expose brew in /opt/homebrew or /usr/local"
-        )
-    return brew
+    raise SystemExit(
+        "Automatic Homebrew installation is disabled because its moving remote "
+        "bootstrap script cannot be verified reproducibly. Install Homebrew "
+        "separately from https://brew.sh, review its requested privileges, then "
+        "rerun this command."
+    )
 
 
 def request_command_line_tools() -> None:
@@ -671,8 +690,8 @@ def install_tools(*, allow_homebrew_install: bool = False) -> None:
             brew = install_homebrew()
         else:
             raise SystemExit(
-                "Homebrew is missing. Double-click 'Install 0-Sky Dependencies.command' "
-                "or rerun with --fix-missing --install-homebrew."
+                "Homebrew is missing. Install it separately from https://brew.sh, "
+                "review its requested privileges, then rerun with --fix-missing."
             )
     brew_bin = str(brew.parent)
     path_parts = os.environ.get("PATH", "").split(os.pathsep)
@@ -822,6 +841,7 @@ def print_checks(checks: list[Check], as_json: bool) -> None:
 
 
 def main() -> int:
+    activate_bundled_runtime()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, help="per-user 0-Sky configuration file")
     parser.add_argument("--init-config", action="store_true", help="create or refresh secure configuration for the current user")
@@ -833,7 +853,7 @@ def main() -> int:
     parser.add_argument("--fix-missing", action="store_true",
                         help="install missing host tools and the pinned offline Python environment; no device required")
     parser.add_argument("--install-homebrew", action="store_true",
-                        help="allow the official interactive Homebrew installer when brew is absent")
+                        help="deprecated compatibility flag; moving remote bootstrap scripts are refused")
     parser.add_argument("--setup-python", action="store_true",
                         help="create the exact pinned Python environment and SSH key")
     parser.add_argument("--install-companion", action="store_true",

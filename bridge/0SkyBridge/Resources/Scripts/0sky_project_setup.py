@@ -1229,8 +1229,54 @@ def enforcement_report(error: BaseException) -> str:
             "UNSUPPORTED_BYPASS_REQUIRED=NO")
 
 
+def atomic_private_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def persist_setup_state(report: dict[str, Any], status: str,
+                        error: str | None = None) -> None:
+    raw = report.get("state_file")
+    if not raw or report.get("check_only"):
+        return
+    results = report.get("stage_results", {})
+    value: dict[str, Any] = {
+        "schema": 1,
+        "device_udid": report["target"]["udid"],
+        "instance": report["target"]["instance"],
+        "status": status,
+        "attempt": report["attempt"],
+        "resumed": report["resumed"],
+        "current_stage": report["stages"][-1] if report["stages"] else None,
+        "last_completed_stage": next(
+            (name for name in reversed(report["stages"])
+             if results.get(name) == "passed"), None),
+        "stages": results,
+        "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+    if error:
+        value["error"] = error[-2000:]
+    atomic_private_json(Path(raw), value)
+
+
 def begin_stage(report: dict[str, Any], name: str) -> None:
+    if report["stages"]:
+        report["stage_results"][report["stages"][-1]] = "passed"
     report["stages"].append(name)
+    report["stage_results"][name] = "running"
+    persist_setup_state(report, "running")
     log(f"stage started: {name}")
 
 
@@ -1238,7 +1284,30 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
                    root_run: Path) -> dict:
     run_dir = root_run / target["instance"]
     run_dir.mkdir(parents=True, exist_ok=True)
-    report: dict[str, Any] = {"target": target, "started_at": dt.datetime.now(dt.timezone.utc).isoformat(), "stages": []}
+    state_file = STATE_ROOT / target["instance"] / "setup-state.json"
+    previous: dict[str, Any] = {}
+    if state_file.is_file() and not state_file.is_symlink():
+        try:
+            previous = json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise PoCError(
+                "persisted setup state is unreadable; preserve it for diagnostics"
+            ) from error
+        if previous.get("device_udid") != target["udid"]:
+            raise PoCError("persisted setup state belongs to another device")
+    if args.resume and not previous:
+        raise PoCError("--resume requested but no setup state exists for this exact device")
+    report: dict[str, Any] = {
+        "target": target,
+        "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "stages": [],
+        "stage_results": {},
+        "state_file": str(state_file),
+        "attempt": int(previous.get("attempt", 0)) + 1,
+        "resumed": bool(previous and previous.get("status") != "complete"),
+        "resume_from": previous.get("current_stage") if previous else None,
+        "check_only": bool(args.check),
+    }
     state = STATE_ROOT / target["instance"] / "srdssh"
     bootstrap = [
         python, KIT / "srdssh/bootstrap.py", "--kit", KIT / "srdssh",
@@ -1395,14 +1464,20 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         report.update(final=final, passed=passed)
         if not passed:
             raise PoCError("post-install version/pairing gate failed: " + json.dumps(final))
+        if report["stages"]:
+            report["stage_results"][report["stages"][-1]] = "passed"
+        persist_setup_state(report, "complete")
         return report
     except Exception as error:
+        if report["stages"]:
+            report["stage_results"][report["stages"][-1]] = "failed"
         report.update(passed=False, error=f"{type(error).__name__}: {error}",
                       enforcement=enforcement_report(error))
+        persist_setup_state(report, "blocked", report["error"])
         raise
     finally:
         report["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        (run_dir / "result.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        atomic_private_json(run_dir / "result.json", report)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1430,6 +1505,7 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--pair-remotexpc", action="store_true", help="offer iOS 27 Paired Macs code flow after a denial")
     p.add_argument("--repair-pairing", action="store_true", help="reissue the exact-UDID bridge pairing marker")
+    p.add_argument("--resume", action="store_true", help="resume persisted setup for this exact device after interruption")
     p.add_argument("--force-dropbear", action="store_true", help="replace even a working Dropbear Cryptex")
     p.add_argument("--force-components", action="store_true", help="reinstall CatVNC, 0-Sky Control, 0-Sky Link, and Filza")
     p.add_argument("--force-filza", action="store_true", help="reinstall only the reviewed Filza 4.0 Cryptex")
@@ -1534,6 +1610,10 @@ def main() -> int:
         return 0
     if not devices:
         raise PoCError("no USB-connected Apple device is visible")
+    if not args.check and not args.udid:
+        raise PoCError("device-changing setup requires an explicit --udid selection")
+    if args.resume and len(args.udid) != 1:
+        raise PoCError("--resume requires exactly one explicit --udid")
     targets = assign_targets(devices, args.udid, args.base_port)
     if args.reuse_port:
         if len(targets) != 1 or len(args.udid) != 1:

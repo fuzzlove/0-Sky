@@ -198,6 +198,8 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             prepared = paths.kit_root
             execute(stage, [sys.executable, str(ROOT / "tools/prepare_release_kit.py"),
                             str(kit), str(prepared), "--deny-file", str(deny)], timeout=900)
+            execute("HOST_RUNTIME", [sys.executable,
+                    str(ROOT / "tools/host_runtime_manifest.py"), str(prepared)], timeout=60)
             stage = "BUILD_UNIVERSAL_APP"
             derived = paths.build_root
             environment = dict(os.environ)

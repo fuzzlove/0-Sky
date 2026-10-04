@@ -28,23 +28,24 @@ copies both files to `Contents/Resources/Legal`; the Swift package copies the
 same canonical directory into its resource bundle. Neither build uses a
 developer workstation path to find the agreement.
 
+Preflight and build are each one repository-relative command. `build.sh`
+prepares, sanitizes, and verifies a raw authorized kit automatically:
+
 ```sh
-REPO=/path/to/0-Sky
-KIT=/path/to/authorized-kit
-python3 "$REPO/tools/environment_preflight.py" --mode development --kit "$KIT" --skip-device
-python3 "$REPO/tools/prepare_release_kit.py" "$KIT" /path/to/work/release-kit
-"$REPO/build.sh" --kit /path/to/work/release-kit --derived-data /path/to/work/derived
+python3 tools/environment_preflight.py --mode development --kit "/path/to/authorized kit" --skip-device
+./build.sh --kit "/path/to/authorized kit" --derived-data "/path/to/build output"
 ```
 
-`prepare_release_kit.py` verifies manifest-listed inputs, stages a Link kit
+`build.sh` invokes `prepare_release_kit.py` when its input is not already a
+prepared kit. The preparer verifies manifest-listed inputs, stages a Link kit
 without recursive IPA/test fixtures, rebuilds Link, verifies its identity,
 icon, and signature, runs the release PII gate, and publishes the prepared kit
 atomically. `build.sh` accepts `--kit` and `--derived-data` (or the corresponding
 `ZERO_SKY_*` variables), builds Intel and Apple-silicon slices, verifies the
 Mac binary and Bluetooth helper slices, and checks the embedded Link IPA. It
 produces an **unsigned** local app under the chosen derived-data directory.
-The build requires the prepared kit's deterministic `PORTABILITY.json` marker;
-passing the raw external kit directly is rejected.
+The build consumes only the preparer's deterministic `PORTABILITY.json`
+output. Raw external kit bytes are never embedded directly.
 
 For a new Mac, the finished app must contain
 `Contents/Resources/Kit/SHA256SUMS`, `host-mac/install.py`, the offline

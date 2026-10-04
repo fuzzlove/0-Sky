@@ -13,6 +13,9 @@ Use a clean checkout and a separately obtained, authorized kit. Keep the kit,
 signing identities, pairing records, SSH keys, provisioning profiles, and
 generated device state outside Git. Verify the kit's provenance before use.
 No personal Team ID or signing certificate is supplied by this repository.
+The kit must contain `host-mac/HOST_RUNTIME_MANIFEST.json` and every declared
+Universal 2 Python/host-tool runtime file; missing components fail closed with
+`HOST_RUNTIME=FAIL`.
 
 1. Run `python3 tools/verify_eula.py` and review the canonical legal artifact
    under `bridge/0SkyBridge/Resources/Legal`. A changed text digest, version,

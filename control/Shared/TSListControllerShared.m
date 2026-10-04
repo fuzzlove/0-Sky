@@ -27,36 +27,19 @@
 
 - (void)downloadTrollStoreAndRun:(void (^)(NSString* localTrollStoreTarPath))doHandler
 {
-	NSURL* trollStoreURL = [NSURL URLWithString:@"https://github.com/opa334/TrollStore/releases/latest/download/TrollStore.tar"];
-	NSURLRequest* trollStoreRequest = [NSURLRequest requestWithURL:trollStoreURL];
-
-	NSURLSessionDownloadTask* downloadTask = [NSURLSession.sharedSession downloadTaskWithRequest:trollStoreRequest completionHandler:^(NSURL *location, NSURLResponse *response, NSError *error)
+	(void)doHandler;
+	UIAlertController* alert = [UIAlertController
+		alertControllerWithTitle:@"Verified update required"
+		message:@"Online self-update is disabled because the upstream latest-release archive has no release-bound checksum. Install 0-Sky Control through a verified 0-Sky release instead."
+		preferredStyle:UIAlertControllerStyleAlert];
+	[alert addAction:[UIAlertAction actionWithTitle:@"Close" style:UIAlertActionStyleDefault handler:nil]];
+	dispatch_async(dispatch_get_main_queue(), ^
 	{
-		if(error)
+		[TSPresentationDelegate stopActivityWithCompletion:^
 		{
-			UIAlertController* errorAlert = [UIAlertController alertControllerWithTitle:@"Error" message:[NSString stringWithFormat:@"Error downloading Commissary: %@", error] preferredStyle:UIAlertControllerStyleAlert];
-			UIAlertAction* closeAction = [UIAlertAction actionWithTitle:@"Close" style:UIAlertActionStyleDefault handler:nil];
-			[errorAlert addAction:closeAction];
-
-			dispatch_async(dispatch_get_main_queue(), ^
-			{
-				[TSPresentationDelegate stopActivityWithCompletion:^
-				{
-					[TSPresentationDelegate presentViewController:errorAlert animated:YES completion:nil];
-				}];
-			});
-		}
-		else
-		{
-			NSString* tarTmpPath = [NSTemporaryDirectory() stringByAppendingPathComponent:@"TrollStore.tar"];
-			[[NSFileManager defaultManager] removeItemAtPath:tarTmpPath error:nil];
-			[[NSFileManager defaultManager] copyItemAtPath:location.path toPath:tarTmpPath error:nil];
-
-			doHandler(tarTmpPath);
-		}
-	}];
-
-	[downloadTask resume];
+			[TSPresentationDelegate presentViewController:alert animated:YES completion:nil];
+		}];
+	});
 }
 
 - (void)_installTrollStoreComingFromUpdateFlow:(BOOL)update
