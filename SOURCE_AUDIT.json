@@ -28,7 +28,7 @@
   ],
   "executed_validation": {
     "tools_unit_tests": "PASS: 282 run, 3 skipped for unavailable private paid fixtures",
-    "host_tools_unit_tests": "PASS: 122 run, 1 skipped because the external source kit is absent",
+    "host_tools_unit_tests": "PASS: 123 run, 1 skipped because the external source kit is absent",
     "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
     "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
     "bridge_core_tests": "PASS: 33/33",
@@ -51,6 +51,7 @@
     "control_release_payload_reproducibility": "PASS: two independent deterministic IPA staging runs produced SHA-256 f698d6f4dc5b2f22d66678cc587a584166d5856d7217af5fee3093a4d5338b9c",
     "release_cache_pruning": "PASS: offline validation wrote no bytecode; prepared release kit contained 0 __pycache__, .pyc, or .pyo artifacts",
     "installed_kit_permissions": "PASS: release staging normalizes root-owned kit directories/executables to 0755 and data to 0644; package BOM and expanded-app gates reject inaccessible resources",
+    "ios26_cryptex_compatibility": "PASS in retained separate live-device session: iPhone15,4 iOS 26.0 build 23A341 used GenericDmg slot 9, a fresh domain-3 nonce, live TSS ticket, and userspace USB transport; public evidence excludes device identifiers and ticket material",
     "theos_dependency_lock": "PASS: Theos dd5c14bb9d91311e221d51b5bfb8c9e5948156db and 9 recursive submodules verified; iPhoneOS SDK 26.5 discovered",
     "release_blocker_diagnostics": "PASS: missing inputs emit exact recovery commands; relocated kit/Theos paths use explicit folder selection in interactive builds",
     "host_runtime_assembly": "PASS: pinned CPython 3.12.14 arm64/x86_64 archives assembled offline; four components and retained licenses verified",
@@ -65,8 +66,8 @@
     "fresh_account_install": "NOT_EXECUTED",
     "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
     "intel_runtime_uat": "NOT_EXECUTED",
-    "live_srd_installation": "NOT_EXECUTED: no device mutation was requested",
-    "supported_device_matrix": "NOT_EXECUTED beyond retained exact-build evidence",
+    "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
+    "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
     "publication": "NOT_EXECUTED: release artifacts were not pushed, uploaded, or published"
   },
   "release_result": "AUTOMATED_RELEASE_GATES_PASS; HARDWARE_UAT_PENDING",

@@ -38,6 +38,16 @@ class AsyncTunnel:
         return None
 
 
+class CryptexImageIndexTests(unittest.TestCase):
+    def test_image_type_index_tracks_verified_ios_family(self):
+        self.assertEqual(installer.image_type_index_for("26.0"), 9)
+        self.assertEqual(installer.image_type_index_for("26.3.1"), 9)
+        self.assertEqual(installer.image_type_index_for("26.4"), 10)
+        self.assertEqual(installer.image_type_index_for("27.0"), 10)
+        with self.assertRaisesRegex(RuntimeError, "Unsupported SRD OS"):
+            installer.image_type_index_for("25.7")
+
+
 @unittest.skipUnless(HAS_PYMOBILEDEVICE3, "pinned pymobiledevice3 runtime unavailable")
 class CryptexTransportFallbackTests(unittest.TestCase):
     def fixture(self, root: Path):

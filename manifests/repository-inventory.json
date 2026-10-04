@@ -1,8 +1,8 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 138,
-    "required-source-or-maintenance-test": 2098,
-    "uncertain-retained-for-investigation": 208
+    "required-source-or-maintenance-test": 2099,
+    "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
     ".build/",
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "a49b61fb433e214cd10fa2449a85dce90ca1e8ea469f55389e15740d5b92a885",
-      "size": 5194
+      "sha256": "3e7173a2f92532ef5ba3d2ab397d58c330c5c300d2710e37bfddca89695487e7",
+      "size": 5635
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -119,6 +119,12 @@
       "path": "addons/PoC/DEVICE_CONNECTION_REPAIR.md",
       "sha256": "9a91c5bbdf9b96648b0778a61ae45fc03839a6dc0adda7cd6bb4da067a6c0182",
       "size": 10346
+    },
+    {
+      "category": "uncertain-retained-for-investigation",
+      "path": "addons/PoC/IOS26_COMPATIBILITY_NOTES.md",
+      "sha256": "24322c2c95deb19c97929010173561e4a647020f9b88a03e042ab9a1356e8586",
+      "size": 10023
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -11511,8 +11517,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
-      "sha256": "79f8a6b3fad802ead22870de45e60e05a23be00a3fcb5059bc58af327cad185e",
-      "size": 13851
+      "sha256": "d725e0505b5b82b87172eb5ded29b2594bee5abcbd6db70a4a70ed68d871dad6",
+      "size": 14669
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11649,8 +11655,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/runtime-generation/install_cryptex_native.py",
-      "sha256": "450fbbaeebd8af2c11677893d032cae9007b769c04b5e74010340d39b31e3b51",
-      "size": 12392
+      "sha256": "aea39b212b08af165f9a6682fcb7f0a5aa87845ee64f0b13c5f913ffb6e8b35a",
+      "size": 13218
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11721,8 +11727,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/Tests/HostToolsTests/test_cryptex_transport_fallback.py",
-      "sha256": "215a4cb55e308da1053db1da01c9bd153023f3fdea87451ee01c87e0522c8322",
-      "size": 3941
+      "sha256": "c6827c01e5ef73cfc6422c4c0fcc498b4901312327a8540db46456682313d23c",
+      "size": 4456
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -11837,6 +11843,12 @@
       "path": "compat/__init__.py",
       "sha256": "e812b4bbc745cd254310cc9ff429cc6ca188c79312536d88647906c0c757f1a1",
       "size": 38
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "compat/ios26/device-validation-23A341.json",
+      "sha256": "2beae9abf2f118ce8989ee0e179e6381b142370e25905c603b1bf166b4faa6a9",
+      "size": 1831
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13557,14 +13569,14 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "4ea2c32952e49993733c60b8b3828fe22ef13690b0b7f25ad5f155b1995ec00a",
-      "size": 10806
+      "sha256": "6a159230d0d9c990702c1535d30d33cff78a38931b66041581cf0408b7580954",
+      "size": 11181
     },
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/SUPPORTED_PLATFORMS.md",
-      "sha256": "e13d7a9128ebc47c2ecd55838a4729b7143ae57bfc2a2e9138a642fdd547dc3a",
-      "size": 1893
+      "sha256": "54a7ae0e9902b0b3c655c9fa236cd2d47f6f6450b01a5d91d41ea4bdf1381fce",
+      "size": 2649
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13743,7 +13755,7 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "link/Info.plist",
-      "sha256": "d70dbc1df0aca5caf7c8d85046779c9466503ab39173135b93b83fc04714a4dc",
+      "sha256": "90c564763e8925601816de3f2791044c9edb6d37825d6bc044094f8d497fcbac",
       "size": 1897
     },
     {

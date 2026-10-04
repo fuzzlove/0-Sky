@@ -140,7 +140,7 @@ identifier.
 | Validation | Result |
 | --- | --- |
 | Tool/release unit tests | PASS — 282 run, 3 skipped for unavailable private paid fixtures |
-| Host-tool unit tests with pinned Python 3.12 | PASS — 122 run, 1 skipped for absent external source kit |
+| Host-tool unit tests with pinned Python 3.12 | PASS — 123 run, 1 skipped for absent external source kit, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
 | BridgeCore tests | PASS — 33/33 |
@@ -157,7 +157,8 @@ identifier.
 | Repeated missing-kit release failure | PASS — failed closed and retained only one sanitized audit report |
 | Control package build | PASS — clean 3.5.36 arm64 rootless package using an explicit Theos checkout |
 | Signed/notarized Universal 2 `.pkg` | PASS — canonical distribution build, Developer ID app/installer signing, notary acceptance, staple validation, user-readable root-owned kit, four-file manifest, and independent package-only verification |
-| Clean-account install, Intel runtime, live SRD matrix | NOT_EXECUTED |
+| Exact iOS 26 Cryptex/device workflow | PASS in retained separate session — iPhone15,4, iOS 26.0 build 23A341, fresh nonce/live ticket, userspace USB transport, durable Link/Control MCM registration; CatVNC backboardd hook remained a documented optional partial result |
+| Replacement clean-account install, Intel runtime, broader live SRD matrix | NOT_EXECUTED |
 
 Machine-readable results in `SOURCE_AUDIT.json` distinguish executed tests from
 blocked hardware work. The distribution artifact now passes the automated

@@ -39,6 +39,17 @@ def trust_payload(data):
     if found is None or offset!=end:raise ValueError('Invalid trust-cache envelope')
     return found
 
+def image_type_index_for(product_version):
+    """Select the measured GenericDmg slot for the connected SRD OS family."""
+    try:
+        parts=str(product_version).split('.')
+        major=int(parts[0]);minor=int(parts[1]) if len(parts)>1 else 0
+    except (TypeError,ValueError,IndexError) as error:
+        raise RuntimeError('Device did not report a usable OS version for Cryptex installation') from error
+    if major==26:return 9 if minor<=3 else 10
+    if major==27:return 10
+    raise RuntimeError('Unsupported SRD OS for Cryptex installation: '+str(product_version)+'; verified families are iOS 26 and iOS 27')
+
 def build(root,identifier,version,work):
     root=pathlib.Path(root).resolve();work=pathlib.Path(work).resolve()
     if not root.is_dir():raise ValueError('Missing payload root')
@@ -86,6 +97,8 @@ async def install(manifest,identifier,udid):
         identity['Manifest'][k]['Digest']=hashlib.sha384(v).digest();identity['Manifest'][k].setdefault('Info',{})['Personalize']=True
     async with NativeRemotedTunnel(serial=udid) as rsd:
         if str(rsd.udid)!=udid:raise RuntimeError('Exact-device identity mismatch')
+        image_type_index=image_type_index_for(getattr(rsd,'product_version',None))
+        print('Selected GenericDmg image index',image_type_index,'for iOS',rsd.product_version,flush=True)
         service=CryptexdService(rsd)
         identifiers=await service.read_personalization_identifiers();nonce=await service.cryptex_nonce(3)
         if not nonce:raise RuntimeError('Research nonce unavailable')
@@ -99,7 +112,7 @@ async def install(manifest,identifier,udid):
         if len(matches)>1:raise RuntimeError('Multiple generations claim this identifier')
         if matches:await asyncio.wait_for(service.uninstall(identifier),timeout=30)
         properties={'Cryptex1,UseProductClass':True,'MountedCryptex':False,'Cryptex1,SubType':XpcUInt64Type(255),'Cryptex1,NonceDomain':XpcUInt64Type(3),'Cryptex1,Version':identity['Cryptex1,Version'],'Cryptex1,PreauthVersion':identity['Cryptex1,PreauthorizationVersion']}
-        await asyncio.wait_for(service.install(data['Cryptex1,GenericDmg'],data['Cryptex1,GenericTrustCache'],ticket,data['Cryptex1,CryptexInfoPlist'],data['Cryptex1,GenericVolume'],properties,image_type_index=10,persistence=2,nonce_persistence=1,auth=0),timeout=900)
+        await asyncio.wait_for(service.install(data['Cryptex1,GenericDmg'],data['Cryptex1,GenericTrustCache'],ticket,data['Cryptex1,CryptexInfoPlist'],data['Cryptex1,GenericVolume'],properties,image_type_index=image_type_index,persistence=2,nonce_persistence=1,auth=0),timeout=900)
         print('INSTALL SUCCESS',identifier,flush=True)
 
 def main():
