@@ -5,8 +5,10 @@ import ast
 import hashlib
 import importlib.util
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -34,6 +36,56 @@ def load_image_type_function():
 
 
 class SRDSSHReleaseAdapterTests(unittest.TestCase):
+    def test_preflight_reuses_existing_pairing_after_native_timeout(self):
+        success = subprocess.CompletedProcess(
+            ["python"], 0,
+            stdout=(
+                '{"udid":"00000000-0000000000000000","nonce_length":32,'
+                '"transport":"userspace USB"}'
+            ),
+            stderr="",
+        )
+        with mock.patch.object(
+            bootstrap, "run",
+            side_effect=[subprocess.TimeoutExpired(["python"], 30), success],
+        ) as runner:
+            bootstrap.remote_xpc_preflight(
+                Path("python"), "00000000-0000000000000000"
+            )
+        self.assertEqual(runner.call_count, 2)
+        self.assertEqual(runner.call_args_list[0].args[0][-1], "native")
+        self.assertEqual(runner.call_args_list[0].kwargs["timeout"], 30)
+        self.assertEqual(runner.call_args_list[1].args[0][-1], "userspace")
+        self.assertEqual(runner.call_args_list[1].kwargs["timeout"], 120)
+
+    def test_preflight_does_not_request_userspace_when_native_is_healthy(self):
+        success = subprocess.CompletedProcess(
+            ["python"], 0,
+            stdout=(
+                '{"udid":"00000000-0000000000000000","nonce_length":32,'
+                '"transport":"macOS native"}'
+            ),
+            stderr="",
+        )
+        with mock.patch.object(bootstrap, "run", return_value=success) as runner:
+            bootstrap.remote_xpc_preflight(
+                Path("python"), "00000000-0000000000000000"
+            )
+        self.assertEqual(runner.call_count, 1)
+        self.assertEqual(runner.call_args.args[0][-1], "native")
+
+    def test_preflight_explains_that_existing_pairing_was_tried(self):
+        failed = subprocess.CompletedProcess(
+            ["python"], 1, stdout="", stderr="pairing record unavailable"
+        )
+        with mock.patch.object(bootstrap, "run", return_value=failed):
+            with self.assertRaisesRegex(
+                bootstrap.ChainError, "existing pairing record was tried"
+            ):
+                bootstrap.remote_xpc_preflight(
+                    Path("python"), "00000000-0000000000000000"
+                )
+
     def test_release_root_manifest_verifies_srdssh_subtree(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

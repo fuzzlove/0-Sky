@@ -178,6 +178,18 @@ identifier.
     iOS 27 or later, retains the existing exact-UDID verification after pairing,
     and leaves iOS 26 on its validated path. BridgeCore regression assertions
     cover both OS-family argument sets.
+17. **An already-paired SRD could be sent through unnecessary re-pairing.** A
+    native libxpc open could remain blocked until the bootstrap process's
+    90-second outer timeout killed `PreferredRsdTunnel`, preventing its
+    userspace USB fallback from running. The GUI then invoked `pair-host`, which
+    waited for a device-initiated pairing that was neither needed nor started.
+    **Status:** fixed. Native-preferred and forced-userspace checks are now
+    separate process-bounded attempts (30 and 120 seconds). The second attempt
+    explicitly reuses the selected device's existing pairing record; new
+    pairing is offered only after both paths fail. Tests cover native success,
+    native timeout plus userspace success, and dual-path actionable failure.
+    Live read-only Intel validation proved the pre-existing record reached the
+    exact USB iPhone12,8 on iOS 27.0 and returned a 48-byte domain-3 nonce.
 
 ### Low severity
 
@@ -223,8 +235,8 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 298 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency and interrupted-profile port recovery |
-| Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 1 skipped for absent external source kit, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
+| Tool/release unit tests | PASS — 301 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, interrupted-profile port recovery, and paired-USB RemoteXPC fallback |
+| Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 3 skipped for unavailable external fixtures, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
 | BridgeCore tests | PASS — 33/33 |

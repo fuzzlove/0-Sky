@@ -480,14 +480,20 @@ def wait_for_root(base: list[str], *, timeout: int = 120) -> None:
 
 def remote_xpc_preflight(python: Path, udid: str) -> None:
     # Exercise the service actually required by installation rather than
-    # treating Bonjour/native browse output as proof. PreferredRsdTunnel tries
-    # Apple's native remoted path first and falls back to a paired userspace
-    # USB tunnel. This is read-only and stops before any Cryptex replacement.
+    # treating Bonjour/native browse output as proof.  Keep native remoted and
+    # the paired userspace USB route in separate, process-bounded attempts.
+    # A native libxpc open can block cancellation; allowing PreferredRsdTunnel
+    # to perform both attempts in one process therefore used to consume the
+    # outer timeout before its userspace fallback ran.  That false failure made
+    # the GUI advertise a *new* Paired Macs host even when a valid pairing
+    # already existed.  The forced userspace attempt below reuses that record.
+    # This check is read-only and stops before any Cryptex replacement.
     program = r'''import asyncio,json,sys
 from pymobiledevice3.remote.rsd_tunnel import PreferredRsdTunnel
 from pymobiledevice3.services.cryptexd import CryptexdService
 async def main():
- async with PreferredRsdTunnel(serial=sys.argv[1],autopair=True) as rsd:
+ prefer_native=sys.argv[2]=="native"
+ async with PreferredRsdTunnel(serial=sys.argv[1],autopair=True,prefer_native=prefer_native) as rsd:
   if str(rsd.udid)!=sys.argv[1]: raise RuntimeError("RemoteXPC UDID mismatch")
   service=CryptexdService(rsd)
   ids=await asyncio.wait_for(service.read_personalization_identifiers(),30)
@@ -498,14 +504,35 @@ async def main():
    "research_identifier_present":"img4_chip_rsch" in ids,
    "research_identifier_value":ids.get("img4_chip_rsch"),"nonce_length":len(nonce)}))
 asyncio.run(main())'''
-    result = run([str(python), "-c", program, udid], check=False,
-                 capture=True, timeout=90)
-    if result.returncode:
+    failures: list[str] = []
+    result: subprocess.CompletedProcess[str] | None = None
+    for label, mode, timeout in (
+        ("macOS native remoted", "native", 30),
+        ("existing paired userspace USB", "userspace", 120),
+    ):
+        pulse(f"RemoteXPC preflight attempt: {label} (timeout {timeout}s)")
+        try:
+            candidate = run(
+                [str(python), "-c", program, udid, mode],
+                check=False, capture=True, timeout=timeout,
+            )
+        except subprocess.TimeoutExpired:
+            failures.append(f"{label}: timed out after {timeout}s")
+            continue
+        if candidate.returncode:
+            detail = (candidate.stderr or candidate.stdout or "no diagnostic output").strip()
+            failures.append(f"{label}: exited {candidate.returncode}: {detail}")
+            continue
+        result = candidate
+        break
+    if result is None:
         raise ChainError(
-            "RemoteXPC/cryptexd preflight was denied on native and userspace paths. "
-            "Enable Developer Mode, unlock the exact SRD, and approve this Mac in "
-            "Settings > Developer > Paired Macs.\n" +
-            (result.stderr or result.stdout).strip()
+            "RemoteXPC/cryptexd preflight failed on both supported paths. "
+            "The existing pairing record was tried before requesting any new pairing. "
+            "Keep the exact SRD unlocked and connected by USB. If the userspace attempt "
+            "reports that no pairing record exists, open Settings > Developer > Paired "
+            "Macs and approve this Mac; otherwise use Diagnostics and preserve the record.\n" +
+            "\n".join(failures)
         )
     payload = json.loads(result.stdout)
     if payload.get("udid") != udid or int(payload.get("nonce_length", 0)) < 1:

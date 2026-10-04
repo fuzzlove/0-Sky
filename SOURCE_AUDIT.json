@@ -27,8 +27,8 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 298 run, 3 skipped for unavailable private paid fixtures; includes interrupted-profile busy-port reuse, cross-profile port reservation, rollback-backed staged-kit revision migration, wrong-endpoint refusal, idempotent rerun, contained runtime symlink acceptance, SRDssh release-adapter preservation, bundled-runtime venv migration, signed Frida sub-manifest rehashing, iOS 26/27 image-slot selection, and absolute, traversal, and broken-link rejection",
-        "host_tools_unit_tests": "PASS: 126 run, 1 skipped because the external source kit is absent; includes private pairing transcript permissions, redacted actionable pairing errors, and symlink rejection",
+        "tools_unit_tests": "PASS: 301 run, 3 skipped for unavailable private paid fixtures; includes existing-pairing RemoteXPC native-timeout/userspace-fallback regression coverage",
+        "host_tools_unit_tests": "PASS: 126 run under pinned Python 3.12, 3 skipped for unavailable external fixtures",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
         "bridge_core_tests": "PASS: 33/33, including iOS 27 guided RemoteXPC pairing selection, iOS 26 fallback exclusion, incomplete-duplicate profile resume, deterministic candidate selection, complete-profile conflict rejection, and stale-port reservation",
@@ -61,12 +61,13 @@
         "distribution_signing_and_notarization": "PASS: Developer ID app/installer signing, hardened runtime, entitlements, notary acceptance, and staple validation",
         "independent_release_verification": "PASS: four-file allowlist and checksums, extracted package, signatures, architectures, kit, privacy, Gatekeeper, and staple; FINAL_RESULT=PASS",
         "release_sanitizer": "PASS: zero blockers; reviewed upstream/debug findings summarized as advisories; public test fixtures exact-hash bound",
-        "intel_setup_failure_diagnosis": "PASS (live host repair plus read-only device inspection): fresh SRD was USB-visible; old setup ordering invoked host pairing before SRDssh; incomplete profiles explained pairing exit 2 and duplicate-UUID state; corrected controller verified 3771 kit entries, all 19 SRDssh assets, native exact-device RemoteXPC, a 48-byte domain-3 nonce, and a live Apple TSS ticket without device mutation; stale Homebrew-backed venv was preserved and rebuilt from signed bundled Python; the remaining host-only failure was traced to a pre.14 profile manifest differing from the current kit and is covered by atomic checkpoint/refresh/rollback tests"
+        "intel_setup_failure_diagnosis": "PASS (live host repair plus read-only device inspection): fresh SRD was USB-visible; old setup ordering invoked host pairing before SRDssh; incomplete profiles explained pairing exit 2 and duplicate-UUID state; corrected controller verified 3771 kit entries, all 19 SRDssh assets, native exact-device RemoteXPC, a 48-byte domain-3 nonce, and a live Apple TSS ticket without device mutation; stale Homebrew-backed venv was preserved and rebuilt from signed bundled Python; the remaining host-only failure was traced to a pre.14 profile manifest differing from the current kit and is covered by atomic checkpoint/refresh/rollback tests",
+        "intel_existing_pairing_remotexpc": "PASS (live read-only): on MacBookPro16,1 x86_64 macOS 26.5.2, forced userspace USB reused the existing exact-device pairing for iPhone12,8 iOS 27.0 and cryptexd returned a 48-byte domain-3 nonce; no device mutation was performed"
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",
         "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
-        "intel_runtime_uat": "PARTIAL: on MacBookPro16,1 x86_64 macOS 26.5.2, Universal 2 slices, readable embedded kit, exact-device USB discovery, developer services, corrected manifest verification, bundled-runtime Python migration, native RemoteXPC, domain-3 nonce, and live TSS authorization were observed; device mutation and complete pre.14 post-install health remain pending",
+        "intel_runtime_uat": "PARTIAL: on MacBookPro16,1 x86_64 macOS 26.5.2, Universal 2 slices, readable embedded kit, exact-device USB discovery, developer services, corrected manifest verification, bundled-runtime Python migration, native RemoteXPC, forced userspace reuse of the existing pairing, a 48-byte domain-3 nonce, and live TSS authorization were observed; pre.18 live Resume/device mutation and complete health remain pending",
         "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
         "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
         "publication": "NOT_EXECUTED: release artifacts were not pushed, uploaded, or published"
