@@ -26,6 +26,11 @@ sanitizes it, then creates the local unsigned Universal 2 app:
   --derived-data "/path/to/build output"
 ```
 
+Paths containing spaces and non-ASCII characters are supported. If an
+interactive macOS run omits Theos or points at a kit without `SHA256SUMS`, the
+build opens a folder chooser and states exactly which directory to select.
+Headless/CI builds never guess: pass absolute `--kit` and `--theos` paths.
+
 This local build is not distributable.
 
 To build a non-public release candidate, run:
@@ -103,7 +108,8 @@ in the root [BUILDING.md](../BUILDING.md). Physical Intel execution, a clean
 installation, an upgrade, and SRD operation require their corresponding
 hardware/environment and must be recorded separately from slice verification.
 
-The currently supplied external kit fails the PII gate because signed device
-payloads contain former builders' home paths. Replace them with authorized,
-verified, sanitized signed payloads, update the manifest, and rerun. Do not
-patch signed binaries in place or bypass the gate.
+The prepared external kit passes the blocking sanitizer gate. Raw upstream
+build/debug strings remain visible as advisories, while actual Mach-O loader
+paths are checked structurally. Exact hash-bound public test fixtures do not
+authorize any other key material. Do not patch signed binaries in place or
+bypass a structural/signature gate.

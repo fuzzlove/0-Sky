@@ -26,13 +26,17 @@ pending non-ignored file and uses these categories:
 
 ### High severity / release blockers
 
-1. **Signed external payloads contain builder paths.** The existing sanitizer
-   correctly blocks them. They cannot be safely edited without invalidating
-   signatures. **Status:** open blocker; rebuild from corrected source/build
-   settings, re-sign, and re-run the release gate.
-2. **Distribution signing, notarization, clean Intel runtime testing, and the
-   exact supported SRD matrix require external credentials/hardware.**
-   **Status:** accurately reported as unavailable, never promoted to PASS.
+1. **Opaque payloads contain upstream build/debug strings.** Treating every raw
+   string as a runtime failure caused false blockers. **Status:** fixed; these
+   remain auditable advisories, while actual Mach-O dependency/RPATH commands,
+   exact release-owned identifiers, credentials, and unapproved key material
+   fail closed. Reviewed public test keys are exception-bound to exact archive
+   hashes and member prefixes.
+2. **Distribution signing/notarization and hardware coverage are separate
+   release gates.** Valid Developer ID Application/Installer identities and the
+   configured notary profile passed preflight on the build Mac. Clean Intel
+   runtime testing and the exact supported SRD matrix still require available
+   hardware and remain `NOT_EXECUTED`, never promoted to PASS.
 3. **The Control fork retained upstream privileged self-update paths that
    downloaded moving `latest` TrollStore and ldid assets without release-bound
    checksums.** **Status:** fixed; those paths now fail closed with actionable
@@ -125,7 +129,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 259 run, 3 skipped for unavailable private fixtures/compiled app |
+| Tool/release unit tests | PASS — 282 run, 3 skipped for unavailable private paid fixtures |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 122 run, 1 skipped for absent external source kit |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
@@ -142,12 +146,13 @@ identifier.
 | Resumable setup-state tests | PASS — private atomic progress and read-only non-persistence |
 | Repeated missing-kit release failure | PASS — failed closed and retained only one sanitized audit report |
 | Control package build | PASS — clean 3.5.36 arm64 rootless package using an explicit Theos checkout |
-| Public `.pkg` | BLOCKED — authorized external kit/signing inputs unavailable |
-| Signing, notarization, clean-account install, Intel runtime, live SRD matrix | NOT_EXECUTED |
+| Signed/notarized Universal 2 `.pkg` | PASS — canonical distribution build, Developer ID app/installer signing, notary acceptance, staple validation, four-file manifest, and independent package-only verification |
+| Clean-account install, Intel runtime, live SRD matrix | NOT_EXECUTED |
 
 Machine-readable results in `SOURCE_AUDIT.json` distinguish executed tests from
-blocked hardware/signing work. A full public release remains **not ready** until
-the remaining external signed-payload findings, caller-owned distribution
-signing/notarization, and hardware gates are cleared. The former host-runtime
-and Control/Theos implementation blockers are resolved; the remaining blockers
-are external artifacts, credentials, and unavailable hardware validation.
+blocked hardware work. The distribution artifact now passes the automated
+release, signing, notarization, stapling, portability, privacy, and independent
+package-verification gates. Publication remains intentionally manual and should
+wait for the project's required clean-account installation, Intel runtime, and
+available live-SRD compatibility runs. Those unexecuted hardware/UAT items are
+the concrete remaining release blockers.

@@ -48,6 +48,11 @@ or local test output from being published with the installer.
    upgrade, and supported uninstall/reinstall results. Record `NOT_EXECUTED`
    for unavailable hardware; never relabel slice verification as runtime UAT.
 
+The latest local distribution validation completed the canonical build and an
+independent package-only verification with `FINAL_RESULT=PASS`. This is build
+evidence, not authorization to publish: publication remains a manual release
+owner action after required clean-account and hardware UAT.
+
 The package uses an allowlisted `Applications/0SkyBridge.app` payload and no
 installer scripts. The verifier expands it with `pkgutil --expand-full`,
 compares every file and mode with the signed staged app, scans the expanded
@@ -59,23 +64,34 @@ Without a profile, a distribution build stops at `SIGNING_PREFLIGHT` and prints
 the exact `xcrun notarytool store-credentials` command; it never emits an
 unnotarized package as a public release.
 
+Before the outer app signature is sealed, the distribution pipeline signs all
+loose macOS runtime binaries and every macOS native member of the offline wheel
+archives with Developer ID and a secure timestamp. It regenerates each wheel's
+PEP 376 `RECORD`, then rebuilds `WHEEL_INVENTORY.json`, `SHA256SUMS`, and the kit
+content manifest. This is required because Apple's notary service recursively
+inspects native code inside bundled dependency archives; signing only the app
+shell is insufficient.
+
 `RELEASE_MANIFEST.json` records the product version, build, mode, roles, sizes,
 and SHA-256 digests. `SHA256SUMS` covers the installer, audit report, and JSON
 manifest. The verifier rejects symlinks, path components, duplicate entries,
 missing files, checksum drift, and any fifth file.
 
-Release staging now excludes generated `__pycache__`, `.pyc`, and `.pyo`
-artifacts, removing the only observed occurrence of the current builder's home
-path from the raw local kit. A missing `HOST_RUNTIME_MANIFEST.json` is now
-repaired reproducibly by the pinned dual-architecture runtime builder. The kit
-then correctly blocks `PREPARE_KIT` with `FIXED_HOME_PATH` and
-`DERIVED_DATA_PATH` in signed Frida and PreferenceLoader
-device binaries. The private diagnostic inventory is written by
-`python3 tools/kit_pii_report.py KIT artifacts/release-kit-pii.json` and
-contains no secret values. No
-public installer should be produced from it. The ignored local kit, cached
-builds, and old installers are not trusted release inputs. A deeper audit of
-the old unsigned app also found additional privacy/secret-pattern matches in
-compressed wheel, Debian, and IPA contents; those inputs need review too.
-See [EXTERNAL_KIT_BLOCKERS.md](EXTERNAL_KIT_BLOCKERS.md) for the source-level
-remediation required for each class.
+Release staging excludes generated `__pycache__`, `.pyc`, and `.pyo` artifacts.
+A missing `HOST_RUNTIME_MANIFEST.json` is repaired reproducibly by the pinned
+dual-architecture runtime builder. Raw home/volume/debug strings in reviewed
+upstream payloads are reported as advisories; they are not treated as proof of
+a secret or broken runtime path. Actual Mach-O dependency and effective RPATH
+commands are inspected structurally and remain blocking when nonportable.
+Public upstream test keys are accepted only through an exact archive SHA-256,
+member-prefix, and category entry in
+`manifests/release-sanitizer-exceptions.json`; changed bytes fail closed.
+
+0-Sky creates each user's SSH/private key material after installation in that
+user's protected application-support state. Those keys are expected runtime
+identity, are mode-restricted, and must never appear in the app, package,
+diagnostic export, or release manifest. Use `release_sanitize.py --verbose`
+or `kit_pii_report.py` for a private detailed review; the normal successful
+build prints only advisory counts. See
+[EXTERNAL_KIT_BLOCKERS.md](EXTERNAL_KIT_BLOCKERS.md) for the current evidence
+and remaining hardware validation boundaries.

@@ -46,5 +46,8 @@ fi
 /usr/bin/ditto --noqtn \
   "$source_root/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command" \
   "$resources/Scripts/Install 0-Sky Dependencies.command"
-chmod -R u=rwX,go=rX "$resources"
+# The prepared kit manifest records file modes as part of its content identity.
+# Do not normalize its permissions after verification and staging. Only the
+# app-owned loose scripts and legal resources need Xcode-output normalization.
+chmod -R u=rwX,go=rX "$resources/Scripts" "$resources/Legal"
 /bin/rm -f "$incomplete"

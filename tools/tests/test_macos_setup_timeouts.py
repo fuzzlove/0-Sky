@@ -17,6 +17,13 @@ import macos_host_setup as setup  # noqa: E402
 
 
 class MacSetupTimeoutTests(unittest.TestCase):
+    def test_source_build_prompts_for_variable_paths_and_avoids_devices(self) -> None:
+        build = (ROOT / "build.sh").read_text(encoding="utf-8")
+        self.assertIn("choose folder with prompt", build)
+        self.assertIn("must contain makefiles/common.mk", build)
+        self.assertIn("must directly contain SHA256SUMS", build)
+        self.assertIn("generic/platform=macOS", build)
+
     def test_bundled_runtime_is_hash_verified_before_path_activation(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             kit = Path(folder)
@@ -73,6 +80,9 @@ class MacSetupTimeoutTests(unittest.TestCase):
         self.assertNotIn("brew\" install", installer)
         self.assertIn("tools/build_host_runtime.py", installer)
         self.assertIn("Expected path:", installer)
+        self.assertIn("--kit '/absolute/path/to/verified kit'", installer)
+        self.assertIn("choose folder with prompt", installer)
+        self.assertIn("Missing required item:", installer)
 
     def test_runtime_repair_message_explains_binary_and_source_paths(self) -> None:
         self.assertIn("four-file release", setup.BUNDLED_RUNTIME_REPAIR)

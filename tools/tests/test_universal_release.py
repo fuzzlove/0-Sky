@@ -17,13 +17,60 @@ from tools.kit_manifest import (APPROVAL_NAME, APPROVAL_STATES, REQUIRED,
                                 generate as generate_kit_manifest)
 from tools.wheel_inventory import write as write_wheel_inventory
 from tools.verify_release import (
-    REQUIRED_APP_SCRIPTS, package_payload, report_text,
-    runtime_kit_issues, same_tree, wheel_coverage,
+    REQUIRED_APP_SCRIPTS, entitlement_status, package_payload, report_text,
+    required_architectures_for, runtime_kit_issues, runtime_path_issues,
+    same_tree, wheel_coverage,
 )
 from tools.host_runtime_manifest import REQUIRED as REQUIRED_HOST_RUNTIME
 
 
 class UniversalReleaseTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("codesign") and os.uname().sysname == "Darwin",
+                         "macOS codesign unavailable")
+    def test_entitlement_parser_requests_xml_on_current_codesign(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            executable = Path(folder) / "probe"
+            executable.write_bytes(Path("/usr/bin/true").read_bytes())
+            executable.chmod(0o755)
+            entitlements = Path(folder) / "entitlements.plist"
+            entitlements.write_bytes(plistlib.dumps({"com.apple.security.cs.allow-jit": False}))
+            subprocess.run(["codesign", "--force", "--sign", "-", "--entitlements",
+                            str(entitlements), str(executable)], check=True,
+                           capture_output=True, timeout=30)
+            self.assertEqual(entitlement_status(executable), "PASS")
+
+    def test_split_host_runtime_uses_path_selected_architecture(self) -> None:
+        arm = ("Contents/Resources/Kit/host-mac/runtime/python/arm64/"
+               "python/bin/python3.12")
+        intel = ("Contents/Resources/Kit/host-mac/runtime/python/x86_64/"
+                 "python/bin/python3.12")
+        self.assertEqual(required_architectures_for(arm), {"arm64"})
+        self.assertEqual(required_architectures_for(intel), {"x86_64"})
+        self.assertEqual(required_architectures_for("Contents/MacOS/0SkyBridge"),
+                         {"arm64", "x86_64"})
+
+    @unittest.skipUnless(shutil.which("xcrun") and shutil.which("otool") and
+                         os.uname().sysname == "Darwin", "macOS toolchain unavailable")
+    def test_macho_runtime_build_path_is_rejected_structurally(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            source = root / "library.c"
+            library = root / "probe.dylib"
+            source.write_text("int probe(void) { return 1; }\n", encoding="utf-8")
+            subprocess.run(["xcrun", "clang", "-dynamiclib", str(source),
+                            "-Wl,-install_name,/Users/buildhost/libprobe.dylib",
+                            "-o", str(library)], check=True, capture_output=True, timeout=30)
+            # LC_ID_DYLIB can contain a build-time install name without being a
+            # runtime dependency of that dylib itself.
+            self.assertEqual(runtime_path_issues(library), [])
+            executable_source = root / "main.c"
+            executable = root / "probe"
+            executable_source.write_text("int probe(void); int main(void) { return probe(); }\n",
+                                         encoding="utf-8")
+            subprocess.run(["xcrun", "clang", str(executable_source), str(library),
+                            "-o", str(executable)], check=True, capture_output=True, timeout=30)
+            self.assertIn("NONPORTABLE_MACHO_RUNTIME_PATH", runtime_path_issues(executable))
+
     @unittest.skipUnless(shutil.which("codesign") and os.uname().sysname == "Darwin",
                          "macOS codesign unavailable")
     def test_post_sign_resource_change_invalidates_app(self) -> None:

@@ -192,6 +192,24 @@
       "category": "unexpected-binary",
       "sha256": "c302d84e55eb1a1354ad741261220b131b944a5b503896798341c5c071e4fc52",
       "reason": "public repository signing key"
+    },
+    {
+      "file": "tools/tests/test_release_sanitize.py",
+      "category": "fixed-home-path",
+      "sha256": "ee0292d84a5ba4f508484f9c81b373a88d85b4b568220ab3425dce8adb102ee0",
+      "reason": "security scanner regression fixture"
+    },
+    {
+      "file": "tools/tests/test_release_sanitize.py",
+      "category": "private-key",
+      "sha256": "ee0292d84a5ba4f508484f9c81b373a88d85b4b568220ab3425dce8adb102ee0",
+      "reason": "security scanner regression fixture"
+    },
+    {
+      "file": "tools/tests/test_universal_release.py",
+      "category": "fixed-home-path",
+      "sha256": "95d77ffeb522b87d27a1fb3bb02cc09432e261fe6917bc3c265e7c37aea37772",
+      "reason": "Mach-O runtime-path regression fixture"
     }
   ]
 }

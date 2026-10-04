@@ -20,6 +20,21 @@ kit="${ZERO_SKY_KIT_SOURCE:-$project_root/bridge/0SkyBridge/Resources/Scripts/ki
 project="$project_root/bridge/0SkyBridge.xcodeproj"
 python3 "$project_root/tools/verify_eula.py"
 
+choose_directory() {
+  local prompt=$1
+  [[ -t 0 && -x /usr/bin/osascript ]] || return 1
+  /usr/bin/osascript - "$prompt" <<'APPLESCRIPT'
+on run argv
+  try
+    set chosenFolder to choose folder with prompt (item 1 of argv)
+    return POSIX path of chosenFolder
+  on error number -128
+    return ""
+  end try
+end run
+APPLESCRIPT
+}
+
 while (( $# )); do
   case "$1" in
     --kit) [[ $# -ge 2 ]] || { echo "--kit requires a path" >&2; exit 64; }
@@ -31,6 +46,12 @@ while (( $# )); do
     *) echo "Unknown build option: $1" >&2; exit 64 ;;
   esac
 done
+if [[ -z ${THEOS:-} ]]; then
+  echo "The locked Theos source toolchain path was not provided."
+  echo "Choose the Theos checkout directory itself; it must contain makefiles/common.mk."
+  selected=$(choose_directory "Select the locked 0-Sky Theos checkout. It must contain makefiles/common.mk and the pinned recursive submodules." || true)
+  [[ -n "$selected" ]] && export THEOS=${selected%/}
+fi
 [[ -n ${THEOS:-} ]] || {
   cat >&2 <<'EOF'
 BUILD=BLOCKED requirement=locked-theos
@@ -44,6 +65,13 @@ EOF
   exit 2;
 }
 python3 "$project_root/tools/theos_preflight.py" --theos "$THEOS"
+if [[ ! -f "$kit/SHA256SUMS" ]]; then
+  echo "The authorized offline kit path is missing or incomplete: $kit" >&2
+  echo "Choose the kit directory itself; it must directly contain SHA256SUMS," >&2
+  echo "host-mac, payloads, and the offline wheelhouse." >&2
+  selected=$(choose_directory "Select the verified 0-Sky kit directory. It must directly contain SHA256SUMS, host-mac, payloads, and the offline wheelhouse." || true)
+  [[ -n "$selected" ]] && kit=${selected%/}
+fi
 [[ -f "$kit/SHA256SUMS" ]] || {
   cat >&2 <<EOF
 BUILD=BLOCKED requirement=authorized-kit
@@ -78,7 +106,7 @@ mkdir -p "$derived"
 derived=$(cd "$derived" && pwd)
 
 ZERO_SKY_KIT_SOURCE="$kit" xcodebuild -project "$project" -scheme 0SkyBridge -configuration Release \
-  -derivedDataPath "$derived" -sdk macosx \
+  -derivedDataPath "$derived" -sdk macosx -destination 'generic/platform=macOS' \
   ARCHS="arm64 x86_64" ONLY_ACTIVE_ARCH=NO CODE_SIGNING_ALLOWED=NO \
   OTHER_SWIFT_FLAGS="-debug-prefix-map $project_root=./source -file-prefix-map $project_root=./source -debug-prefix-map $derived=./build -file-prefix-map $derived=./build" \
   OTHER_CFLAGS="-fdebug-prefix-map=$project_root=./source -ffile-prefix-map=$project_root=./source -fdebug-prefix-map=$derived=./build -ffile-prefix-map=$derived=./build" \

@@ -17,6 +17,7 @@ def offline_environment() -> dict[str, str]:
         "PIP_NO_INDEX": "1",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
         "PIP_REQUIRE_VIRTUALENV": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
         "HTTP_PROXY": "http://127.0.0.1:9",
         "HTTPS_PROXY": "http://127.0.0.1:9",
         "ALL_PROXY": "http://127.0.0.1:9",
@@ -33,7 +34,8 @@ def verify(kit: Path, python: Path) -> str:
         venv = Path(folder) / "venv"
         try:
             create = subprocess.run([str(python), "-m", "venv", str(venv)],
-                                    capture_output=True, timeout=120, check=False)
+                                    env=offline_environment(), capture_output=True,
+                                    timeout=120, check=False)
             if create.returncode:
                 return "VENV_CREATION_FAILED"
             managed = venv / "bin/python3"

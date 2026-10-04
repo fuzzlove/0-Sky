@@ -56,9 +56,10 @@ headless exact-device resume:
 
 See the evidence-scoped [compatibility matrix](docs/SUPPORTED_PLATFORMS.md).
 
-There is currently no verified public binary installer built from the local
-external kit described in [RELEASE.md](RELEASE.md). Signed payloads containing
-builder paths must be replaced and rebuilt; do not edit them in place.
+A package is public only when its own four-file release set verifies and its
+audit says `FINAL_RESULT=PASS`. Upstream debug/build strings are advisory;
+actual nonportable native load commands, bundled user keys, invalid signatures,
+or an incomplete kit remain release blockers.
 
 ## Upgrade and repair
 
@@ -100,6 +101,9 @@ A Git checkout is not a complete installer. It intentionally omits signing
 credentials, Apple assets, signed device payloads, and the external wheelhouse.
 Developers should follow [BUILDING.md](BUILDING.md); release engineers should
 use only `scripts/build_release.sh` as documented in [RELEASE.md](RELEASE.md).
+When the kit or locked Theos checkout is not at a standard path, `build.sh`
+opens a folder chooser in an interactive macOS session and explains the exact
+required contents. Automation should pass absolute `--kit` and `--theos` paths.
 The root `setup_0sky_devices.*` files are compatibility wrappers around the one
 canonical state machine, `bridge/macos_host_setup.py`; they do not implement
 independent installers.

@@ -17,7 +17,7 @@ from tools.release_sanitize import audit
 from tools.signing_identities import (Identity, parse_identities, require_identity,
                                       resolve_identity)
 from tools.test_offline_install import verify as verify_offline_install
-from tools.wheel_inventory import write as write_wheel_inventory
+from tools.wheel_inventory import inspect as inspect_wheels, write as write_wheel_inventory
 
 
 def fixture(root: Path) -> None:
@@ -48,6 +48,20 @@ def fixture(root: Path) -> None:
 
 class KitManifestTests(unittest.TestCase):
 
+    def test_wheel_inventory_normalizes_multiline_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            wheelhouse = Path(folder)
+            wheel = wheelhouse / "demo-1.0-py3-none-any.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr(
+                    "demo-1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: demo\nVersion: 1.0\n"
+                    "License: first line\n second line\nRequires-Dist: dep >= 1\n\n",
+                )
+            item = inspect_wheels(wheelhouse)["wheels"][0]
+            self.assertEqual(item["license_metadata"], "first line second line")
+            self.assertEqual(item["dependencies"], ["dep >= 1"])
+
     def test_notary_blocker_prints_exact_credential_setup(self) -> None:
         action = remediation_for("BLOCKED_MISSING_NOTARY_PROFILE")
         self.assertIn("xcrun notarytool store-credentials", action)
@@ -60,6 +74,15 @@ class KitManifestTests(unittest.TestCase):
         self.assertIn("wheel/DEB", action)
         self.assertIn("payment/personal URLs", action)
         self.assertIn("never globally allowlist", action)
+
+    def test_release_kit_blockers_have_exact_recovery_steps(self) -> None:
+        wheels = remediation_for("OFFLINE_WHEEL_ARCHITECTURE_COVERAGE_FAILED")
+        self.assertIn("wheel_inventory.py", wheels)
+        self.assertIn("arm64", wheels)
+        self.assertIn("x86_64", wheels)
+        script = remediation_for("REQUIRED_PORTABLE_SCRIPT_MISSING")
+        self.assertIn("reported relative path", script)
+        self.assertIn("git status --short", script)
 
     def test_release_preflight_reports_missing_host_runtime(self) -> None:
         payload = json.dumps({"host_runtime": {"status": "BLOCKED"},
@@ -99,6 +122,43 @@ class KitManifestTests(unittest.TestCase):
             self.assertEqual(process.returncode, 0)
             self.assertIn("ARGS=--setup-python,--requirements-only", process.stdout)
             self.assertNotIn("--install-homebrew", process.stdout)
+
+    @unittest.skipUnless(shutil.which("zsh") and shutil.which("python3.12"),
+                         "macOS offline dependency launcher unavailable")
+    def test_dependency_launcher_accepts_explicit_relocated_kit(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="0 Sky-ü-") as folder:
+            root = Path(folder)
+            launcher_dir = root / "source scripts"
+            launcher_dir.mkdir()
+            source = Path(__file__).resolve().parents[2] / (
+                "bridge/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command")
+            launcher = launcher_dir / source.name
+            launcher.write_bytes(source.read_bytes())
+            launcher.chmod(0o755)
+            (launcher_dir / "macos_host_setup.py").write_text(
+                "import os,sys; print('SELECTED=' + os.environ['ZERO_SKY_KIT']); "
+                "print('ARGS=' + ','.join(sys.argv[1:]))\n", encoding="utf-8")
+            kit = root / "external verified kit"
+            for relative in ("SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
+                             "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+                             "host-mac/HOST_RUNTIME_MANIFEST.json", "host-mac/install.py",
+                             "host-mac/pair.py", "host-mac/requirements-lock.txt",
+                             "payloads/0-Sky-Link-1.9.0-universal.ipa"):
+                item = kit / relative
+                item.parent.mkdir(parents=True, exist_ok=True)
+                item.write_text("fixture", encoding="utf-8")
+            runtime_python = kit / "host-mac/runtime/bin/python3"
+            runtime_python.parent.mkdir(parents=True)
+            runtime_python.write_text(
+                f"#!/bin/sh\nexec {shutil.which('python3.12')} \"$@\"\n", encoding="utf-8")
+            runtime_python.chmod(0o755)
+            (kit / "host-mac/wheelhouse").mkdir()
+            process = subprocess.run(["/bin/zsh", str(launcher), "--kit", str(kit)],
+                                     input="\n", text=True, capture_output=True,
+                                     timeout=30, check=False)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertIn(f"SELECTED={kit.resolve()}", process.stdout)
+            self.assertIn("ARGS=--setup-python,--requirements-only", process.stdout)
 
     def test_paths_are_independent_of_working_directory_and_home(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -190,6 +250,7 @@ class KitManifestTests(unittest.TestCase):
                 self.assertIn("--no-index", argv)
                 self.assertIn("--isolated", argv)
                 self.assertEqual(install.kwargs["env"]["PIP_NO_INDEX"], "1")
+                self.assertEqual(install.kwargs["env"]["PYTHONDONTWRITEBYTECODE"], "1")
                 self.assertNotIn("https://", " ".join(argv))
 
     def test_distribution_mode_blocks_before_build_without_developer_id(self) -> None:

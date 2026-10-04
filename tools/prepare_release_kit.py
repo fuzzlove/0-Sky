@@ -19,6 +19,7 @@ try:
     from .verify_release import architecture_of, platform_of, wheel_coverage
     from .host_runtime_manifest import verify as verify_host_runtime
     from .build_host_runtime import RuntimeBuildError, build as build_host_runtime
+    from .prune_release_artifacts import prune as prune_release_artifacts
 except ImportError:
     from kit_manifest import (APPROVAL_NAME, APPROVAL_STATES,
                               generate as generate_kit_manifest, verify as verify_kit_manifest)
@@ -27,6 +28,7 @@ except ImportError:
     from verify_release import architecture_of, platform_of, wheel_coverage
     from host_runtime_manifest import verify as verify_host_runtime
     from build_host_runtime import RuntimeBuildError, build as build_host_runtime
+    from prune_release_artifacts import prune as prune_release_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -248,6 +250,7 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
                        timeout=900, check=True)
         subprocess.run([sys.executable, str(ROOT / "tools/wheel_inventory.py"),
                         str(candidate)], timeout=120, check=True)
+        prune_release_artifacts(candidate)
         (candidate / APPROVAL_NAME).write_text(
             json.dumps({"schema_version": 1, "states": list(APPROVAL_STATES)},
                        sort_keys=True) + "\n", encoding="utf-8")
@@ -295,7 +298,21 @@ def main() -> int:
               file=sys.stderr)
         return 2
     except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as error:
-        print(f"RELEASE_KIT=FAIL {type(error).__name__}", file=sys.stderr)
+        message = str(error)
+        known = (
+            ("offline Mac wheel architecture coverage failed", "OFFLINE_WHEEL_ARCHITECTURE_COVERAGE_FAILED"),
+            ("required portable script is missing:", "REQUIRED_PORTABLE_SCRIPT_MISSING"),
+            ("required Mac helper lacks Universal 2 slices", "MAC_HELPER_NOT_UNIVERSAL2"),
+            ("Python 3.12 is required", "PYTHON312_MISSING"),
+            ("generated release kit manifest failed validation", "GENERATED_MANIFEST_INVALID"),
+        )
+        code = next((value for text, value in known if text in message),
+                    type(error).__name__.upper())
+        print(f"RELEASE_KIT=FAIL code={code}", file=sys.stderr)
+        if code == "REQUIRED_PORTABLE_SCRIPT_MISSING":
+            relative = message.partition(":")[2].strip()
+            if relative and not Path(relative).is_absolute() and ".." not in Path(relative).parts:
+                print(f"MISSING_RELATIVE_PATH={relative}", file=sys.stderr)
         return 2
     return 0
 

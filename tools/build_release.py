@@ -100,6 +100,24 @@ def remediation_for(code: str) -> str:
                 "dd5c14bb9d91311e221d51b5bfb8c9e5948156db`, and `git -C "
                 "'/absolute/path/to/theos' submodule update --init --recursive`; then rerun with "
                 "--theos '/absolute/path/to/theos'. Preserve any existing modified checkout")
+    if "OFFLINE_WHEEL_ARCHITECTURE_COVERAGE_FAILED" in code:
+        return ("The selected kit has no complete offline macOS dependency set for both arm64 "
+                "and x86_64. Select the kit directory that directly contains SHA256SUMS and "
+                "host-mac/wheelhouse, then run `python3 tools/wheel_inventory.py "
+                "'/absolute/path/to/kit'`. Replace each reported missing or single-architecture "
+                "wheel with the locked universal2 pair and rerun the build")
+    if "REQUIRED_PORTABLE_SCRIPT_MISSING" in code:
+        return ("Restore the missing source-controlled portability script from this exact Git "
+                "revision; do not copy it from an installed app or another device. Run `git "
+                "status --short`, restore only the reported relative path, then rerun the build")
+    if "MAC_HELPER_NOT_UNIVERSAL2" in code:
+        return ("The selected kit contains a macOS helper without both arm64 and x86_64 slices. "
+                "Rebuild the helper with the repository's canonical host-runtime command, verify "
+                "it with `lipo -archs PATH_TO_HELPER`, and rerun the release build")
+    if "PYTHON312_MISSING" in code:
+        return ("The source release validation requires Python 3.12. Install the universal2 "
+                "installer from https://www.python.org/downloads/macos/, open a new Terminal, "
+                "verify `python3.12 --version`, and rerun the same build command")
     if "TOOL_MISSING_OR_INCOMPATIBLE" in code or "TOOL_MISSING:" in code:
         return ("Run `python3 tools/environment_preflight.py --human --mode release "
                 "--kit /absolute/path/to/kit --skip-device` and perform each printed command")
@@ -119,7 +137,10 @@ def execute(stage: str, argv: list[str], *, timeout: int,
                                            result.stdout + result.stderr)))
         category_code = ":" + ",".join(x.decode("ascii").upper().replace("-", "_")
                                        for x in categories) if categories else ""
-        raise ReleaseFailure(stage, f"EXIT_{result.returncode}{category_code}")
+        stable = re.search(rb"RELEASE_KIT=FAIL code=([A-Z0-9_:-]+)",
+                           result.stdout + result.stderr)
+        code = stable.group(1).decode("ascii") if stable else f"EXIT_{result.returncode}{category_code}"
+        raise ReleaseFailure(stage, code)
     print(f"[PASS] {stage}", flush=True)
 
 
@@ -319,6 +340,16 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
                     if relative in entitlement:
                         command += ["--entitlements", str(entitlement[relative])]
                     execute(stage, command + [str(target)], timeout=120)
+                execute("SIGN_KIT_NATIVE_CODE", [sys.executable,
+                        str(ROOT / "tools/sign_release_kit.py"),
+                        str(app / "Contents/Resources/Kit"),
+                        "--identity", app_identity], timeout=1800)
+                execute("REBUILD_WHEEL_INVENTORY", [sys.executable,
+                        str(ROOT / "tools/wheel_inventory.py"),
+                        str(app / "Contents/Resources/Kit")], timeout=180)
+                execute("VERIFY_SIGNED_HOST_RUNTIME", [sys.executable,
+                        str(ROOT / "tools/host_runtime_manifest.py"),
+                        str(app / "Contents/Resources/Kit")], timeout=180)
                 execute("REHASH_SIGNED_KIT", [sys.executable,
                         str(ROOT / "tools/kit_manifest.py"), "generate",
                         str(app / "Contents/Resources/Kit")], timeout=180)

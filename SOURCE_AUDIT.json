@@ -11,7 +11,7 @@
   "cleanup_branch": "cleanup/release-portability-20261004T025515Z",
   "privacy": {
     "pii_audit": "PASS",
-    "allowlisted_immutable_fixture_findings": 32,
+    "allowlisted_immutable_fixture_findings": 35,
     "unallowlisted_findings": 0,
     "credentials_discovered": false,
     "history_rewritten": false
@@ -27,7 +27,7 @@
     }
   ],
   "executed_validation": {
-    "tools_unit_tests": "PASS: 259 run, 3 skipped for unavailable private fixtures or compiled app",
+    "tools_unit_tests": "PASS: 282 run, 3 skipped for unavailable private paid fixtures",
     "host_tools_unit_tests": "PASS: 122 run, 1 skipped because the external source kit is absent",
     "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
     "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
@@ -49,28 +49,30 @@
     "resumable_setup_state": "PASS: owner-only atomic progress; read-only checks do not persist",
     "control_package_build": "PASS: clean 3.5.36 arm64 iOS/rootless build with explicit Theos checkout",
     "control_release_payload_reproducibility": "PASS: two independent deterministic IPA staging runs produced SHA-256 f698d6f4dc5b2f22d66678cc587a584166d5856d7217af5fee3093a4d5338b9c",
-    "release_cache_pruning": "PASS: release staging excluded __pycache__, .pyc, and .pyo; current builder path matches reduced from 1 to 0",
+    "release_cache_pruning": "PASS: offline validation wrote no bytecode; prepared release kit contained 0 __pycache__, .pyc, or .pyo artifacts",
     "theos_dependency_lock": "PASS: Theos dd5c14bb9d91311e221d51b5bfb8c9e5948156db and 9 recursive submodules verified; iPhoneOS SDK 26.5 discovered",
-    "release_blocker_diagnostics": "PASS: distribution build blocks on absent Developer ID identities with exact recovery; prepared kit reaches and fails the external payload privacy gate",
+    "release_blocker_diagnostics": "PASS: missing inputs emit exact recovery commands; relocated kit/Theos paths use explicit folder selection in interactive builds",
     "host_runtime_assembly": "PASS: pinned CPython 3.12.14 arm64/x86_64 archives assembled offline; four components and retained licenses verified",
     "host_runtime_functional_probe": "PASS on Apple Silicon: Python 3.12.14, USB tool version commands, Debian field query and extraction",
-    "prerequisite_diagnostics": "PASS: human doctor prints exact repair/install commands for Xcode, Python, Theos, libraries, runtime, signing, and notarization"
+    "prerequisite_diagnostics": "PASS: human doctor prints exact repair/install commands for Xcode, Python, Theos, libraries, runtime, signing, and notarization",
+    "distribution_package_build": "PASS: Universal 2 package built through the canonical distribution pipeline",
+    "distribution_signing_and_notarization": "PASS: Developer ID app/installer signing, hardened runtime, entitlements, notary acceptance, and staple validation",
+    "independent_release_verification": "PASS: four-file allowlist and checksums, extracted package, signatures, architectures, kit, privacy, Gatekeeper, and staple; FINAL_RESULT=PASS",
+    "release_sanitizer": "PASS: zero blockers; reviewed upstream/debug findings summarized as advisories; public test fixtures exact-hash bound"
   },
   "not_executed_or_blocked": {
-    "public_pkg_build": "BLOCKED: remaining external signed/device payload inputs require source rebuild or documented review; self-contained host runtime is resolved",
-    "distribution_signing_and_notarization": "BLOCKED: zero valid code-signing identities and no 0-sky-release notary profile are installed; exact setup commands are emitted",
     "fresh_account_install": "NOT_EXECUTED",
     "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
     "intel_runtime_uat": "NOT_EXECUTED",
     "live_srd_installation": "NOT_EXECUTED: no device mutation was requested",
-    "supported_device_matrix": "NOT_EXECUTED beyond retained exact-build evidence"
+    "supported_device_matrix": "NOT_EXECUTED beyond retained exact-build evidence",
+    "publication": "NOT_EXECUTED: release artifacts were not pushed, uploaded, or published"
   },
-  "release_result": "BLOCKED",
+  "release_result": "AUTOMATED_RELEASE_GATES_PASS; HARDWARE_UAT_PENDING",
   "release_blockers": [
-    "rebuild or source-review and explicitly approve remaining external device payload paths and fixtures",
-    "supply a release-authorized manifest-verified external kit",
-    "install caller-owned Developer ID Application/Installer identities and notary credentials",
-    "execute clean-account Apple Silicon and Intel install/upgrade/uninstall UAT",
-    "execute the documented exact-device SRD matrix"
+    "execute clean-account Apple Silicon installation, repair, upgrade, and uninstall UAT",
+    "execute physical Intel installation and runtime UAT",
+    "execute the documented exact-device SRD compatibility matrix on available hardware",
+    "obtain explicit release-owner approval before publication"
   ]
 }
