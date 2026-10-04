@@ -27,7 +27,7 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 304 run, 3 skipped for unavailable private paid fixtures; includes process-bounded existing-pairing fallback, exact transport propagation into TSS/install, Intel-safe userspace-first direct invocation, and line-streamed plus captured child output",
+        "tools_unit_tests": "PASS: 306 run, 3 skipped for unavailable private paid fixtures; includes runtime-manager controller/package semantic release gate and exact missing-package diagnostics",
         "host_tools_unit_tests": "PASS: 126 run under pinned Python 3.12, 3 skipped for unavailable external fixtures",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
@@ -63,12 +63,13 @@
         "release_sanitizer": "PASS: zero blockers; reviewed upstream/debug findings summarized as advisories; public test fixtures exact-hash bound",
         "intel_setup_failure_diagnosis": "PASS (live host repair plus read-only device inspection): fresh SRD was USB-visible; old setup ordering invoked host pairing before SRDssh; incomplete profiles explained pairing exit 2 and duplicate-UUID state; corrected controller verified 3771 kit entries, all 19 SRDssh assets, native exact-device RemoteXPC, a 48-byte domain-3 nonce, and a live Apple TSS ticket without device mutation; stale Homebrew-backed venv was preserved and rebuilt from signed bundled Python; the remaining host-only failure was traced to a pre.14 profile manifest differing from the current kit and is covered by atomic checkpoint/refresh/rollback tests",
         "intel_existing_pairing_remotexpc": "PASS (live read-only): on MacBookPro16,1 x86_64 macOS 26.5.2, forced userspace USB reused the existing exact-device pairing for iPhone12,8 iOS 27.0 and cryptexd returned a 48-byte domain-3 nonce; no device mutation was performed",
-        "intel_native_remotexpc_stall_diagnosis": "PASS (live read-only process inspection): pre.18 proved userspace USB, then actual install retried native and stalled before Cryptex mutation in hardened Intel Python ctypes/libffi callback allocation; process tree and stack sample retained privately"
+        "intel_native_remotexpc_stall_diagnosis": "PASS (live read-only process inspection): pre.18 proved userspace USB, then actual install retried native and stalled before Cryptex mutation in hardened Intel Python ctypes/libffi callback allocation; process tree and stack sample retained privately",
+        "intel_first_runtime_diagnosis": "PASS (live Intel): pre.19 completed exact-device userspace RemoteXPC, installed SRDssh/Procursus, and stopped before first runtime because the controller named absent srd-runtime-manager 2.4.17 while the checksum-bound kit contains verified bootstrap 2.4.10; pre.20 aligns the bootstrap version and rejects future filename/Package/Version/Architecture drift during release preparation"
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",
         "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
-        "intel_runtime_uat": "PARTIAL: pre.18 existing pairing/userspace preflight passed on MacBookPro16,1 x86_64 macOS 26.5.2; actual installer incorrectly retried native and stalled before Cryptex mutation. Pre.19 exact-route propagation and verbose streaming require live Resume UAT",
+        "intel_runtime_uat": "PARTIAL: on MacBookPro16,1 x86_64 macOS 26.5.2, pre.19 passed existing pairing, exact-device userspace RemoteXPC, SRDssh Cryptex, reboot/reconnect, UID-0 SSH, and Procursus bootstrap. First Python-trusted runtime failed before upload because the controller requested an absent 2.4.17 DEB; checkpoint fix aligns the verified 2.4.10 bootstrap and requires live Resume UAT",
         "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
         "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
         "publication": "NOT_EXECUTED: release artifacts were not pushed, uploaded, or published"

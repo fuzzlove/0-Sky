@@ -63,7 +63,12 @@ IDENTITY_DEFAULT = Path(USER_CONFIG["paths"]["ssh_identity"])
 UDID_RE = re.compile(r"^[A-Za-z0-9-]{20,80}$")
 FILZA_BUNDLE_ID = "com.tigisoftware.Filza"
 FILZA_VERSION = "4.0"
-RUNTIME_MANAGER_VERSION = "2.4.17"
+# This is the immutable bootstrap package shipped in the verified kit. Newer
+# runtime sources are assembled into the per-device Cryptex immediately after
+# this package establishes Python. Keep this value synchronized with the
+# package release gate in tools/prepare_release_kit.py; never name an artifact
+# that the bundle does not contain.
+RUNTIME_MANAGER_VERSION = "2.4.10"
 FILZA_CRYPTEX_ID = "codes.rambo.research.filza.permanent"
 FILZA_CRYPTEX_VERSION = "1.0.1789361256"
 FILZA_APP_NAME = "FilzaFixed.6907.app"

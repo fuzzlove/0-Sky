@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -12,6 +13,35 @@ from tools.verify_prepared_kit import verify
 
 
 class PrepareReleaseKitTests(unittest.TestCase):
+    def test_runtime_manager_package_matches_controller_and_debian_metadata(self) -> None:
+        self.assertEqual(release.runtime_manager_version(), "2.4.10")
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            package = kit / "packages/srd-runtime-manager_2.4.10_iphoneos-arm64.deb"
+            package.parent.mkdir(parents=True)
+            package.write_bytes(b"immutable package fixture")
+            helper = kit / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text("fixture", encoding="utf-8")
+            fields = {
+                "Package": "com.liquidskysecurity.srd-runtime-manager",
+                "Version": "2.4.10",
+                "Architecture": "iphoneos-arm64",
+            }
+
+            def field_result(argv, **_kwargs):
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout=fields[argv[-1]] + "\n", stderr=""
+                )
+
+            with patch.object(release.subprocess, "run", side_effect=field_result):
+                self.assertEqual(release.verify_runtime_manager_package(kit), package)
+
+    def test_missing_runtime_manager_package_blocks_release(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(RuntimeError, "bootstrap package is missing"):
+                release.verify_runtime_manager_package(Path(folder))
+
     def test_overrides_are_manifest_bound_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

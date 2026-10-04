@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 from pathlib import Path
@@ -33,6 +34,7 @@ except ImportError:
 
 ROOT = Path(__file__).resolve().parents[1]
 LINK_NAME = "0-Sky-Link-1.9.0-universal.ipa"
+SETUP_CONTROLLER = ROOT / "bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py"
 OVERRIDES = {
     "automation/CrypStoreAutomation/native-install/install_cryptex_native.py": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
     "runtime-generation/install_cryptex_native.py": ROOT / "bridge/KitScripts/runtime-generation/install_cryptex_native.py",
@@ -81,6 +83,64 @@ for relative in (
     RUNTIME_MANAGER_ADDITIONS["automation/tools/srd-runtime-manager/" + relative] = (
         RUNTIME_MANAGER_SOURCE / relative
     )
+
+
+def runtime_manager_version() -> str:
+    """Read the controller's exact bootstrap version without importing it."""
+    tree = ast.parse(SETUP_CONTROLLER.read_text(encoding="utf-8"),
+                     filename=str(SETUP_CONTROLLER))
+    values = [
+        node.value.value
+        for node in tree.body
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        for target in (
+            node.targets if isinstance(node, ast.Assign) else [node.target]
+        )
+        if isinstance(target, ast.Name)
+        and target.id == "RUNTIME_MANAGER_VERSION"
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    ]
+    if len(values) != 1 or not values[0] or any(
+            character not in "0123456789." for character in values[0]):
+        raise RuntimeError("setup controller has no unique safe runtime-manager version")
+    return values[0]
+
+
+def verify_runtime_manager_package(kit: Path) -> Path:
+    """Fail release preparation if setup names an absent or mismatched DEB."""
+    version = runtime_manager_version()
+    package = kit / f"packages/srd-runtime-manager_{version}_iphoneos-arm64.deb"
+    dpkg_deb = kit / "host-mac/runtime/bin/dpkg-deb"
+    if package.is_symlink() or not package.is_file():
+        raise RuntimeError(
+            "required runtime-manager bootstrap package is missing: "
+            + package.relative_to(kit).as_posix()
+        )
+    if dpkg_deb.is_symlink() or not dpkg_deb.is_file():
+        raise RuntimeError("bundled dpkg-deb is unavailable for device-package verification")
+    expected = {
+        "Package": "com.liquidskysecurity.srd-runtime-manager",
+        "Version": version,
+        "Architecture": "iphoneos-arm64",
+    }
+    for field, wanted in expected.items():
+        result = subprocess.run(
+            [str(dpkg_deb), "--field", str(package), field],
+            check=True, capture_output=True, text=True, timeout=30,
+        )
+        observed = result.stdout.strip()
+        if observed != wanted:
+            raise RuntimeError(
+                f"runtime-manager package {field} mismatch: "
+                f"expected {wanted!r}, observed {observed!r}"
+            )
+    print(
+        f"RUNTIME_MANAGER_PACKAGE=PASS version={version} "
+        f"sha256={digest(package)}",
+        flush=True,
+    )
+    return package
 
 
 def stage_link_control_only(verified_kit: Path, destination: Path) -> None:
@@ -223,6 +283,7 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
             print("HOST_RUNTIME_BUILD=START pinned dual-architecture runtime", flush=True)
             build_host_runtime(candidate, ROOT / ".build/host-runtime-cache")
         verify_host_runtime(candidate)
+        verify_runtime_manager_package(candidate)
         staged_control = stage_control_payload(candidate, build=False)
         if staged_control["sha256"] != digest(embedded / "packages/Commissary-Universal.ipa"):
             raise RuntimeError("Link and release kit have different Control payload bytes")
@@ -307,6 +368,9 @@ def main() -> int:
             ("required Mac helper lacks Universal 2 slices", "MAC_HELPER_NOT_UNIVERSAL2"),
             ("Python 3.12 is required", "PYTHON312_MISSING"),
             ("generated release kit manifest failed validation", "GENERATED_MANIFEST_INVALID"),
+            ("required runtime-manager bootstrap package is missing:",
+             "DEVICE_RUNTIME_BOOTSTRAP_MISSING"),
+            ("runtime-manager package ", "DEVICE_RUNTIME_BOOTSTRAP_METADATA_MISMATCH"),
         )
         code = next((value for text, value in known if text in message),
                     type(error).__name__.upper())
@@ -315,6 +379,19 @@ def main() -> int:
             relative = message.partition(":")[2].strip()
             if relative and not Path(relative).is_absolute() and ".." not in Path(relative).parts:
                 print(f"MISSING_RELATIVE_PATH={relative}", file=sys.stderr)
+        elif code in {
+            "DEVICE_RUNTIME_BOOTSTRAP_MISSING",
+            "DEVICE_RUNTIME_BOOTSTRAP_METADATA_MISMATCH",
+        }:
+            print(f"DETAIL={message}", file=sys.stderr)
+            print("REQUIRED_ACTION:", file=sys.stderr)
+            print(
+                "  Supply the exact controller-selected runtime-manager DEB with "
+                "Package=com.liquidskysecurity.srd-runtime-manager, matching Version, "
+                "and Architecture=iphoneos-arm64. Rebuild and verify the DEB; do not "
+                "rename a different package to bypass this gate.",
+                file=sys.stderr,
+            )
         return 2
     return 0
 
