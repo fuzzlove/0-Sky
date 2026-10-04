@@ -167,6 +167,14 @@ def inspect_device(udid: str | None, xcrun: str | None) -> dict[str, object]:
                    {"remediation": "Connect and select the exact authorized SRD"})}
 
 
+def validate_notary_profile(profile: str) -> bool:
+    """Authenticate a named Keychain profile without exposing account data."""
+    code, _ = command(["/usr/bin/xcrun", "notarytool", "history",
+                       "--keychain-profile", profile,
+                       "--output-format", "json"], timeout=45)
+    return code == 0
+
+
 def report(*, mode: str, kit: Path | None = None, udid: str | None = None,
            config_file: Path | None = None,
            theos: Path | None = None,
@@ -234,8 +242,11 @@ def report(*, mode: str, kit: Path | None = None, udid: str | None = None,
         missing.append("Developer ID Installer certificate and private key")
     elif installer_count > 1:
         missing.append("an explicit Developer ID Installer fingerprint (multiple are installed)")
+    notary_authenticated = bool(profile and validate_notary_profile(profile))
     if not profile:
         missing.append("a notarytool keychain profile")
+    elif not notary_authenticated:
+        missing.append("valid Apple credentials in the selected notarytool profile")
     release_ready = not missing
     security_status = ("PASS" if release_ready else
                        ("BLOCKED" if mode == "release" else "DEGRADED"))
@@ -254,6 +265,13 @@ def report(*, mode: str, kit: Path | None = None, udid: str | None = None,
             "password in shell history: xcrun notarytool store-credentials 0-sky-release --apple-id "
             "YOUR_APPLE_ID --team-id YOUR_TEAM_ID; enter the app-specific password only at the secure prompt. "
             "Then rerun preflight with --notary-profile 0-sky-release.")
+    elif not notary_authenticated:
+        remediation_parts.append(
+            "The selected profile did not authenticate. Generate a new app-specific password at "
+            "https://account.apple.com, then replace the profile with: xcrun notarytool "
+            "store-credentials 0-sky-release --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID; "
+            "enter the password only at the secure prompt and verify with: xcrun notarytool "
+            "history --keychain-profile 0-sky-release")
     if discovery_error:
         remediation_parts.append(
             "Open Keychain Access, unlock the login keychain, and verify with: security find-identity -v -p basic")
@@ -263,7 +281,8 @@ def report(*, mode: str, kit: Path | None = None, udid: str | None = None,
         ("missing" if app_count == 0 else "ambiguous"),
         "developer_id_installer": "available" if installer_count == 1 else
         ("missing" if installer_count == 0 else "ambiguous"),
-        "notary_profile": "configured" if profile else "missing",
+        "notary_profile": "authenticated" if notary_authenticated else
+        ("invalid" if profile else "missing"),
         "detail": "All distribution credentials are selected." if release_ready else
         "Missing or ambiguous: " + "; ".join(missing),
         "remediation": "\n".join(remediation_parts) or None,

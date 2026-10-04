@@ -81,8 +81,9 @@ class EnvironmentPreflightTests(unittest.TestCase):
         self.assertIn("Developer ID Installer", security["detail"])
         self.assertIn("notarytool", security["remediation"])
 
+    @patch.object(preflight, "validate_notary_profile", return_value=True)
     @patch.object(preflight, "discover_signing_identities")
-    def test_release_signing_accepts_one_identity_of_each_type(self, discover) -> None:
+    def test_release_signing_accepts_one_identity_of_each_type(self, discover, _notary) -> None:
         from tools.signing_identities import Identity
         discover.return_value = [Identity("A" * 40, "Developer ID Application"),
                                  Identity("B" * 40, "Developer ID Installer")]
@@ -91,6 +92,20 @@ class EnvironmentPreflightTests(unittest.TestCase):
                                       notary_profile="release-profile", environment={},
                                       discover_device=False)
         self.assertEqual(result["security"]["status"], "PASS")
+
+    @patch.object(preflight, "validate_notary_profile", return_value=False)
+    @patch.object(preflight, "discover_signing_identities")
+    def test_release_signing_rejects_invalid_notary_profile(self, discover, _notary) -> None:
+        from tools.signing_identities import Identity
+        discover.return_value = [Identity("A" * 40, "Developer ID Application"),
+                                 Identity("B" * 40, "Developer ID Installer")]
+        with tempfile.TemporaryDirectory() as folder:
+            result = preflight.report(mode="release", kit=Path(folder) / "missing-kit",
+                                      notary_profile="invalid-profile", environment={},
+                                      discover_device=False)
+        self.assertEqual(result["security"]["status"], "BLOCKED")
+        self.assertEqual(result["security"]["notary_profile"], "invalid")
+        self.assertIn("did not authenticate", result["security"]["remediation"])
 
 
 if __name__ == "__main__":
