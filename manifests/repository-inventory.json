@@ -99,7 +99,7 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "864b562af56576423fc8f4ada3436dfca3690466487cb9134fff7f6689981efc",
+      "sha256": "fb4e65095ae7b155a7cc9d03ac76e695e7795e51d797290ce791c133c08dd30c",
       "size": 7139
     },
     {

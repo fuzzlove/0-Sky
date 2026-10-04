@@ -27,7 +27,7 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 289 run, 3 skipped for unavailable private paid fixtures; includes contained runtime symlink acceptance, SRDssh release-adapter preservation, iOS 26/27 image-slot selection, and absolute, traversal, and broken-link rejection",
+        "tools_unit_tests": "PASS: 290 run, 3 skipped for unavailable private paid fixtures; includes contained runtime symlink acceptance, SRDssh release-adapter preservation, iOS 26/27 image-slot selection, and absolute, traversal, and broken-link rejection",
         "host_tools_unit_tests": "PASS: 126 run, 1 skipped because the external source kit is absent; includes private pairing transcript permissions, redacted actionable pairing errors, and symlink rejection",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
