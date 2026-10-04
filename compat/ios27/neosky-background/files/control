@@ -1,6 +1,6 @@
 Package: xyz.0sky.neoskybackground
 Name: NeoSky Background
-Version: 1.0.0+0sky27.6
+Version: 1.0.0+0sky27.7
 Architecture: iphoneos-arm64
 Description: Native Neofetch-style Home Screen statistics for the 0-Sky iOS 27 SRD environment, with an experimental Lock Screen path
 Maintainer: 0-Sky Project

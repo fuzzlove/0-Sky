@@ -2,7 +2,7 @@
   "schema": 1,
   "project": "NeoSky Background",
   "package_identifier": "xyz.0sky.neoskybackground",
-  "package_version": "1.0.0+0sky27.6",
+  "package_version": "1.0.0+0sky27.7",
   "preference_domain": "xyz.0sky.neoskybackground",
   "implementation": "native-darwin-stats-no-shell-in-springboard",
   "target": {
@@ -20,13 +20,13 @@
     "host_build": "VERIFIED_REPRODUCIBLE",
     "package_validation": "VERIFIED",
     "device_install": "VERIFIED",
-    "home_runtime_previous_variant": "VERIFIED_1.0.0+0sky27.5",
-    "device_runtime_current_variant": "PENDING_RECONNECT",
+    "home_runtime_current_variant": "VERIFIED_1.0.0+0sky27.7",
+    "device_runtime_current_variant": "VERIFIED",
     "lock_screen_visual": "FAILED_UNVERIFIED"
   },
   "validated_artifact": {
-    "filename": "xyz.0sky.neoskybackground_1.0.0+0sky27.6_iphoneos-arm64.deb",
-    "sha256": "bbda21f893c14ef7e1b8287df96c8dee15d7cd242c577fcde609f9df2098e67b",
+    "filename": "xyz.0sky.neoskybackground_1.0.0+0sky27.7_iphoneos-arm64.deb",
+    "sha256": "9adc1294fd36c9fb9cdb31be98b8914101e2f391f47271e5291a33c75bd2b18b",
     "two_clean_builds_identical": true,
     "native_preference_controls": 10
   },

@@ -8,7 +8,7 @@ from pathlib import Path
 
 EXPECTED = {
     "Package": "xyz.0sky.neoskybackground",
-    "Version": "1.0.0+0sky27.6",
+    "Version": "1.0.0+0sky27.7",
     "Architecture": "iphoneos-arm64",
 }
 ROOT = Path("var/jb")

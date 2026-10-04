@@ -201,9 +201,8 @@ static void NSUpdateAllLabels(void) {
     }
 }
 
-static void NSHomeLayout(id self, SEL selector) {
-    NSOriginalHomeLayout(self, selector);
-    SBHomeScreenView *host = (SBHomeScreenView *)self;
+static void NSInstallHomeLabel(SBHomeScreenView *host) {
+    if (!host) return;
     [NSHomeHosts addObject:host];
     BOOL visible = NSBool(@"enabled", NO) && NSBool(@"homeEnabled", YES);
     UILabel *label = objc_getAssociatedObject(host, NSHomeLabelKey);
@@ -225,6 +224,24 @@ static void NSHomeLayout(id self, SEL selector) {
         NSHomeActive = YES;
         NSWriteDiagnostics(NSLockActive ? @"active-lock-and-home" : @"active-home");
     }
+}
+
+static void NSFindExistingHomeViews(UIView *view) {
+    if (!view) return;
+    Class homeClass = NSClassFromString(@"SBHomeScreenView");
+    if (homeClass && [view isKindOfClass:homeClass])
+        NSInstallHomeLabel((SBHomeScreenView *)view);
+    for (UIView *child in view.subviews) NSFindExistingHomeViews(child);
+}
+
+static void NSAttachToExistingHomeViews(void) {
+    for (UIWindow *window in UIApplication.sharedApplication.windows)
+        NSFindExistingHomeViews(window);
+}
+
+static void NSHomeLayout(id self, SEL selector) {
+    NSOriginalHomeLayout(self, selector);
+    NSInstallHomeLabel((SBHomeScreenView *)self);
 }
 
 static void NSLockLayout(id self, SEL selector) {
@@ -267,7 +284,10 @@ static void NSPreferencesChanged(CFNotificationCenterRef center, void *observer,
                                  CFDictionaryRef userInfo) {
     (void)center; (void)observer; (void)name; (void)object; (void)userInfo;
     CFPreferencesAppSynchronize((__bridge CFStringRef)NSDomain);
-    dispatch_async(dispatch_get_main_queue(), ^{ NSUpdateAllLabels(); });
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSUpdateAllLabels();
+        NSAttachToExistingHomeViews();
+    });
 }
 
 static void NSStartTimer(void) {
@@ -312,6 +332,11 @@ __attribute__((constructor)) static void NSInitialize(void) {
                 CFNotificationSuspensionBehaviorDeliverImmediately);
             NSWriteDiagnostics(@"hook-installed");
             NSStartTimer();
+            // Runtime-manager injection occurs after SpringBoard may have built
+            // its Home Screen. Attach directly to the exact guarded host instead
+            // of forcing a UIKit layout pass through unrelated tweak hooks.
+            dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.0 * NSEC_PER_SEC)),
+                           dispatch_get_main_queue(), ^{ NSAttachToExistingHomeViews(); });
         });
     }
 }

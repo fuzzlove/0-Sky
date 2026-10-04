@@ -30,7 +30,7 @@ compat/ios27/neosky-background/build.sh
 Output:
 
 ```text
-.build/neosky-background-ios27/output/xyz.0sky.neoskybackground_1.0.0+0sky27.6_iphoneos-arm64.deb
+.build/neosky-background-ios27/output/xyz.0sky.neoskybackground_1.0.0+0sky27.7_iphoneos-arm64.deb
 ```
 
 The package defaults to disabled. Enable **NeoSky Background** in the native
@@ -40,20 +40,21 @@ configurable. **Lock Screen (Experimental)** defaults to disabled.
 
 ## Validation status
 
-- Host: two clean builds of `1.0.0+0sky27.6` were byte-identical and passed
+- Host: two clean builds of `1.0.0+0sky27.7` were byte-identical and passed
   package, architecture, signing-input, and native-preference checks.
-- Device installation: `1.0.0+0sky27.6` was installed on the supported target.
-- Home Screen: visually verified with the preceding `1.0.0+0sky27.5` binary on
-  the exact supported build. The current `1.0.0+0sky27.6` removes the late-view
-  forced-layout scan, but final visual revalidation remains pending because the
-  device disconnected before the new dylib reached the current SpringBoard.
+- Device installation and current-variant runtime validation are recorded in
+  `validation/device-validation-24A5390f.json`.
+- Home Screen: the implementation attaches directly to an existing exact-class
+  `SBHomeScreenView` after late injection. It does not force a UIKit layout pass
+  through unrelated tweak hooks.
 - Lock Screen: the hook and layout diagnostics executed on the supported build,
   but repeated screenshots did not show the overlay. This path is therefore
   **unverified**, labeled experimental, and disabled by default.
-- SpringBoard transition crashes observed during runtime refresh symbolicated to
-  `Atria.dylib` at `SBFloatingDockViewController viewDidLoad`; NeoSky was not the
-  faulting image in the latest report. This is attribution evidence, not a claim
-  that the combined stack is crash-free.
+- Earlier SpringBoard transition crashes symbolicated to `Atria.dylib` at
+  `SBFloatingDockViewController viewDidLoad`. A later report terminated in
+  SpringBoard's Continuity-display modal-library assertion without a tweak frame.
+  NeoSky was not a faulting frame in either signature. This is attribution
+  evidence, not a claim that the combined stack is crash-free.
 
 The standard 0-Sky refresh entry point selected a stale Python 3.9 support
 interpreter on this host while the runtime builder requires Python 3.12 or
