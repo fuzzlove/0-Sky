@@ -94,6 +94,16 @@ identifier.
    stage, current failure, and resume origin. Reruns re-converge idempotent
    preconditions; `--resume` requires one explicit UDID, and read-only checks
    never create progress state.
+8. **Duplicate exact-device profiles blocked resumable setup.** A readable
+   `config.json` containing the selected UUID was counted before its pin,
+   permissions, schema, and endpoint fields were validated. An interrupted
+   deterministic setup beside a complete legacy enrollment therefore produced
+   `ERR_PROFILE_STALE`, while registry selection depended on directory order.
+   **Status:** fixed. Candidates are validated independently; one complete
+   exact-device profile wins over preserved incomplete copies, two complete
+   profiles fail closed, deterministic interrupted setup resumes, and ports
+   from incomplete profiles remain reserved. BridgeCore tests execute each
+   regression case without deleting user state.
 
 ### Low severity
 

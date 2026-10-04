@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 138,
-    "required-source-or-maintenance-test": 2099,
+    "required-source-or-maintenance-test": 2100,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "3e7173a2f92532ef5ba3d2ab397d58c330c5c300d2710e37bfddca89695487e7",
-      "size": 5635
+      "sha256": "b03361fcd6c711f54d6507c1433f6aa7f39e294fdc6e4cf8fcb8194b150e870f",
+      "size": 5786
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10833,14 +10833,14 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/BridgeCore/DeviceEnrollmentManager.swift",
-      "sha256": "f14f7ee898d7db949f68fee2e3bd112f197779d546ccfaa3da688e84296bdb55",
-      "size": 4799
+      "sha256": "5d3182a6e271891c93afcae248a0513b705c84102b095a1abcad30558271490d",
+      "size": 8533
     },
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/BridgeCore/DeviceRegistry.swift",
-      "sha256": "b2281902d9022d57d28e66c05208bf2f8bb5c2f8969bc03e17ea52bc025620f4",
-      "size": 7234
+      "sha256": "7f5ec0535c12d27b2148adb467d919859d6b0873d8737162b012ce898206941d",
+      "size": 7984
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -10875,8 +10875,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/BridgeCore/HostProfileInspector.swift",
-      "sha256": "77e107e86a5d612383f791ba9d3e2fd25bfcb75e8616fad090c308b4a922a7b6",
-      "size": 5394
+      "sha256": "c991ea6a04e508ce6bb6f9577ed96f2095d23fa0274041fe9fd4052a4d987697",
+      "size": 7699
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -11697,8 +11697,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/Tests/BridgeCoreTests/main.swift",
-      "sha256": "7f57ee30f350254ad27977ad09eefc6ba0e249017c5b3e9ab5b3ac3a58a74061",
-      "size": 72809
+      "sha256": "ece9708967aeeeefc0f65f0a51097d207573f71473c88a530de25a87fad4b609",
+      "size": 76618
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13569,8 +13569,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "6a159230d0d9c990702c1535d30d33cff78a38931b66041581cf0408b7580954",
-      "size": 11181
+      "sha256": "e6f6e7833cc442aa14629e422f505b26b044bba73fba28635ed80f69c42f4a73",
+      "size": 11911
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13587,8 +13587,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "854be9c7d7b111afdd30049483cdb45a21846ff35e57629b0914b15d191af6b1",
-      "size": 8218
+      "sha256": "c99e560a5e53612c00d286986a4f864cb795e71e6a241867ad821f491aa2ab5a",
+      "size": 9055
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13637,6 +13637,12 @@
       "path": "docs/compatibility-findings.md",
       "sha256": "9e983ebc64c44fa40e3c4664c6c31bb92cf0ff029b27a86166d9383e87e2f98a",
       "size": 4147
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/release-notes-v1.0.0-pre.12.md",
+      "sha256": "d3ec5fa162fd23f65927c40c168de6444aa24e5254dbf0f613a94baf13c5260a",
+      "size": 1213
     },
     {
       "category": "required-source-or-maintenance-test",

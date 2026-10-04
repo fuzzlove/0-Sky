@@ -40,6 +40,9 @@ public actor DeviceEnrollmentManager {
         return try await coordinator.withLock(deviceID: udid, operation: "enrollment") {
             let profiles = (try? await registry.reload()) ?? []
             let interrupted = profiles.first(where: { $0.udid == udid })
+            let canonical = try Self.canonicalResumeCandidate(
+                supportURL: paths.supportRoot, device: device
+            )
             let installComplete = interrupted.map {
                 FileManager.default.fileExists(
                     atPath: paths.instanceDirectory($0)
@@ -55,8 +58,13 @@ public actor DeviceEnrollmentManager {
             // fails. Reuse only this exact UDID's validated instance and port;
             // never allocate a second identity or silently select a device.
             let port = try interrupted.map { try BridgeValidation.validatePort($0.localPort) }
-                ?? Self.nextAvailablePort(profiles: profiles)
+                ?? canonical?.port
+                ?? Self.nextAvailablePort(
+                    profiles: profiles,
+                    reservedPorts: Self.configuredPorts(supportURL: paths.supportRoot)
+                )
             let instance = try interrupted.map { try BridgeValidation.validateInstance($0.instanceName) }
+                ?? canonical?.instance
                 ?? Self.instanceName(for: device)
             let installer = try paths.enrollmentInstaller()
             let result = try await runner.run(
@@ -89,11 +97,71 @@ public actor DeviceEnrollmentManager {
         return try BridgeValidation.validateInstance("\(family)-\(suffix)")
     }
 
-    public static func nextAvailablePort(profiles: [DeviceProfile]) throws -> Int {
-        let used = Set(profiles.map(\.localPort))
+    public static func nextAvailablePort(
+        profiles: [DeviceProfile], reservedPorts: Set<Int> = []
+    ) throws -> Int {
+        let used = Set(profiles.map(\.localPort)).union(reservedPorts)
         guard let port = (2222...8999).first(where: { !used.contains($0) }) else {
             throw BridgeCoreError.operationFailed("No unprivileged per-device forwarding port is available.")
         }
         return try BridgeValidation.validatePort(port)
+    }
+
+    /// Resume the deterministic directory created by an interrupted setup,
+    /// even when other incomplete legacy directories claim the same UUID.
+    /// Identity and port are validated before the installer sees them.
+    public static func canonicalResumeCandidate(
+        supportURL: URL, device: SkyDevice
+    ) throws -> (instance: String, port: Int)? {
+        let instance = try instanceName(for: device)
+        let directory = supportURL.appendingPathComponent("instances/\(instance)", isDirectory: true)
+        let config = directory.appendingPathComponent("config.json")
+        let fm = FileManager.default
+        guard fm.fileExists(atPath: config.path) else { return nil }
+        let properties = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
+        let configProperties = try config.resourceValues(
+            forKeys: [.isRegularFileKey, .isSymbolicLinkKey]
+        )
+        guard properties.isDirectory == true, properties.isSymbolicLink != true,
+              configProperties.isRegularFile == true, configProperties.isSymbolicLink != true else {
+            throw BridgeCoreError.operationFailed(
+                "The resumable setup directory is unsafe. Open Diagnostics and export a report; no files were changed."
+            )
+        }
+        let object = try JSONSerialization.jsonObject(with: Data(contentsOf: config)) as? [String: Any]
+        guard let object,
+              object["udid"] as? String == device.udid,
+              object["instance"] as? String == instance else {
+            throw BridgeCoreError.operationFailed(
+                "The deterministic setup directory \(instance) belongs to another endpoint. Open Diagnostics and remove only the obsolete Mac-side enrollment before retrying."
+            )
+        }
+        let rawPort = object["ssh_port"]
+        let port = (rawPort as? Int) ?? (rawPort as? String).flatMap(Int.init)
+        guard let port else {
+            throw BridgeCoreError.operationFailed(
+                "The interrupted setup profile has no valid local SSH port. Open Diagnostics and repair that profile before retrying."
+            )
+        }
+        return (instance, try BridgeValidation.validatePort(port))
+    }
+
+    public static func configuredPorts(supportURL: URL) -> Set<Int> {
+        let instances = supportURL.appendingPathComponent("instances", isDirectory: true)
+        let fm = FileManager.default
+        guard let directories = try? fm.contentsOfDirectory(
+            at: instances, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+        ) else { return [] }
+        return Set(directories.compactMap { directory in
+            guard let properties = try? directory.resourceValues(
+                forKeys: [.isDirectoryKey, .isSymbolicLinkKey]
+            ), properties.isDirectory == true, properties.isSymbolicLink != true,
+            let data = try? Data(contentsOf: directory.appendingPathComponent("config.json")),
+            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+            else { return nil }
+            if let value = object["ssh_port"] as? Int { return value }
+            if let value = object["ssh_port"] as? String { return Int(value) }
+            return nil
+        }.filter { (1024...65535).contains($0) })
     }
 }

@@ -423,6 +423,28 @@ struct BridgeCoreTestRunner {
         let port = try DeviceEnrollmentManager.nextAvailablePort(profiles: [profile])
         try expect(port == 2223,
                    "port allocator reused an existing device port")
+        let reservedPort = try DeviceEnrollmentManager.nextAvailablePort(
+            profiles: [profile], reservedPorts: [2223]
+        )
+        try expect(reservedPort == 2224,
+                   "port allocator reused a port from an incomplete duplicate profile")
+        let resumeRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("0sky-enrollment-resume-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: resumeRoot) }
+        let resumeDirectory = resumeRoot.appendingPathComponent("instances/\(instanceName)")
+        try FileManager.default.createDirectory(at: resumeDirectory, withIntermediateDirectories: true)
+        let resumeConfig: [String: Any] = [
+            "udid": device.udid, "instance": instanceName, "ssh_port": "2237",
+        ]
+        try JSONSerialization.data(withJSONObject: resumeConfig)
+            .write(to: resumeDirectory.appendingPathComponent("config.json"))
+        let resume = try DeviceEnrollmentManager.canonicalResumeCandidate(
+            supportURL: resumeRoot, device: device
+        )
+        try expect(resume?.instance == instanceName && resume?.port == 2237,
+                   "interrupted deterministic setup was not resumed")
+        try expect(DeviceEnrollmentManager.configuredPorts(supportURL: resumeRoot) == [2237],
+                   "incomplete profile port was not reserved")
         let complete = IOSComponentSetupManager.plan(.completeProject)
         try expect(complete.tier == .highRisk
                    && complete.components.contains("0-Sky Link")
@@ -1216,6 +1238,38 @@ struct BridgeCoreTestRunner {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: pinURL.path)
         let valid = HostProfileInspector.inspect(supportURL: root, udid: udid)
         try expect(valid.ready, "complete exact-device profile was rejected: \(valid.code ?? "none") \(valid.detail)")
+        try expect(valid.selectedInstance == "iphonese-srd", "valid instance was not selected explicitly")
+
+        // An interrupted deterministic setup may coexist with a complete
+        // legacy enrollment. It must not block the one complete exact-device
+        // profile or win by directory enumeration order.
+        let interrupted = root.appendingPathComponent("instances/iphone-srd-00000001", isDirectory: true)
+        try FileManager.default.createDirectory(at: interrupted, withIntermediateDirectories: true)
+        var interruptedConfig = complete
+        interruptedConfig["instance"] = "iphone-srd-00000001"
+        interruptedConfig["ssh_known_hosts"] = interrupted.appendingPathComponent("device-known-hosts").path
+        let interruptedConfigURL = interrupted.appendingPathComponent("config.json")
+        try JSONSerialization.data(withJSONObject: interruptedConfig).write(to: interruptedConfigURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: interruptedConfigURL.path)
+        let resumable = HostProfileInspector.inspect(supportURL: root, udid: udid)
+        try expect(resumable.ready && resumable.selectedInstance == "iphonese-srd",
+                   "incomplete duplicate blocked the complete profile: \(resumable.detail)")
+        let resumedRegistry = try await DeviceRegistry(supportURL: root).reload()
+        try expect(resumedRegistry.count == 1
+                   && resumedRegistry.first?.instanceName == "iphonese-srd",
+                   "registry selected an incomplete duplicate by directory order")
+
+        let interruptedPin = interrupted.appendingPathComponent("device-known-hosts")
+        try Data("\(alias) ssh-ed25519 \(String(repeating: "A", count: 44))\n".utf8).write(to: interruptedPin)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: interruptedPin.path)
+        let conflict = HostProfileInspector.inspect(supportURL: root, udid: udid)
+        try expect(conflict.code == "ERR_PROFILE_CONFLICT" && conflict.selectedInstance == nil,
+                   "two complete profiles were selected implicitly")
+        let conflictedRegistry = try await DeviceRegistry(supportURL: root).reload()
+        try expect(conflictedRegistry.isEmpty,
+                   "registry silently selected one of two complete profiles")
+        try FileManager.default.removeItem(at: interrupted)
+
         try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: pinURL.path)
         let unsafe = HostProfileInspector.inspect(supportURL: root, udid: udid)
         try expect(unsafe.code == "ERR_PROFILE_PERMISSION", "broad host-key pin mode was accepted")

@@ -31,7 +31,7 @@
     "host_tools_unit_tests": "PASS: 123 run, 1 skipped because the external source kit is absent",
     "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
     "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
-    "bridge_core_tests": "PASS: 33/33",
+        "bridge_core_tests": "PASS: 33/33, including incomplete-duplicate profile resume, deterministic candidate selection, complete-profile conflict rejection, and stale-port reservation",
     "bridge_release_source_build": "PASS",
     "link_source_build": "PASS",
     "link_identity_icon_signature_verification": "PASS",

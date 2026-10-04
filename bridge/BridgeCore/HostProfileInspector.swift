@@ -6,6 +6,16 @@ public struct HostProfileInspection: Sendable {
     public let state: State
     public let code: String?
     public let detail: String
+    /// The only structurally complete profile for the exact UDID. Callers
+    /// must not infer an instance when this is nil.
+    public let selectedInstance: String?
+
+    public init(state: State, code: String?, detail: String, selectedInstance: String? = nil) {
+        self.state = state
+        self.code = code
+        self.detail = detail
+        self.selectedInstance = selectedInstance
+    }
 
     public var ready: Bool { state == .valid }
     public var failed: Bool { state == .invalid }
@@ -15,6 +25,11 @@ public struct HostProfileInspection: Sendable {
 /// An existing JSON file is not a completed profile until its identity, pin,
 /// owner and permissions match the selected device.
 public enum HostProfileInspector {
+    private struct Candidate {
+        let directory: URL
+        let inspection: HostProfileInspection
+    }
+
     public static func inspect(supportURL: URL, udid: String) -> HostProfileInspection {
         let instances = supportURL.appendingPathComponent("instances", isDirectory: true)
         let fm = FileManager.default
@@ -23,27 +38,56 @@ public enum HostProfileInspector {
         ) else {
             return .init(state: .missing, code: nil, detail: "No local host profile exists for this device.")
         }
-        var matches: [URL] = []
-        for directory in directories {
+        var matches: [Candidate] = []
+        for directory in directories.sorted(by: { $0.lastPathComponent < $1.lastPathComponent }) {
             guard let properties = try? directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
                   properties.isDirectory == true, properties.isSymbolicLink != true else { continue }
             let config = directory.appendingPathComponent("config.json")
             guard let data = try? Data(contentsOf: config),
                   let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   object["udid"] as? String == udid else { continue }
-            matches.append(directory)
+            matches.append(Candidate(directory: directory,
+                                     inspection: inspect(directory: directory, value: object, udid: udid)))
         }
-        guard matches.count == 1, let directory = matches.first else {
-            return matches.isEmpty
-                ? .init(state: .missing, code: nil, detail: "No local host profile exists for this device.")
-                : .init(state: .invalid, code: "ERR_PROFILE_STALE",
-                        detail: "Multiple local profiles claim this device UDID.")
+        guard !matches.isEmpty else {
+            return .init(state: .missing, code: nil, detail: "No local host profile exists for this device.")
         }
+
+        // Interrupted setup can leave a resumable, incomplete directory next
+        // to an older complete enrollment. It must not make the complete,
+        // exact-device profile unusable. Conversely, two complete profiles
+        // remain an explicit conflict: never select one by filesystem order.
+        let valid = matches.filter { $0.inspection.ready }
+        if valid.count == 1, let selected = valid.first {
+            let stale = matches.filter { !$0.inspection.ready }
+            let suffix = stale.isEmpty
+                ? ""
+                : " Ignored \(stale.count) incomplete duplicate profile(s); no files were deleted."
+            return .init(state: .valid, code: nil,
+                         detail: selected.inspection.detail + suffix,
+                         selectedInstance: selected.directory.lastPathComponent)
+        }
+        if valid.count > 1 {
+            let names = valid.map { $0.directory.lastPathComponent }.joined(separator: ", ")
+            return .init(
+                state: .invalid, code: "ERR_PROFILE_CONFLICT",
+                detail: "Multiple complete local profiles claim this device UUID (\(names)). Open Diagnostics and export the report, then remove only the obsolete Mac-side enrollment; 0-Sky will not choose one automatically."
+            )
+        }
+        if matches.count == 1, let only = matches.first {
+            return only.inspection
+        }
+        let reasons = matches.map {
+            "\($0.directory.lastPathComponent): \($0.inspection.code ?? "ERR_PROFILE_VALIDATION")"
+        }.joined(separator: "; ")
+        return .init(
+            state: .invalid, code: "ERR_PROFILE_STALE",
+            detail: "Multiple incomplete local profiles claim this device UUID and none is usable (\(reasons)). Resume setup while the exact device is connected by USB; existing profiles are preserved."
+        )
+    }
+
+    private static func inspect(directory: URL, value: [String: Any], udid: String) -> HostProfileInspection {
         let config = directory.appendingPathComponent("config.json")
-        guard let data = try? Data(contentsOf: config),
-              let value = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
-            return .init(state: .invalid, code: "ERR_PROFILE_PARSE", detail: "The host profile JSON is invalid.")
-        }
         let alias = "0sky-device-" + SHA256.hash(data: Data(udid.utf8))
             .map { String(format: "%02x", $0) }.joined().prefix(24)
         let pin = directory.appendingPathComponent("device-known-hosts")
@@ -83,7 +127,9 @@ public enum HostProfileInspector {
             return .init(state: .invalid, code: "ERR_PROFILE_PERMISSION",
                          detail: "The host profile or device SSH pin is missing or unsafe.")
         }
-        return .init(state: .valid, code: nil, detail: "Exact-device host profile and SSH pin are present.")
+        return .init(state: .valid, code: nil,
+                     detail: "Exact-device host profile and SSH pin are present.",
+                     selectedInstance: directory.lastPathComponent)
     }
 
     private static func privateFile(_ url: URL) -> Bool {

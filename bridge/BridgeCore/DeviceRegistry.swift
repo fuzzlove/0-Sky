@@ -26,7 +26,7 @@ public actor DeviceRegistry {
             includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey],
             options: [.skipsHiddenFiles]
         )
-        var loaded: [String: DeviceProfile] = [:]
+        var candidates: [String: [DeviceProfile]] = [:]
         for directory in directories {
             let values = try directory.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey])
             guard values.isDirectory == true, values.isSymbolicLink != true else { continue }
@@ -84,7 +84,22 @@ public actor DeviceRegistry {
                 pairedHostCount: (pairing?["paired_host_count"] as? NSNumber)?.intValue
                     ?? (pairing?["verified"] as? Bool == true ? 1 : 0)
             )
-            loaded[udid] = profile
+            candidates[udid, default: []].append(profile)
+        }
+        var loaded: [String: DeviceProfile] = [:]
+        for (udid, values) in candidates {
+            if values.count == 1 {
+                loaded[udid] = values[0]
+                continue
+            }
+            // Use only the profile independently proven complete by the host
+            // profile inspector. Never let directory enumeration order choose
+            // between duplicate exact-device profiles.
+            let inspected = HostProfileInspector.inspect(supportURL: supportURL, udid: udid)
+            if let instance = inspected.selectedInstance,
+               let selected = values.first(where: { $0.instanceName == instance }) {
+                loaded[udid] = selected
+            }
         }
         profiles = loaded
         return loaded.values.sorted { $0.instanceName < $1.instanceName }
