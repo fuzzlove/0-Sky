@@ -18,6 +18,22 @@ The source tree deliberately excludes device identifiers, pairing records,
 credentials, tokens, SSH keys, provisioning profiles, certificates, research
 sessions, logs, compiled applications, and device-derived evidence.
 
+## Installation
+
+The recommended user path is a verified, signed Universal 2 macOS package.
+Follow [`INSTALL.md`](INSTALL.md), verify the four-file release set before
+opening the package, then use **Install All 0-Sky Requirements** inside Bridge.
+The installer discovers Intel or Apple-silicon tools at runtime, maintains an
+isolated pinned Python environment, and requires explicit selection and
+verification of the exact connected SRD.
+
+A source checkout is not a complete installer: authorized Apple assets, signed
+device payloads, the offline wheelhouse, and publisher credentials remain
+external. Developers should use [`BUILDING.md`](BUILDING.md); release engineers
+should use only [`scripts/build_release.sh`](scripts/build_release.sh) and the
+procedure in [`RELEASE.md`](RELEASE.md). See
+[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for repair and uninstall.
+
 ## Screenshots
 
 The root-filesystem image is a public redacted copy with the operator name and
@@ -62,20 +78,25 @@ researcher-provided signing/authorization environment described in the
 requirements. This repository does not contain Apple-provided SRD assets or
 any reusable signing credential.
 
-## Pre-releases
+## Releases
 
-[`v1.0.0-pre.4`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.4)
-is the latest source prerelease and includes the clean-checkout and CI repairs.
-It contains no installer assets. External signed device payloads must pass the
-release sanitization gate before new installers can be published.
+Use the [GitHub Releases](https://github.com/fuzzlove/0-Sky/releases) page only
+for version discovery; a downloadable artifact is acceptable only when its
+`RELEASE_MANIFEST.json`, `SHA256SUMS`, and `RELEASE_AUDIT.txt` verify. Source
+tags do not imply that a binary installer passed distribution signing,
+notarization, clean-machine, or hardware tests.
 
-The earlier installer prerelease has been withdrawn. No verified installer
-assets are currently published for this source revision.
+No verified installer can currently be produced from the locally available
+external kit because signed device payloads retain builder paths. The release
+gate correctly blocks publication until those inputs are rebuilt and verified.
 
 ## Security and privacy
 
 Use only with devices and systems you own or are explicitly authorized to
 research. Review [`SECURITY.md`](SECURITY.md) and [`PRIVACY.md`](PRIVACY.md).
+The current cleanup findings, retained uncertainties, removed files, executed
+validation, and release blockers are recorded in
+[`docs/REPOSITORY_AUDIT.md`](docs/REPOSITORY_AUDIT.md).
 
 ## Attribution and licensing
 

@@ -148,10 +148,14 @@ try:
  imports=True
 except Exception: imports=False
 print(json.dumps(found,sort_keys=True));raise SystemExit(0 if imports else 2)'''
-    result = subprocess.run(
-        [str(python), "-c", probe, json.dumps(wanted_packages())],
-        text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-    )
+    try:
+        result = subprocess.run(
+            [str(python), "-c", probe, json.dumps(wanted_packages())],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False, {}
     try:
         found = json.loads(result.stdout)
     except Exception:
@@ -295,10 +299,14 @@ def bootstrap_python() -> Path | None:
     for candidate in candidates:
         if not candidate.is_file():
             continue
-        result = subprocess.run(
-            [str(candidate), "-c", "import sys;raise SystemExit(sys.version_info[:2]!=(3,12))"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        try:
+            result = subprocess.run(
+                [str(candidate), "-c", "import sys;raise SystemExit(sys.version_info[:2]!=(3,12))"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=10, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
         if result.returncode == 0:
             return candidate.resolve()
     return None
@@ -314,10 +322,14 @@ def xcode_environment(sdk: str) -> tuple[dict[str, str] | None, str]:
         env = dict(os.environ)
         if developer is not None:
             env["DEVELOPER_DIR"] = str(developer)
-        result = subprocess.run(
-            ["/usr/bin/xcrun", "--sdk", sdk, "--show-sdk-path"],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
-        )
+        try:
+            result = subprocess.run(
+                ["/usr/bin/xcrun", "--sdk", sdk, "--show-sdk-path"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
+                timeout=20, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
         if result.returncode == 0 and Path(result.stdout.strip()).is_dir():
             return env, result.stdout.strip()
     return None, ""
@@ -425,10 +437,14 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
                 valid = valid and any(item.endswith("/device_bridge_supervisor.sh") for item in arguments)
         except Exception:
             valid = False
-        loaded = subprocess.run(
-            ["/bin/launchctl", "print", f"{domain}/{label}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        ).returncode == 0
+        try:
+            loaded = subprocess.run(
+                ["/bin/launchctl", "print", f"{domain}/{label}"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=15, check=False,
+            ).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            loaded = False
         status = "PASS" if valid and loaded else "FAIL"
         detail = f"definition={'valid' if valid else 'invalid'}, service={'loaded' if loaded else 'not loaded'}"
         checks.append(Check(status, f"LaunchAgent {role}", detail,
@@ -457,18 +473,25 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
         f"{python}: {packages}", "rerun this script with --setup",
     ))
     if python_ok and pair.is_file():
-        proof = subprocess.run([
-            str(python), str(pair), "--udid", udid, "--ssh-key", str(identity),
-            "--host", "127.0.0.1", "--port", str(port),
-            "--remote-port", str(remote_port),
-            "--instance-name", instance, "--support", str(support),
-            "--pymobile-python", str(python), "--verify-only", "--require-worker",
-        ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        try:
+            proof = subprocess.run([
+                str(python), str(pair), "--udid", udid, "--ssh-key", str(identity),
+                "--host", "127.0.0.1", "--port", str(port),
+                "--remote-port", str(remote_port),
+                "--instance-name", instance, "--support", str(support),
+                "--pymobile-python", str(python), "--verify-only", "--require-worker",
+            ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                timeout=90, check=False)
+            proof_ok, proof_detail = proof.returncode == 0, proof.stdout.strip()[-1200:]
+        except subprocess.TimeoutExpired:
+            proof_ok, proof_detail = False, "verification timed out after 90 seconds"
+        except OSError:
+            proof_ok, proof_detail = False, "verification process could not be started"
         checks.append(Check(
-            "PASS" if proof.returncode == 0 else "FAIL",
+            "PASS" if proof_ok else "FAIL",
             "paired bridge and worker proof",
             "exact-UDID HMAC marker and fresh worker heartbeat verified"
-            if proof.returncode == 0 else proof.stdout.strip()[-1200:],
+            if proof_ok else proof_detail,
             "unlock/connect the SRD, then rerun this script with --setup",
         ))
     else:
@@ -615,10 +638,16 @@ def request_command_line_tools() -> None:
     if find_command("xcrun") and find_command("clang"):
         return
     log("Requesting Apple's Command Line Tools installer")
-    result = subprocess.run(
-        ["/usr/bin/xcode-select", "--install"], text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-    )
+    try:
+        result = subprocess.run(
+            ["/usr/bin/xcode-select", "--install"], text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise SystemExit(
+            "Could not open Apple's Command Line Tools installer; run 'xcode-select --install' manually"
+        )
     detail = result.stdout.strip()
     if detail:
         log(detail)
@@ -755,8 +784,12 @@ def choose_target(requested: str | None, python: Path | None) -> str | None:
         "if picked is false then error number -128\n"
         "return item 1 of picked"
     )
-    picked = subprocess.run(["/usr/bin/osascript", "-e", script], text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        picked = subprocess.run(["/usr/bin/osascript", "-e", script], text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=600, check=False)
+    except subprocess.TimeoutExpired:
+        raise SystemExit("device selection timed out; rerun setup when the SRD is connected")
     if picked.returncode:
         raise SystemExit("device selection was cancelled")
     selected = picked.stdout.strip()

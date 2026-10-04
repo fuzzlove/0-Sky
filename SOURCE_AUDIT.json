@@ -1,23 +1,65 @@
 {
-  "schema": 1,
+  "schema": 2,
   "scope": [
     "0-Sky Bridge",
     "0-Sky Link",
-    "0-Sky Control"
+    "0-Sky Control",
+    "host installation and release tooling",
+    "active AFC2 compatibility port"
   ],
-  "source_publication": "PII-sanitized",
-  "pii_audit": "PASS",
-  "bridge_build": "PASS",
-  "bridge_tests": "29/29 PASS",
-  "link_build": "PASS",
-  "control_build": "PASS",
-  "control_tests": "10/10 PASS",
-  "binary_payloads_excluded": true,
-  "credentials_excluded": true,
-  "pairing_records_excluded": true,
-  "device_evidence_excluded": true,
-  "requirements_documented": true,
-  "multi_mac_pairing_tests": "22/22 PASS",
-  "multi_mac_pairing": "PUBLIC_ONLY_SIGNED_REQUESTS_AND_BOUNDED_REGISTRY",
-  "device_runtime": "2.4.10_SCHEMA2_PAIRING_READER"
+  "original_revision": "30d2bdc15a906d3d081f6ce64e5f6b9012e511da",
+  "cleanup_branch": "cleanup/release-portability-20261004T025515Z",
+  "privacy": {
+    "pii_audit": "PASS",
+    "allowlisted_immutable_fixture_findings": 32,
+    "unallowlisted_findings": 0,
+    "credentials_discovered": false,
+    "history_rewritten": false
+  },
+  "removed_files": [
+    {
+      "path": "combined_requirements.txt",
+      "reason": "unreferenced near-duplicate dependency list"
+    },
+    {
+      "path": "tools/patches/doodle-ios27-source-probe-v1.patch",
+      "reason": "byte-identical to the referenced canonical patch"
+    }
+  ],
+  "executed_validation": {
+    "tools_unit_tests": "PASS: 238 run, 4 skipped for unavailable private fixtures or compiled app",
+    "host_tools_unit_tests": "PASS: 122 run, 1 skipped because the external source kit is absent",
+    "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
+    "control_source_compatibility_tests": "PASS: 20 run",
+    "bridge_core_tests": "PASS: 33/33",
+    "bridge_release_source_build": "PASS",
+    "link_source_build": "PASS",
+    "link_identity_icon_signature_verification": "PASS",
+    "link_release_sanitizer": "PASS",
+    "eula_verification": "PASS",
+    "source_pii_audit": "PASS",
+    "python_compile": "PASS for release, host, device runtime, and active AFC2 Python sources",
+    "shell_syntax": "PASS: 23 non-vendored tracked shell entry points checked",
+    "markdown_local_links": "PASS",
+    "repository_inventory_reproducibility": "PASS",
+    "release_failure_path_idempotency": "PASS: repeated missing-kit build produced one sanitized audit report"
+  },
+  "not_executed_or_blocked": {
+    "public_pkg_build": "BLOCKED: authorized external kit is absent and known signed inputs contain builder paths",
+    "distribution_signing_and_notarization": "NOT_EXECUTED: publisher credentials unavailable",
+    "control_package_build": "BLOCKED: THEOS is not configured in this environment",
+    "fresh_account_install": "NOT_EXECUTED",
+    "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
+    "intel_runtime_uat": "NOT_EXECUTED",
+    "live_srd_installation": "NOT_EXECUTED: no device mutation was requested",
+    "supported_device_matrix": "NOT_EXECUTED beyond retained exact-build evidence"
+  },
+  "release_result": "BLOCKED",
+  "release_blockers": [
+    "rebuild and re-sign external device payloads without developer paths",
+    "supply the authorized manifest-verified external kit",
+    "complete Developer ID signing and notarization",
+    "execute clean-account Apple Silicon and Intel install/upgrade/uninstall UAT",
+    "execute the documented exact-device SRD matrix"
+  ]
 }

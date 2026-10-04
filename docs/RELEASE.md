@@ -10,6 +10,11 @@ with independent artifact verification through
 preserves the separate iOS/SRD Link and Control payloads; those binaries are
 validated for their device platform, not given Intel slices.
 
+Every run must use a new empty output directory. A successful run contains
+exactly the package, `RELEASE_AUDIT.txt`, `RELEASE_MANIFEST.json`, and
+`SHA256SUMS`. This explicit allowlist prevents stale packages, logs, symbols,
+or local test output from being published with the installer.
+
 1. Start from a clean checkout. Obtain the authorized external kit and its
    manifest separately. Verify toolchain/dependencies with
    `tools/environment_preflight.py`; inspect
@@ -22,10 +27,17 @@ validated for their device platform, not given Intel slices.
    missing Mac architecture slices, incomplete Python wheel coverage,
    unexpected payload contents, unsafe permissions, development files,
    invalid signatures, or Gatekeeper rejection.
-4. Inspect `dist/RELEASE_AUDIT.txt`. When it says `FINAL_RESULT=PASS`, verify
-   the signed package once more with `scripts/verify_release.sh --app APP
-   --package PKG --report REPORT` against the staged signed app. Publish only
-   the audited package and checksums. Retain private symbol archives separately.
+4. Inspect `RELEASE_AUDIT.txt`. When it says `FINAL_RESULT=PASS`, verify the
+   directory and package once more without relying on the removed build tree:
+
+   ```sh
+   python3 tools/release_manifest.py verify /path/to/release
+   scripts/verify_release.sh --release-directory /path/to/release \
+     --report /tmp/0sky-independent-release-audit.txt
+   ```
+
+   Publish the complete four-file set. Retain private symbol archives
+   separately and never add them to the release directory.
 5. On both Apple Silicon and Intel hardware, record clean install, launch,
    upgrade, and supported uninstall/reinstall results. Record `NOT_EXECUTED`
    for unavailable hardware; never relabel slice verification as runtime UAT.
@@ -39,6 +51,11 @@ for unexpected debug entitlements. If notarization is configured, the
 pipeline waits for acceptance, staples the package, and validates the ticket.
 Without a profile, the report says `NOT_EXECUTED` for notarization and
 stapling; it never claims those steps passed.
+
+`RELEASE_MANIFEST.json` records the product version, build, mode, roles, sizes,
+and SHA-256 digests. `SHA256SUMS` covers the installer, audit report, and JSON
+manifest. The verifier rejects symlinks, path components, duplicate entries,
+missing files, checksum drift, and any fifth file.
 
 At present the available external kit blocks `PREPARE_KIT` with
 `FIXED_HOME_PATH` and `DERIVED_DATA_PATH` in signed Frida and PreferenceLoader

@@ -9,6 +9,19 @@ import argparse, json, pathlib, subprocess, sys
 from instance import resolve as resolve_support
 
 
+class RefreshError(RuntimeError):
+    pass
+
+
+def run(argv: list[str], *, timeout: int, **kwargs) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(argv, timeout=timeout, **kwargs)
+    except subprocess.TimeoutExpired as error:
+        raise RefreshError(f"{pathlib.Path(argv[0]).name} timed out after {timeout} seconds") from error
+    except OSError as error:
+        raise RefreshError(f"could not start {pathlib.Path(argv[0]).name}") from error
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--support", type=pathlib.Path,
@@ -34,7 +47,7 @@ def main() -> int:
            "-o", "KbdInteractiveAuthentication=no",
            "-i", config["ssh_key"], "-p", config["ssh_port"],
            f"root@{config['ssh_host']}"]
-    root = subprocess.run(ssh + ['test "$(id -u)" = 0'], check=False)
+    root = run(ssh + ['test "$(id -u)" = 0'], timeout=30, check=False)
     if root.returncode:
         print("[0-Sky Link refresh] ROOT NOT OBTAINED — refusing runtime mutation", flush=True)
         return root.returncode
@@ -53,15 +66,15 @@ def main() -> int:
             " print(response.read().decode('utf-8'))\n"
         )
         command = "/var/jb/usr/bin/python3 - <<'PY'\n" + program + "PY"
-        return subprocess.run(
+        return run(
             ssh + [command], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-            text=True, check=False,
+            text=True, check=False, timeout=30,
         )
 
     if args.status:
         command = "/var/jb/usr/bin/python3 /var/jb/usr/local/libexec/srd-runtime-manager.py status"
         print("[0-Sky Link refresh] device command: " + command, flush=True)
-        result = subprocess.run(ssh + [command], check=False)
+        result = run(ssh + [command], timeout=120, check=False)
         return result.returncode
     if args.registry_only:
         command = ("/var/jb/usr/bin/python3 /var/jb/usr/local/libexec/"
@@ -70,7 +83,7 @@ def main() -> int:
                    "repair-preferences --json; /var/jb/usr/bin/python3 "
                    "/var/jb/usr/local/libexec/crypstore-appctl.py list --json")
         print("[0-Sky Link refresh] device command: " + command, flush=True)
-        result = subprocess.run(ssh + [command], check=False)
+        result = run(ssh + [command], timeout=180, check=False)
         return result.returncode
 
     sync = support/"automation/tools/srd-runtime-manager/sync_runtime_cryptex.py"
@@ -81,7 +94,7 @@ def main() -> int:
                "--udid", config["udid"], "--known-hosts", str(known_hosts),
                "--host-alias", host_alias]
     print("[0-Sky Link refresh] rebuilding the dpkg/filter-derived trust runtime", flush=True)
-    result = subprocess.run(command, check=False)
+    result = run(command, timeout=1800, check=False)
     if result.returncode:
         return result.returncode
     proof = bridge_get("/v1/runtime")
@@ -100,4 +113,8 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        raise SystemExit(main())
+    except (RefreshError, OSError, ValueError, KeyError, json.JSONDecodeError) as error:
+        print(f"[0-Sky Link refresh] FAILED: {error}", file=sys.stderr)
+        raise SystemExit(2)

@@ -219,7 +219,7 @@ with urllib.request.urlopen(request,timeout=10) as response:
     else:
         log("renewing dpkg/filter-derived SRD runtime trust")
         if not args.dry_run:
-            subprocess.run(command,check=True)
+            subprocess.run(command, check=True, timeout=1800)
             # A successful installer process is not itself proof of injection.
             # Wait for the live endpoint to confirm ElleKit and at least one
             # dylib/target before printing the success milestone.

@@ -56,6 +56,7 @@ def derive_ssh_public_key(identity: Path) -> str:
     result = subprocess.run(
         ["/usr/bin/ssh-keygen", "-y", "-f", str(identity)], check=True,
         text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        timeout=15,
     )
     fields = result.stdout.strip().split()
     if len(fields) < 2:

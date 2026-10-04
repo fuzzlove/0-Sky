@@ -16,6 +16,11 @@ import tempfile
 import zipfile
 
 try:
+    from .release_manifest import ManifestError, verify as verify_release_manifest
+except ImportError:
+    from release_manifest import ManifestError, verify as verify_release_manifest
+
+try:
     from .kit_manifest import verify as verify_kit_manifest
     from .release_sanitize import audit, load_deny_patterns
 except ImportError:
@@ -451,16 +456,46 @@ def report_text(values: dict[str, str], errors: list[str], *, candidate: bool = 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", required=True, type=Path)
+    parser.add_argument("--app", type=Path,
+                        help="staged app; optional when --package is provided")
     parser.add_argument("--package", type=Path)
+    parser.add_argument("--release-directory", type=Path,
+                        help="verify the four-file release allowlist and checksums")
     parser.add_argument("--deny-file", type=Path)
     parser.add_argument("--notarized", action="store_true")
     parser.add_argument("--candidate", action="store_true",
                         help="verify all structural gates, report distribution signing BLOCKED")
     parser.add_argument("--report", required=True, type=Path)
     args = parser.parse_args()
-    values, errors = verify(args.app, args.package, args.deny_file, args.notarized,
-                            distribution=not args.candidate)
+    if args.app is None and args.package is None and args.release_directory is None:
+        parser.error("one of --app, --package, or --release-directory is required")
+    manifest_errors: list[str] = []
+    if args.release_directory:
+        try:
+            manifest = verify_release_manifest(args.release_directory)
+            packages = [row["path"] for row in manifest["files"]
+                        if row.get("role") == "installer"]
+            if args.package is None:
+                args.package = args.release_directory / packages[0]
+            elif args.package.resolve() != (args.release_directory / packages[0]).resolve():
+                manifest_errors.append("RELEASE_PACKAGE_NOT_IN_MANIFEST")
+        except (ManifestError, OSError, ValueError, KeyError, IndexError, TypeError):
+            manifest_errors.append("RELEASE_MANIFEST_INVALID")
+    if args.app is None and args.package is None:
+        values, errors = {}, []
+    elif args.app is None:
+        with tempfile.TemporaryDirectory(prefix="0sky-package-only-audit-") as temp:
+            try:
+                app = package_payload(args.package, Path(temp) / "expanded")
+                values, errors = verify(app, args.package, args.deny_file, args.notarized,
+                                        distribution=not args.candidate)
+            except (OSError, ValueError):
+                values = {}
+                errors = ["PACKAGE_EXPANSION_INVALID"]
+    else:
+        values, errors = verify(args.app, args.package, args.deny_file, args.notarized,
+                                distribution=not args.candidate)
+    errors.extend(manifest_errors)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report_text(values, errors, candidate=args.candidate), encoding="utf-8")
     print(f"RELEASE_GATE={'FAIL' if errors else 'BLOCKED' if args.candidate else 'PASS'} errors={len(errors)}")

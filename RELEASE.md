@@ -4,6 +4,11 @@ For the signed Universal 2 package pipeline, start with
 [`docs/RELEASE.md`](docs/RELEASE.md) and [`scripts/build_release.sh`](scripts/build_release.sh).
 The steps below describe lower-level inputs and verification.
 
+Use a new empty `--output` directory for every build. The canonical pipeline
+publishes exactly one package plus `RELEASE_AUDIT.txt`,
+`RELEASE_MANIFEST.json`, and `SHA256SUMS`; stale or extra output files fail the
+build rather than being silently included.
+
 Use a clean checkout and a separately obtained, authorized kit. Keep the kit,
 signing identities, pairing records, SSH keys, provisioning profiles, and
 generated device state outside Git. Verify the kit's provenance before use.
@@ -33,7 +38,8 @@ No personal Team ID or signing certificate is supplied by this repository.
 6. Sign and notarize the Mac app with the publisher's own credentials and
    required entitlements. Verify signatures and architecture slices after
    signing. The local `build.sh` output is unsigned and is **not** a public
-   release artifact.
+   release artifact. `scripts/build_release.sh` emits the minimal checksummed
+   release set only after all gates pass.
 7. On a clean account, verify the complete first-launch EULA, unchecked
    acceptance controls, explicit Decline/Accept paths, and a persisted local
    version/digest/timestamp record. Verify a newer EULA requires acceptance
@@ -42,6 +48,15 @@ No personal Team ID or signing certificate is supplied by this repository.
    pairing, CoreDevice, root SSH, Link icon and registration, Control, bridge,
    wireless reconnect where applicable, upgrade, uninstall/restore, and
    reinstall. Preserve the existing bootstrap and pairing material.
+
+Independently verify a published directory without relying on a retained build
+tree:
+
+```sh
+python3 tools/release_manifest.py verify /path/to/release
+scripts/verify_release.sh --release-directory /path/to/release \
+  --report /tmp/0sky-independent-release-audit.txt
+```
 
 The scanner covers known high-confidence home paths, device IDs, private key
 headers, embedded passwords, developer CoreDevice hostnames, local IPs,

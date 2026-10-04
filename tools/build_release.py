@@ -16,10 +16,12 @@ import sys
 import tempfile
 
 try:
+    from .release_manifest import ManifestError, generate as generate_release_manifest
     from .release_paths import ReleasePaths
     from .signing_identities import discover, require_identity
     from .verify_release import REQUIRED_MAC_BINARIES, report_text
 except ImportError:
+    from release_manifest import ManifestError, generate as generate_release_manifest
     from release_paths import ReleasePaths
     from signing_identities import discover, require_identity
     from verify_release import REQUIRED_MAC_BINARIES, report_text
@@ -114,7 +116,20 @@ def make_deny_file(destination: Path, staging: Path, output: Path,
 def build(kit: Path, output: Path, mode: str, app_identity: str | None,
           installer_identity: str | None, notary_profile: str | None,
           extra_deny: Path | None) -> int:
+    if output.is_symlink() or (output.exists() and not output.is_dir()):
+        print("RELEASE_GATE=FAIL stage=OUTPUT error=UNSAFE_OUTPUT_DIRECTORY", file=sys.stderr)
+        return 2
     output.mkdir(parents=True, exist_ok=True)
+    existing = {item.name for item in output.iterdir()}
+    if existing - {"RELEASE_AUDIT.txt"}:
+        print("RELEASE_GATE=FAIL stage=OUTPUT error=OUTPUT_NOT_EMPTY", file=sys.stderr)
+        return 2
+    prior_report = output / "RELEASE_AUDIT.txt"
+    if prior_report.is_symlink():
+        print("RELEASE_GATE=FAIL stage=OUTPUT error=UNSAFE_OUTPUT_REPORT", file=sys.stderr)
+        return 2
+    if prior_report.exists():
+        prior_report.unlink()
     report = output / "RELEASE_AUDIT.txt"
     stage = "PREFLIGHT"
     state: dict[str, str] = {"Product": "0-Sky Bridge", "Version": "UNKNOWN",
@@ -174,7 +189,7 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
         execute("EULA", [sys.executable, str(ROOT / "tools/verify_eula.py")],
                 timeout=30)
         state["EULA"] = "PASS"
-        with tempfile.TemporaryDirectory(prefix=".0sky-release-", dir=output) as temp:
+        with tempfile.TemporaryDirectory(prefix=".0sky-release-", dir=output.parent) as temp:
             work = Path(temp)
             paths = ReleasePaths.from_work(ROOT, work)
             deny = work / "deny.json"
@@ -261,7 +276,6 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             if notarized:
                 command.append("--notarized")
             execute(stage, command, timeout=900)
-            package.replace(output / package.name)
             content = report.read_text(encoding="utf-8")
             content = content.replace("Clean-build verification: NOT_EXECUTED",
                                       "Clean-build verification: PASS")
@@ -269,9 +283,29 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             content = content.replace("Signing identities: UNKNOWN",
                                       f"Signing identities: {state['Signing identities']}")
             report.write_text(content, encoding="utf-8")
+            stage = "RELEASE_MANIFEST"
+            release_directory = work / "release"
+            release_directory.mkdir(mode=0o755)
+            package.replace(release_directory / package.name)
+            report.replace(release_directory / report.name)
+            generate_release_manifest(
+                release_directory, package.name, product="0-Sky Bridge", version=version,
+                build=state["Build"], mode=mode)
+            stage = "PUBLISH"
+            if output.is_symlink() or any(output.iterdir()):
+                raise ReleaseFailure(stage, "OUTPUT_CHANGED_DURING_BUILD")
+            output.rmdir()
+            os.replace(release_directory, output)
             print(f"{'RELEASE' if mode == 'distribution' else 'NON_PUBLIC_CANDIDATE'}_PACKAGE={package.name}")
             return 0
-    except (ReleaseFailure, OSError, ValueError, json.JSONDecodeError) as error:
+    except (ReleaseFailure, ManifestError, OSError, ValueError, json.JSONDecodeError) as error:
+        if not output.exists():
+            output.mkdir(parents=True, mode=0o755)
+        report = output / "RELEASE_AUDIT.txt"
+        if output.is_symlink() or not output.is_dir() or report.is_symlink():
+            print("RELEASE_GATE=FAIL stage=OUTPUT error=UNSAFE_FAILURE_REPORT",
+                  file=sys.stderr)
+            return 2
         if isinstance(error, ReleaseFailure):
             stage, code = error.stage, error.code
         else:
