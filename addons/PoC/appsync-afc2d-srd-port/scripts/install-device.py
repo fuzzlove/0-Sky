@@ -19,44 +19,18 @@ if str(POC) not in sys.path:
 
 from install_doodle_private_uat import cleanup, install, stage  # noqa: E402
 from repair_device_connection import profiles, usb_identity, worker_namespace  # noqa: E402
+from compatibility import load_profiles, validate_profile  # noqa: E402
 
 
-SPECS = (
-    {
-        "package": "ai.akemi.appsyncunified",
-        "installable": True,
-        "version": "116.0+0sky26.1",
-        "filename": "ai.akemi.appsyncunified_116.0+0sky26.1_iphoneos-arm64.deb",
-        "package_sha256": "0aa9de47e00fe58940027d6af3efef56aae5060731d82de64ade6b63e910a597",
-        "files": {
-            "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-FrontBoard.dylib":
-                "6e85f950c22c2faa9d127dbe59403582ce5b049da19ce30cb7f1928142ee5d30",
-            "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-FrontBoard.plist":
-                "eff0e07afd4afa6713eea91fde32a92d420c39361f2ee021548dc3e01cb552ea",
-            "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-installd.dylib":
-                "c911785e41c7cde4edffbe0af8a10acc99d68b3810dc6eb15a38518384424111",
-            "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-installd.plist":
-                "98d31c678ba9eec7e15cfdc849c2bd26da866d19d5b2e880be5e7cd9c95e3385",
-        },
-    },
-    {
-        "package": "com.cannathea.afc2d-arm64",
-        "installable": True,
-        "version": "1.2.0+0sky27.5",
-        "filename": "com.cannathea.afc2d-arm64_1.2.0+0sky27.5_iphoneos-arm64.deb",
-        "package_sha256": "50c2d7dd3fd53ed399c88a0ef748a1553a2cba49780219260624a764f61fe049",
-        "files": {
-            "/var/jb/Library/MobileSubstrate/DynamicLibraries/afc2dService.dylib":
-                "a6820ed1a222a58aebab2f32a85c5a2aca585a81245fac429cba70ae285bd7a4",
-            "/var/jb/Library/MobileSubstrate/DynamicLibraries/afc2dService.plist":
-                "81221171550150d8cdb6bb341284741d2f02118bcee7dbaaccec0e71ef3e29a2",
-            "/var/jb/usr/lib/afc2d-xpc-shim.dylib":
-                "152b2f68129eb04bb89572d1100e40478b77e8f539c34631dfaddee510bdfeff",
-            "/var/jb/usr/libexec/afc2d":
-                "c900211619e202e1469f049ad7e721897396f3b0e6b27cfa9c9378ffe0b2284e",
-        },
-    },
+PROJECT = Path(__file__).resolve().parents[1]
+DEFAULT_PROFILE_DIR = PROJECT / "profiles"
+_DEFAULT_PROFILE = json.loads(
+    (DEFAULT_PROFILE_DIR / "iPhone13,2-24A5390f.json").read_text()
 )
+# Backward-compatible exports used by host checks; main() resolves all profiles.
+SUPPORTED_DEVICE = _DEFAULT_PROFILE["device"]
+SYSTEM_BINARIES = _DEFAULT_PROFILE["system_binaries"]
+SPECS = tuple(_DEFAULT_PROFILE["packages"])
 
 
 def remote_json(worker: dict, code: str, *, timeout: int = 90) -> dict:
@@ -71,6 +45,177 @@ def remote_json(worker: dict, code: str, *, timeout: int = 90) -> dict:
             + result.stderr.decode("utf-8", "replace")[-800:]
         )
     return json.loads(result.stdout.decode("utf-8", "replace"))
+
+
+def system_binary_identities(worker: dict, paths=None) -> dict:
+    """Read the exact system Mach-O identities used to build this port."""
+    code = r'''import hashlib,json,pathlib,struct,uuid
+paths=%s
+def inspect(raw_path):
+ path=pathlib.Path(raw_path)
+ if not path.is_file():
+  raise RuntimeError('required system binary is missing: '+raw_path)
+ data=path.read_bytes()
+ if len(data)<32:
+  raise RuntimeError('truncated Mach-O: '+raw_path)
+ magic,cputype,cpusubtype,filetype,ncmds,sizeofcmds,flags,reserved=struct.unpack_from('<IiiIIIII',data,0)
+ if magic!=0xfeedfacf or ncmds>4096 or 32+sizeofcmds>len(data):
+  raise RuntimeError('unexpected 64-bit Mach-O header: '+raw_path)
+ cursor=32; image_uuid=None
+ for index in range(ncmds):
+  if cursor+8>len(data):
+   raise RuntimeError('truncated Mach-O load commands: '+raw_path)
+  command,size=struct.unpack_from('<II',data,cursor)
+  if size<8 or cursor+size>len(data):
+   raise RuntimeError('invalid Mach-O load command: '+raw_path)
+  if command==0x1b:
+   if size<24 or image_uuid is not None:
+    raise RuntimeError('invalid LC_UUID command: '+raw_path)
+   image_uuid=str(uuid.UUID(bytes=data[cursor+8:cursor+24])).upper()
+  cursor+=size
+ if image_uuid is None:
+  raise RuntimeError('Mach-O has no LC_UUID: '+raw_path)
+ if cputype!=0x0100000c or cpusubtype&0x00ffffff!=2:
+  raise RuntimeError('required system binary is not arm64e: '+raw_path)
+ return {'uuid':image_uuid,'sha256':hashlib.sha256(data).hexdigest(),'size':len(data),'architecture':'arm64e'}
+print(json.dumps({path:inspect(path) for path in paths},sort_keys=True))
+''' % repr(list(paths or SYSTEM_BINARIES))
+    return remote_json(worker, code)
+
+
+def dyld_shared_cache_identities(worker: dict) -> list[dict]:
+    code = r'''import ctypes,json,uuid
+library=ctypes.CDLL(None)
+value=(ctypes.c_ubyte*16)()
+get_uuid=library._dyld_get_shared_cache_uuid
+get_uuid.argtypes=[ctypes.POINTER(ctypes.c_ubyte)]
+get_uuid.restype=ctypes.c_bool
+size=ctypes.c_size_t()
+get_range=library._dyld_get_shared_cache_range
+get_range.argtypes=[ctypes.POINTER(ctypes.c_size_t)]
+get_range.restype=ctypes.c_void_p
+base=get_range(ctypes.byref(size))
+if not get_uuid(value) or not base or not size.value:
+ raise RuntimeError('dyld shared cache identity is unavailable')
+print(json.dumps([{'kind':'process_primary_shared_cache','uuid':str(uuid.UUID(bytes=bytes(value))).upper(),'mapped_size':size.value}]))
+'''
+    return remote_json(worker, code)
+
+
+def compatibility_mismatches(identity: dict, binaries: dict | None = None,
+                             profile: dict | None = None,
+                             shared_caches: list[dict] | None = None) -> list[str]:
+    """Return public-identity and, when supplied, binary-identity mismatches."""
+    mismatches = []
+    profile = profile or _DEFAULT_PROFILE
+    for key, expected in profile["device"].items():
+        observed = identity.get(key)
+        if observed != expected:
+            mismatches.append(f"{key} expected {expected!r}, observed {observed!r}")
+    if binaries is None:
+        return mismatches
+    for path, expected in profile["system_binaries"].items():
+        observed = binaries.get(path)
+        if not isinstance(observed, dict):
+            mismatches.append(f"{path} identity is missing")
+            continue
+        for key in ("uuid", "sha256"):
+            actual = observed.get(key)
+            wanted = expected[key]
+            if not isinstance(actual, str) or actual.lower() != wanted.lower():
+                mismatches.append(
+                    f"{path} {key} expected {wanted!r}, observed {actual!r}"
+                )
+        if observed.get("architecture") != expected.get("architecture"):
+            mismatches.append(
+                f"{path} architecture expected {expected.get('architecture')!r}, "
+                f"observed {observed.get('architecture')!r}"
+            )
+        if observed.get("size") != expected.get("size"):
+            mismatches.append(
+                f"{path} size expected {expected.get('size')!r}, "
+                f"observed {observed.get('size')!r}"
+            )
+    if shared_caches is None:
+        mismatches.append("dyld shared-cache identity evidence is missing")
+    else:
+        expected_caches = {
+            (item.get("kind"), str(item.get("uuid", "")).upper(),
+             item.get("mapped_size"))
+            for item in profile.get("dyld_shared_caches", [])
+        }
+        observed_caches = {
+            (item.get("kind"), str(item.get("uuid", "")).upper(),
+             item.get("mapped_size"))
+            for item in shared_caches
+        }
+        if observed_caches != expected_caches:
+            mismatches.append(
+                f"dyld shared-cache identities expected {sorted(expected_caches)!r}, "
+                f"observed {sorted(observed_caches)!r}"
+            )
+    return mismatches
+
+
+def validate_compatibility(identity: dict, binaries: dict | None = None,
+                           profile: dict | None = None,
+                           shared_caches: list[dict] | None = None) -> None:
+    """Fail closed unless the supplied compatibility evidence exactly matches."""
+    mismatches = compatibility_mismatches(
+        identity, binaries, profile, shared_caches
+    )
+    if mismatches:
+        raise RuntimeError(
+            "UNSUPPORTED_DEVICE_BUILD: exact-build preflight failed: "
+            + "; ".join(mismatches)
+        )
+
+
+def compatibility_preflight(worker: dict, identity: dict,
+                            available_profiles: list[dict] | None = None) -> dict:
+    available_profiles = available_profiles or load_profiles(DEFAULT_PROFILE_DIR)
+    for profile in available_profiles:
+        try:
+            validate_profile(profile)
+        except ValueError as error:
+            raise RuntimeError(
+                "INVALID_COMPATIBILITY_PROFILE: " + str(error)
+            ) from error
+    public_matches = [profile for profile in available_profiles
+                      if not compatibility_mismatches(identity, profile=profile)]
+    if not public_matches:
+        raise RuntimeError(
+            "UNSUPPORTED_DEVICE_BUILD: no profile matches the product/version/build"
+        )
+    paths = sorted({path for profile in public_matches
+                    for path in profile["system_binaries"]})
+    binaries = system_binary_identities(worker, paths)
+    shared_caches = dyld_shared_cache_identities(worker)
+    exact_matches = [profile for profile in public_matches
+                     if not compatibility_mismatches(
+                         identity, binaries, profile, shared_caches
+                     )]
+    if len(exact_matches) != 1:
+        raise RuntimeError(
+            "UNSUPPORTED_DEVICE_BUILD: no unique profile matches the exact "
+            "system-binary and dyld shared-cache identities"
+        )
+    profile = exact_matches[0]
+    if profile.get("status") != "reviewed":
+        raise RuntimeError(
+            "COMPATIBILITY_PROFILE_NOT_REVIEWED: offsets were discovered for "
+            f"{identity.get('product')} {identity.get('build')}, but the profile "
+            "has not been approved for package construction or installation"
+        )
+    if not profile.get("packages"):
+        raise RuntimeError("COMPATIBILITY_PROFILE_HAS_NO_BOUND_PACKAGES")
+    return {
+        "result": "EXACT_BUILD_MATCH",
+        "profile": profile,
+        "profile_path": profile.get("_path"),
+        "system_binaries": binaries,
+        "dyld_shared_caches": shared_caches,
+    }
 
 
 def state(worker: dict, spec: dict) -> dict:
@@ -108,7 +253,10 @@ heartbeat=pathlib.Path('/var/jb/var/run/crypstore-worker.json')
 try:
  worker=json.loads(heartbeat.read_text());worker={'age_seconds':time.time()-worker['timestamp'],'pairing':worker.get('apple_pairing_verified'),'identity':worker.get('host_identity_verified')}
 except Exception as error:worker={'error':type(error).__name__}
-owned_dylibs=[os.path.realpath(path) for path in paths if path.endswith('.dylib')]
+owned_dylibs=[os.path.realpath(path) for path in paths
+              if path.endswith('.dylib') and path.startswith((
+                  '/var/jb/Library/MobileSubstrate/DynamicLibraries/',
+                  '/var/jb/usr/lib/TweakInject/'))]
 print(json.dumps({'version_status':query.stdout.strip() if query.returncode==0 else None,'files':files,'apt_check_exit':apt.returncode,'apt_check_error':apt.stderr[-1000:],'dpkg_audit_exit':audit.returncode,'dpkg_audit':audit.stdout[-4000:],'owned_dylibs':owned_dylibs,'runtime_generation':registry.get('generation'),'runtime_expected':expected,'runtime_loaded':loaded,'runtime_quarantine':quarantined,'worker':worker}))
 ''' % (repr(spec["package"]), repr(list(spec["files"])))
     return remote_json(worker, code)
@@ -152,29 +300,40 @@ def main() -> int:
     parser.add_argument("--instance", required=True)
     parser.add_argument("--dist", type=Path, required=True)
     parser.add_argument("--report", type=Path, required=True)
+    parser.add_argument("--profiles-dir", type=Path, default=DEFAULT_PROFILE_DIR)
     parser.add_argument(
         "--package",
         action="append",
-        choices=[spec["package"] for spec in SPECS],
         help="install only the selected package; repeat to select more than one",
     )
     args = parser.parse_args()
     if args.report.exists() or args.report.is_symlink():
         raise FileExistsError("refusing to overwrite transaction evidence")
     identity = asyncio.run(usb_identity(args.udid))
-    if identity.get("product") != "iPhone13,2":
-        raise RuntimeError("selected USB device is not the confirmed iPhone 12")
+    available_profiles = load_profiles(args.profiles_dir)
+    if not any(not compatibility_mismatches(identity, profile=profile)
+               for profile in available_profiles):
+        raise RuntimeError("UNSUPPORTED_DEVICE_BUILD: no public identity profile")
     selected = profiles(instance_name=args.instance)
     if args.udid not in selected:
         raise RuntimeError("paired worker does not match the exact USB identity")
     worker = worker_namespace(selected[args.udid][1])
-    report = {"schema": 1, "device": identity, "started_at": int(time.time()),
+    preflight = compatibility_preflight(worker, identity, available_profiles)
+    selected_profile = preflight.pop("profile")
+    specs = tuple(selected_profile["packages"])
+    known_packages = {spec["package"] for spec in specs}
+    unknown_packages = set(args.package or ()) - known_packages
+    if unknown_packages:
+        raise ValueError("selected profile has no package definition for: "
+                         + ", ".join(sorted(unknown_packages)))
+    report = {"schema": 1, "device": identity, "preflight": preflight,
+              "started_at": int(time.time()),
               "result": "UNTESTED", "packages": []}
     exit_code = 0
     selected_packages = set(args.package or (
-        spec["package"] for spec in SPECS if spec.get("installable", True)
+        spec["package"] for spec in specs if spec.get("installable", True)
     ))
-    for spec in (item for item in SPECS if item["package"] in selected_packages):
+    for spec in (item for item in specs if item["package"] in selected_packages):
         if not spec.get("installable", True):
             raise RuntimeError(
                 spec["package"]

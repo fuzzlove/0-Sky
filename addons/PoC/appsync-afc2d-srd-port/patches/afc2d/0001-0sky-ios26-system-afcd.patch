@@ -31,10 +31,10 @@ index e557d30..de59d4e 100644
 -include $(THEOS_MAKE_PATH)/tool.mk
  include $(THEOS_MAKE_PATH)/tweak.mk
 diff --git a/afc2dService.xm b/afc2dService.xm
-index 039e975..630755a 100644
+index 039e975..21c640b 100644
 --- a/afc2dService.xm
 +++ b/afc2dService.xm
-@@ -22,22 +22,312 @@
+@@ -22,22 +22,399 @@
  
  #import <CoreFoundation/CoreFoundation.h>
  #import <Foundation/Foundation.h>
@@ -55,23 +55,17 @@ index 039e975..630755a 100644
 -    NSDictionary *origDict = (NSDictionary *)CFBridgingRelease(%orig);
 +#include <string.h>
 +
-+// These offsets are valid only for the UUID below.
-+static const uintptr_t kCFRunLoopReturnOffset = 0xf454;
-+static const uintptr_t kServiceArkAddEntryOffset = 0x1b268;
-+static const uintptr_t kServiceArkInMainFrameOffset = 0x68;
-+static const uint8_t kExpectedLockdownUUID[16] = {
-+    0xc5, 0x9e, 0x0b, 0xd6, 0x8b, 0x64, 0x32, 0xdd,
-+    0xa3, 0x3a, 0x26, 0x70, 0x80, 0x1c, 0xd9, 0xe4,
-+};
++// Generated from a reviewed exact-binary compatibility profile.
++#include "0sky-compatibility.h"
++
++typedef void (*ServiceArkAddEntryFunction)(void *ark,
++    CFDictionaryRef original, CFStringRef label,
++    CFDictionaryRef normalized, bool *loaded);
  
 -    if ([origDict isKindOfClass:[NSDictionary class]] && origDict[@"com.apple.afc"])
 -    {
 -        NSMutableDictionary *mDict = [origDict mutableCopy];
 -        mDict[@"com.apple.afc2"] = @{
-+typedef void (*ServiceArkAddEntryFunction)(void *ark,
-+    CFDictionaryRef original, CFStringRef label,
-+    CFDictionaryRef normalized, bool *loaded);
-+
 +static NSDictionary *AFC2ServiceDefinition(void)
 +{
 +    static NSDictionary *service;
@@ -84,9 +78,17 @@ index 039e975..630755a 100644
 +            @"ProgramArguments": @[ROOT_PATH_NS(@"/usr/libexec/afc2d")],
 +            @"USBOnlyService": @true,
 +            @"UserName": @"root",
-+        };
+         };
+-        return CFBridgingRetain(mDict);
 +    });
 +    return service;
++}
++
++static bool ImageRangeIsInText(uintptr_t offset, size_t size,
++    uintptr_t textOffset, size_t textSize)
++{
++    return size <= textSize && offset >= textOffset
++        && offset - textOffset <= textSize - size;
 +}
 +
 +static bool LockdownBuildMatches(const struct mach_header_64 *header)
@@ -96,18 +98,104 @@ index 039e975..630755a 100644
 +    }
 +
 +    const uint8_t *cursor = (const uint8_t *)header + sizeof(*header);
++    if (header->sizeofcmds > 16 * 1024 * 1024
++            || (uintptr_t)cursor + header->sizeofcmds < (uintptr_t)cursor) {
++        return false;
++    }
++    const uint8_t *commandsEnd = cursor + header->sizeofcmds;
++    bool uuidMatched = false;
++    bool foundText = false;
++    uintptr_t textOffset = 0;
++    size_t textSize = 0;
 +    for (uint32_t index = 0; index < header->ncmds; ++index) {
++        if ((size_t)(commandsEnd - cursor) < sizeof(struct load_command)) {
++            return false;
++        }
 +        const struct load_command *command = (const struct load_command *)cursor;
-+        if (command->cmdsize < sizeof(*command)) {
++        if (command->cmdsize < sizeof(*command)
++                || command->cmdsize > (size_t)(commandsEnd - cursor)) {
 +            return false;
 +        }
 +        if (command->cmd == LC_UUID && command->cmdsize >= sizeof(struct uuid_command)) {
 +            const struct uuid_command *uuid = (const struct uuid_command *)command;
-+            return memcmp(uuid->uuid, kExpectedLockdownUUID, sizeof(kExpectedLockdownUUID)) == 0;
++            uuidMatched = memcmp(uuid->uuid, kExpectedLockdownUUID,
++                sizeof(kExpectedLockdownUUID)) == 0;
++        }
++        if (command->cmd == LC_SEGMENT_64
++                && command->cmdsize >= sizeof(struct segment_command_64)) {
++            const struct segment_command_64 *segment =
++                (const struct segment_command_64 *)command;
++            size_t sectionBytes = (size_t)segment->nsects * sizeof(struct section_64);
++            if (sectionBytes / sizeof(struct section_64) != segment->nsects
++                    || sizeof(*segment) + sectionBytes > command->cmdsize) {
++                return false;
++            }
++            if (strncmp(segment->segname, "__TEXT", sizeof(segment->segname)) == 0) {
++                const struct section_64 *sections =
++                    (const struct section_64 *)(segment + 1);
++                for (uint32_t sectionIndex = 0;
++                        sectionIndex < segment->nsects; ++sectionIndex) {
++                    const struct section_64 *section = &sections[sectionIndex];
++                    if (strncmp(section->sectname, "__text",
++                            sizeof(section->sectname)) == 0
++                            && strncmp(section->segname, "__TEXT",
++                            sizeof(section->segname)) == 0) {
++                        if (section->addr < segment->vmaddr
++                                || section->size > SIZE_MAX) {
++                            return false;
++                        }
++                        textOffset = (uintptr_t)(section->addr - segment->vmaddr);
++                        textSize = (size_t)section->size;
++                        foundText = true;
++                    }
++                }
++            }
 +        }
 +        cursor += command->cmdsize;
 +    }
-+    return false;
++
++    if (cursor != commandsEnd || !uuidMatched || !foundText
++            || kCFRunLoopReturnOffset < sizeof(uint32_t)
++            || !ImageRangeIsInText(kCFRunLoopReturnOffset - sizeof(uint32_t),
++                sizeof(uint32_t), textOffset, textSize)
++            || !ImageRangeIsInText(kServiceArkAddEntryOffset,
++                2 * sizeof(uint32_t), textOffset, textSize)
++            || !ImageRangeIsInText(kExpectedMainSequenceOffset,
++                sizeof(kExpectedMainSequenceInstructions), textOffset, textSize)
++            || kServiceArkInMainFrameOffset == 0
++            || (kServiceArkInMainFrameOffset & (sizeof(uintptr_t) - 1)) != 0
++            || kServiceArkInMainFrameOffset > 4096) {
++        return false;
++    }
++
++    uint32_t runLoopInstruction = 0;
++    uint32_t addEntryInstructions[2] = {};
++    uint32_t mainSequence[4] = {};
++    memcpy(&runLoopInstruction,
++        (const uint8_t *)header + kCFRunLoopReturnOffset - sizeof(uint32_t),
++        sizeof(runLoopInstruction));
++    memcpy(addEntryInstructions,
++        (const uint8_t *)header + kServiceArkAddEntryOffset,
++        sizeof(addEntryInstructions));
++    memcpy(mainSequence, (const uint8_t *)header + kExpectedMainSequenceOffset,
++        sizeof(mainSequence));
++    if (runLoopInstruction != kExpectedRunLoopCallInstruction
++            || addEntryInstructions[0] != kExpectedAddEntryInstruction0
++            || addEntryInstructions[1] != kExpectedAddEntryInstruction1
++            || memcmp(mainSequence, kExpectedMainSequenceInstructions,
++                sizeof(mainSequence)) != 0) {
++        return false;
++    }
++
++    typedef bool (*GetSharedCacheUUIDFunction)(uint8_t *uuid);
++    GetSharedCacheUUIDFunction getSharedCacheUUID =
++        (GetSharedCacheUUIDFunction)dlsym(
++            RTLD_DEFAULT, "_dyld_get_shared_cache_uuid");
++    uint8_t sharedCacheUUID[16] = {};
++    return getSharedCacheUUID != NULL
++        && getSharedCacheUUID(sharedCacheUUID)
++        && memcmp(sharedCacheUUID, kExpectedSharedCacheUUID,
++            sizeof(sharedCacheUUID)) == 0;
 +}
 +
 +static bool ReadTaskMemory(vm_address_t address, void *destination, vm_size_t size)
@@ -141,8 +229,7 @@ index 039e975..630755a 100644
 +        id probes[] = {
 +            empty, single, multiple, mutableDictionary,
 +            (__bridge id)cfDictionary, (__bridge id)cfMutable,
-         };
--        return CFBridgingRetain(mDict);
++        };
 +        for (unsigned index = 0; index < 6; ++index) {
 +            dictionaryClasses[index] =
 +                ((uintptr_t)object_getClass(probes[index])) & isaMask;
@@ -380,7 +467,7 @@ index 7d642f3..48bb566 100644
  Author: saurik, Cannathea <csupport@cannathea.com>
  Homepage: https://cannathea.com/
  Depiction: https://cydia.akemi.ai/?page/com.cannathea.afc2d-arm64
-diff --git a/layout/DEBIAN/postinst b/tmp/afc2-patchgen.BGNniB/a/layout/DEBIAN/postinst
+diff --git a/layout/DEBIAN/postinst b/layout/DEBIAN/postinst
 deleted file mode 100755
 index bba968a..0000000
 --- a/layout/DEBIAN/postinst
@@ -389,7 +476,7 @@ index bba968a..0000000
 -#!/bin/bash
 -launchctl kill 9 system/com.apple.mobile.lockdown
 -exit 0
-diff --git a/layout/DEBIAN/postrm b/tmp/afc2-patchgen.BGNniB/a/layout/DEBIAN/postrm
+diff --git a/layout/DEBIAN/postrm b/layout/DEBIAN/postrm
 deleted file mode 100755
 index 33f48d1..0000000
 --- a/layout/DEBIAN/postrm
@@ -402,7 +489,7 @@ index 33f48d1..0000000
 -rm -f /tmp/entitlements_afc2d.xml
 -
 -exit 0
-diff --git a/layout/usr/libexec/afc2d b/tmp/afc2-patchgen.BGNniB/a/layout/usr/libexec/afc2d
+diff --git a/layout/usr/libexec/afc2d b/layout/usr/libexec/afc2d
 deleted file mode 100644
 index deadf9d..0000000
 --- a/layout/usr/libexec/afc2d

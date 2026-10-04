@@ -10,7 +10,10 @@ def install_for(udid):
  asyncio.run(usb_identity(udid))
  ref=hashlib.sha256(udid.encode()).hexdigest()[:16]
  output=HERE/'connection-repair'/ref/('launch-helper-'+uuid.uuid4().hex)
- output.mkdir(mode=0o700)
+ # The device-specific evidence directory is not guaranteed to exist on a
+ # newly enrolled Mac profile.  Create the confined parent chain before the
+ # per-run directory; the random leaf still prevents accidental reuse.
+ output.mkdir(parents=True,mode=0o700)
  source=HERE/'localfence-repair-v2/payload/launchctl-srd'
  expected=json.loads((HERE/'localfence-repair-v2/payload-sha256.json').read_text())['launchctl-srd']
  if hashlib.sha256(source.read_bytes()).hexdigest()!=expected:raise RuntimeError('Helper hash mismatch')

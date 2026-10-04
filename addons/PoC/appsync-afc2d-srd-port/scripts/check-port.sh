@@ -43,6 +43,13 @@ check_macho() {
         echo "$binary: ad-hoc CodeDirectory verification failed" >&2
         exit 1
     fi
+    # dyld on iOS 27 rejects injected images without LC_UUID.  Do not trade
+    # loadability for a linker-level reproducibility shortcut.
+    uuid_count=$(otool -arch all -l "$binary" | grep -c 'cmd LC_UUID')
+    if [ "$uuid_count" -ne 2 ]; then
+        echo "$binary: expected one LC_UUID in each architecture slice" >&2
+        exit 1
+    fi
     if otool -L "$binary" | grep -E '/(Users|Volumes)/' >/dev/null; then
         echo "$binary: host library path found" >&2
         exit 1

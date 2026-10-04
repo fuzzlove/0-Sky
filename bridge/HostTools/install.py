@@ -268,9 +268,9 @@ def install_agent(label: str, payload: bytes, agents: Path) -> None:
                         f"loading {label}")
 
 
-def exact_forward_exists(udid: str, port: int) -> bool:
+def exact_forward_exists(udid: str, port: int, remote_port: int) -> bool:
     from pair import exact_iproxy_present
-    return exact_iproxy_present(udid, str(port))
+    return exact_iproxy_present(udid, str(port), str(remote_port))
 
 
 def main() -> int:
@@ -279,6 +279,7 @@ def main() -> int:
     parser.add_argument("--ssh-key", required=True, type=Path)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=2222)
+    parser.add_argument("--remote-port", type=int, default=22)
     parser.add_argument("--instance-name")
     parser.add_argument("--support", type=Path,
                         default=Path.home() / "Library/Application Support/0-Sky")
@@ -291,8 +292,9 @@ def main() -> int:
         if sys.platform != "darwin":
             raise InstallError("the host companion requires macOS")
         arch = host_architecture()
-        if not UDID_RE.fullmatch(args.udid) or not 1024 <= args.port <= 65535:
-            raise InstallError("an exact device UDID and unprivileged SSH port are required")
+        if (not UDID_RE.fullmatch(args.udid) or not 1024 <= args.port <= 65535
+                or not 1 <= args.remote_port <= 65535):
+            raise InstallError("an exact device UDID and valid SSH ports are required")
         instance = args.instance_name or args.udid.lower()
         if not INSTANCE_RE.fullmatch(instance):
             raise InstallError("instance name must be a stable lowercase label")
@@ -309,6 +311,7 @@ def main() -> int:
         directory = support / "instances" / instance
         config = {"schema": 2, "instance": instance, "udid": args.udid,
                   "ssh_host": args.host, "ssh_port": str(args.port),
+                  "ssh_remote_port": str(args.remote_port),
                   "ssh_key": str(key), "ssh_known_hosts": str(directory / "device-known-hosts"),
                   "ssh_host_alias": device_alias(args.udid),
                   "bluetooth_port": bluetooth_port(args.udid),
@@ -324,6 +327,7 @@ def main() -> int:
         pair = kit / "host-mac/pair.py"
         pair_argv = [python, pair, "--udid", args.udid, "--ssh-key", key,
                      "--host", args.host, "--port", str(args.port),
+                     "--remote-port", str(args.remote_port),
                      "--instance-name", instance, "--support", support,
                      "--pymobile-python", python]
         pair_argv.append("--verify-only" if args.verify_pairing_only else "--confirm-host-enrollment")
@@ -348,11 +352,17 @@ def main() -> int:
             raise InstallError("Mac SSH key fingerprint is unavailable")
         env = {"CRYPSTORE_INSTANCE_DIR": str(directory), "CRYPSTORE_DEVICE_HOST": args.host,
                "CRYPSTORE_DEVICE_PORT": str(args.port), "CRYPSTORE_DEVICE_USER": "root",
+               "CRYPSTORE_DEVICE_REMOTE_PORT": str(args.remote_port),
                "CRYPSTORE_DEVICE_KEY": str(key), "CRYPSTORE_DEVICE_UDID": args.udid,
                "CRYPSTORE_DEVICE_KNOWN_HOSTS": str(directory / "device-known-hosts"),
                "CRYPSTORE_DEVICE_HOST_ALIAS": device_alias(args.udid),
                "CRYPSTORE_HOST_KEY_FINGERPRINT": parts[1],
-               "CRYPSTORE_WIRELESS_SSH": "1", "SRD_PYTHON": str(python),
+               # A recovery SSH Cryptex may intentionally listen on a
+               # device-only port.  CoreDevice port 22 can then be a different
+               # SSH service with a different authorized-key set, so it is not
+               # a valid failover route for this enrolled profile.
+               "CRYPSTORE_WIRELESS_SSH": "1" if args.remote_port == 22 else "0",
+               "SRD_PYTHON": str(python),
                "CRYPSTORE_BLUETOOTH_PORT": str(bluetooth_port(args.udid)),
                "CRYPSTORE_BLUETOOTH_STATE": str(directory / "bluetooth/state.json")}
         helper = directory / "host-mac/zero-sky-bluetooth-tunnel"
@@ -365,7 +375,7 @@ def main() -> int:
                                                "--state-file", str(directory / "bluetooth/state.json")],
             f"{PREFIX}-device-bridge.{instance}": [str(bridge)],
         }
-        if not exact_forward_exists(args.udid, args.port):
+        if not exact_forward_exists(args.udid, args.port, args.remote_port):
             listener = run(["/usr/sbin/lsof", "-nP", f"-iTCP:{args.port}", "-sTCP:LISTEN"], 10)
             if listener.returncode == 0 and listener.stdout.strip():
                 raise InstallError("SSH port is occupied by another listener; choose another port")
@@ -373,7 +383,8 @@ def main() -> int:
             if not iproxy:
                 raise InstallError("iproxy is required for USB SSH")
             definitions[f"{PREFIX}-usbmux.{instance}"] = [iproxy, "-s", "127.0.0.1",
-                                                            "-u", args.udid, f"{args.port}:22"]
+                                                            "-u", args.udid,
+                                                            f"{args.port}:{args.remote_port}"]
         generated = directory / "launchagents"
         generated.mkdir(mode=0o700, exist_ok=True)
         payloads = {label: agent(label, program, env, directory / "logs")

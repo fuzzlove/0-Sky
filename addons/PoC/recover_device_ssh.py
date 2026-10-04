@@ -144,7 +144,7 @@ async def install(udid, identifier, assets):
         await asyncio.wait_for(service.install(data["Cryptex1,GenericDmg"],
             data["Cryptex1,GenericTrustCache"], ticket, data["Cryptex1,CryptexInfoPlist"],
             data["Cryptex1,GenericVolume"], properties, image_type_index=10,
-            persistence=2, nonce_persistence=1, auth=0), timeout=90)
+            persistence=2, nonce_persistence=1, auth=0), timeout=900)
 
 
 async def remove(udid, identifier):

@@ -389,7 +389,7 @@ def visible_usb_devices(python: Path | None) -> list[str]:
 
 
 def agent_checks(instance: str, support: Path, udid: str, port: int,
-                 identity: Path) -> list[Check]:
+                 remote_port: int, identity: Path) -> list[Check]:
     checks: list[Check] = []
     agents = Path.home() / "Library/LaunchAgents"
     domain = f"gui/{os.getuid()}"
@@ -414,7 +414,11 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
                 and environment.get("CRYPSTORE_DEVICE_KEY") == str(identity)
             )
             if role == "usbmux":
-                valid = valid and "-u" in arguments and udid in arguments and f"{port}:{environment.get("CRYPSTORE_DEVICE_REMOTE_PORT", "22")}" in arguments
+                forwarded = f"{port}:{remote_port}"
+                valid = (valid and "-u" in arguments and udid in arguments
+                         and forwarded in arguments
+                         and environment.get("CRYPSTORE_DEVICE_REMOTE_PORT", "22")
+                         == str(remote_port))
             elif role == "worker":
                 valid = valid and any(item.endswith("/crypstore_worker.py") for item in arguments)
             else:
@@ -456,6 +460,7 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
         proof = subprocess.run([
             str(python), str(pair), "--udid", udid, "--ssh-key", str(identity),
             "--host", "127.0.0.1", "--port", str(port),
+            "--remote-port", str(remote_port),
             "--instance-name", instance, "--support", str(support),
             "--pymobile-python", str(python), "--verify-only", "--require-worker",
         ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -476,7 +481,7 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
 
 def host_checks(sdk: str, requested_python: Path | None, support: Path,
                 identity: Path, instance: str | None, udid: str | None,
-                port: int) -> tuple[list[Check], Path | None]:
+                port: int, remote_port: int) -> tuple[list[Check], Path | None]:
     checks: list[Check] = []
     checks.append(Check(
         "PASS" if sys.platform == "darwin" else "FAIL",
@@ -554,7 +559,9 @@ def host_checks(sdk: str, requested_python: Path | None, support: Path,
             "rerun this script with --setup-python or create an ed25519 key",
         ))
     if instance and udid:
-        checks.extend(agent_checks(instance, support, udid, port, identity))
+        checks.extend(agent_checks(
+            instance, support, udid, port, remote_port, identity
+        ))
     return checks, selected
 
 
@@ -803,6 +810,8 @@ def main() -> int:
     parser.add_argument("--udid", help="exact authorized SRD USB UDID; auto-detected when possible")
     parser.add_argument("--instance-name", help="stable per-device LaunchAgent suffix")
     parser.add_argument("--port", type=int)
+    parser.add_argument("--remote-port", type=int, default=22,
+                        help="device-side SSH port behind the exact-UDID USB tunnel")
     parser.add_argument("--identity", type=Path)
     parser.add_argument("--python", type=Path, help="candidate Python interpreter")
     parser.add_argument("--support", type=Path)
@@ -838,8 +847,8 @@ def main() -> int:
         print(json.dumps(public_user_config(config, config_file), indent=2, sort_keys=True))
         return 0
 
-    if not 1 <= args.port <= 65535:
-        raise SystemExit("--port must be between 1 and 65535")
+    if not 1 <= args.port <= 65535 or not 1 <= args.remote_port <= 65535:
+        raise SystemExit("--port and --remote-port must be between 1 and 65535")
 
     if args.setup or args.install_tools or args.fix_missing:
         request_command_line_tools()
@@ -862,6 +871,7 @@ def main() -> int:
             selected, INSTALLER, "--udid", target,
             "--ssh-key", identity, "--host", "127.0.0.1",
             "--port", str(args.port), "--instance-name", instance,
+            "--remote-port", str(args.remote_port),
             "--support", support,
         ])
 
@@ -869,7 +879,7 @@ def main() -> int:
         args.sdk, args.python, support, identity,
         None if args.requirements_only else instance,
         None if args.requirements_only else target,
-        args.port,
+        args.port, args.remote_port,
     )
     if target:
         checks.append(Check("PASS", "USB target", target))

@@ -247,6 +247,9 @@ struct BridgeCoreTestRunner {
         try expectThrows("unsafe instance accepted") {
             _ = try BridgeValidation.validateInstance("../other")
         }
+        let environment = try BridgeValidation.safeEnvironment()
+        try expect(environment["PYTHONDONTWRITEBYTECODE"] == "1",
+                   "approved Python processes may mutate the signed app bundle")
         let profile = DeviceProfile(
             udid: "00000000-0000000000000001", instanceName: "research-ipad",
             localPort: 2231, sshHostAlias: "0sky-device-aaaaaaaaaaaaaaaaaaaaaaaa",
