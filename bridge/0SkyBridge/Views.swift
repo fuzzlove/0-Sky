@@ -359,7 +359,7 @@ struct DevicesView: View {
                         HealthDetails(snapshot: model.health)
                         HStack {
                             if !model.selectedHasProfile {
-                                Button("Set Up New Device") { model.enrollSelectedDevice() }
+                                Button("Set Up New Device…") { model.enrollSelectedDevice() }
                                     .buttonStyle(.borderedProminent)
                             }
                             Button("Pair This Mac") { model.pairDevice() }
@@ -1325,7 +1325,7 @@ struct SetupAssistantView: View {
         case 2: "The app inspects instance-scoped USB, worker, bridge, and Bluetooth services."
         case 3: "Connect and unlock an authorized iPhone or iPad. Discovery runs continuously."
         case 4: "Approve this Mac using Apple's normal Trust This Computer and Developer Paired Macs workflows."
-        case 5: "Use Pair This Mac. The operation adds this computer to the device's bounded trusted-Mac registry without replacing existing computers."
+        case 5: "For an already prepared SRD, Pair This Mac adds this computer to the bounded trusted-Mac registry. For a fresh SRD, continue to Complete Project Setup; it establishes SRDssh over exact-device RemoteXPC before it creates the host pairing."
         case 6: "Enable wireless pairing while USB remains connected."
         case 7: "Install the complete device-side 0-Sky Project—including Link and Control—with one reviewed, instance-scoped operation. Detailed output is retained in the researcher console and logs."
         case 8: "0-Sky Link is verified over the authenticated, pinned device connection."

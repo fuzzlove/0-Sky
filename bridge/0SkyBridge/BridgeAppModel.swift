@@ -609,20 +609,17 @@ final class BridgeAppModel: ObservableObject {
     }
 
     func enrollSelectedDevice() {
-        guard let device = selectedDevice else { return }
-        launchTrackedOperation("Set Up New Device") { [weak self] in
-            guard let self else { return }
-            await self.perform("Set Up New Device") { [environment] in
-            try await environment.enrollment.enroll(device: device) { event in
-                Task { await environment.logs.append(
-                    category: .pairing,
-                    level: event.stream == .stderr ? .warning : .info,
-                    message: DiagnosticRedactor.redact(event.line),
-                    deviceID: device.udid
-                ) }
-            }
-            }
-        }
+        guard selectedDevice != nil else { return }
+        // A fresh SRD does not have an SSH service yet. Running the host-only
+        // enrollment installer here creates a circular dependency: pairing
+        // requires SRDssh, while the user has not reached the RemoteXPC stage
+        // that installs SRDssh. Always enter the confirmed guided pipeline;
+        // setupCompleteProject establishes SRDssh first and then converges the
+        // host profile, pairing, applications, and health checks.
+        // The device card is already the explicit target-selection context;
+        // open directly on the reviewed complete-project confirmation instead
+        // of inviting the user to run the impossible pre-SRDssh pairing step.
+        openSetupAssistant(step: 7)
     }
 
     func removeDeviceFromBridge(_ device: SkyDevice) {

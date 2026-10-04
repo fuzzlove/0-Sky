@@ -111,6 +111,14 @@ identifier.
    under the selected instance, while the UI receives a bounded redacted cause
    and condition-specific recovery action. Symlinked transcript destinations
    fail closed, and diagnostic exports retain only redacted operation output.
+10. **The fresh-device shortcut invoked host pairing before SRDssh existed.**
+    Live Intel inspection reproduced a USB-visible fresh SRD with no SSH
+    Cryptex, while **Set Up New Device** called the host-only enrollment path.
+    Pairing therefore failed before the existing exact-device RemoteXPC
+    controller could install SRDssh. **Status:** fixed. The shortcut now opens
+    the confirmed Complete Project stage directly; that audited controller
+    establishes SRDssh/Procursus first and only then converges host pairing and
+    device components. Existing-device pairing remains a separate operation.
 
 ### Low severity
 

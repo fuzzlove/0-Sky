@@ -1,80 +1,81 @@
 {
-  "schema": 2,
-  "scope": [
-    "0-Sky Bridge",
-    "0-Sky Link",
-    "0-Sky Control",
-    "host installation and release tooling",
-    "active AFC2 compatibility port"
-  ],
-  "original_revision": "30d2bdc15a906d3d081f6ce64e5f6b9012e511da",
-  "cleanup_branch": "cleanup/release-portability-20261004T025515Z",
-  "privacy": {
-    "pii_audit": "PASS",
-    "allowlisted_immutable_fixture_findings": 35,
-    "unallowlisted_findings": 0,
-    "credentials_discovered": false,
-    "history_rewritten": false
-  },
-  "removed_files": [
-    {
-      "path": "combined_requirements.txt",
-      "reason": "unreferenced near-duplicate dependency list"
+    "schema": 2,
+    "scope": [
+        "0-Sky Bridge",
+        "0-Sky Link",
+        "0-Sky Control",
+        "host installation and release tooling",
+        "active AFC2 compatibility port"
+    ],
+    "original_revision": "30d2bdc15a906d3d081f6ce64e5f6b9012e511da",
+    "cleanup_branch": "cleanup/release-portability-20261004T025515Z",
+    "privacy": {
+        "pii_audit": "PASS",
+        "allowlisted_immutable_fixture_findings": 35,
+        "unallowlisted_findings": 0,
+        "credentials_discovered": false,
+        "history_rewritten": false
     },
-    {
-      "path": "tools/patches/doodle-ios27-source-probe-v1.patch",
-      "reason": "byte-identical to the referenced canonical patch"
-    }
-  ],
-  "executed_validation": {
-    "tools_unit_tests": "PASS: 282 run, 3 skipped for unavailable private paid fixtures",
+    "removed_files": [
+        {
+            "path": "combined_requirements.txt",
+            "reason": "unreferenced near-duplicate dependency list"
+        },
+        {
+            "path": "tools/patches/doodle-ios27-source-probe-v1.patch",
+            "reason": "byte-identical to the referenced canonical patch"
+        }
+    ],
+    "executed_validation": {
+        "tools_unit_tests": "PASS: 282 run, 3 skipped for unavailable private paid fixtures",
         "host_tools_unit_tests": "PASS: 126 run, 1 skipped because the external source kit is absent; includes private pairing transcript permissions, redacted actionable pairing errors, and symlink rejection",
-    "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
-    "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
+        "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
+        "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
         "bridge_core_tests": "PASS: 33/33, including incomplete-duplicate profile resume, deterministic candidate selection, complete-profile conflict rejection, and stale-port reservation",
-    "bridge_release_source_build": "PASS",
-    "link_source_build": "PASS",
-    "link_identity_icon_signature_verification": "PASS",
-    "link_release_sanitizer": "PASS",
-    "eula_verification": "PASS",
-    "source_pii_audit": "PASS",
-    "python_compile": "PASS for release, host, device runtime, and active AFC2 Python sources",
-    "shell_syntax": "PASS: 23 non-vendored tracked shell entry points checked",
-    "markdown_local_links": "PASS",
-    "repository_inventory_reproducibility": "PASS",
-    "release_failure_path_idempotency": "PASS: repeated missing-kit build produced one sanitized audit report",
-    "homebrew_bootstrap_safety": "PASS: moving remote installer is refused and never executed",
-    "privileged_update_safety": "PASS: moving latest TrollStore and ldid assets are refused",
-    "host_runtime_manifest": "PASS: schema-2 component, architecture payload, hash, missing-component, traversal, and notice validation",
-    "resumable_setup_state": "PASS: owner-only atomic progress; read-only checks do not persist",
-    "control_package_build": "PASS: clean 3.5.36 arm64 iOS/rootless build with explicit Theos checkout",
-    "control_release_payload_reproducibility": "PASS: two independent deterministic IPA staging runs produced SHA-256 f698d6f4dc5b2f22d66678cc587a584166d5856d7217af5fee3093a4d5338b9c",
-    "release_cache_pruning": "PASS: offline validation wrote no bytecode; prepared release kit contained 0 __pycache__, .pyc, or .pyo artifacts",
-    "installed_kit_permissions": "PASS: release staging normalizes root-owned kit directories/executables to 0755 and data to 0644; package BOM and expanded-app gates reject inaccessible resources",
-    "ios26_cryptex_compatibility": "PASS in retained separate live-device session: iPhone15,4 iOS 26.0 build 23A341 used GenericDmg slot 9, a fresh domain-3 nonce, live TSS ticket, and userspace USB transport; public evidence excludes device identifiers and ticket material",
-    "theos_dependency_lock": "PASS: Theos dd5c14bb9d91311e221d51b5bfb8c9e5948156db and 9 recursive submodules verified; iPhoneOS SDK 26.5 discovered",
-    "release_blocker_diagnostics": "PASS: missing inputs emit exact recovery commands; relocated kit/Theos paths use explicit folder selection in interactive builds",
-    "host_runtime_assembly": "PASS: pinned CPython 3.12.14 arm64/x86_64 archives assembled offline; four components and retained licenses verified",
-    "host_runtime_functional_probe": "PASS on Apple Silicon: Python 3.12.14, USB tool version commands, Debian field query and extraction",
-    "prerequisite_diagnostics": "PASS: human doctor prints exact repair/install commands for Xcode, Python, Theos, libraries, runtime, signing, and notarization",
-    "distribution_package_build": "PASS: Universal 2 package built through the canonical distribution pipeline",
-    "distribution_signing_and_notarization": "PASS: Developer ID app/installer signing, hardened runtime, entitlements, notary acceptance, and staple validation",
-    "independent_release_verification": "PASS: four-file allowlist and checksums, extracted package, signatures, architectures, kit, privacy, Gatekeeper, and staple; FINAL_RESULT=PASS",
-    "release_sanitizer": "PASS: zero blockers; reviewed upstream/debug findings summarized as advisories; public test fixtures exact-hash bound"
-  },
-  "not_executed_or_blocked": {
-    "fresh_account_install": "NOT_EXECUTED",
-    "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
-    "intel_runtime_uat": "NOT_EXECUTED",
-    "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
-    "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
-    "publication": "NOT_EXECUTED: release artifacts were not pushed, uploaded, or published"
-  },
-  "release_result": "AUTOMATED_RELEASE_GATES_PASS; HARDWARE_UAT_PENDING",
-  "release_blockers": [
-    "execute clean-account Apple Silicon installation, repair, upgrade, and uninstall UAT",
-    "execute physical Intel installation and runtime UAT",
-    "execute the documented exact-device SRD compatibility matrix on available hardware",
-    "obtain explicit release-owner approval before publication"
-  ]
+        "bridge_release_source_build": "PASS",
+        "link_source_build": "PASS",
+        "link_identity_icon_signature_verification": "PASS",
+        "link_release_sanitizer": "PASS",
+        "eula_verification": "PASS",
+        "source_pii_audit": "PASS",
+        "python_compile": "PASS for release, host, device runtime, and active AFC2 Python sources",
+        "shell_syntax": "PASS: 23 non-vendored tracked shell entry points checked",
+        "markdown_local_links": "PASS",
+        "repository_inventory_reproducibility": "PASS",
+        "release_failure_path_idempotency": "PASS: repeated missing-kit build produced one sanitized audit report",
+        "homebrew_bootstrap_safety": "PASS: moving remote installer is refused and never executed",
+        "privileged_update_safety": "PASS: moving latest TrollStore and ldid assets are refused",
+        "host_runtime_manifest": "PASS: schema-2 component, architecture payload, hash, missing-component, traversal, and notice validation",
+        "resumable_setup_state": "PASS: owner-only atomic progress; read-only checks do not persist",
+        "control_package_build": "PASS: clean 3.5.36 arm64 iOS/rootless build with explicit Theos checkout",
+        "control_release_payload_reproducibility": "PASS: two independent deterministic IPA staging runs produced SHA-256 f698d6f4dc5b2f22d66678cc587a584166d5856d7217af5fee3093a4d5338b9c",
+        "release_cache_pruning": "PASS: offline validation wrote no bytecode; prepared release kit contained 0 __pycache__, .pyc, or .pyo artifacts",
+        "installed_kit_permissions": "PASS: release staging normalizes root-owned kit directories/executables to 0755 and data to 0644; package BOM and expanded-app gates reject inaccessible resources",
+        "ios26_cryptex_compatibility": "PASS in retained separate live-device session: iPhone15,4 iOS 26.0 build 23A341 used GenericDmg slot 9, a fresh domain-3 nonce, live TSS ticket, and userspace USB transport; public evidence excludes device identifiers and ticket material",
+        "theos_dependency_lock": "PASS: Theos dd5c14bb9d91311e221d51b5bfb8c9e5948156db and 9 recursive submodules verified; iPhoneOS SDK 26.5 discovered",
+        "release_blocker_diagnostics": "PASS: missing inputs emit exact recovery commands; relocated kit/Theos paths use explicit folder selection in interactive builds",
+        "host_runtime_assembly": "PASS: pinned CPython 3.12.14 arm64/x86_64 archives assembled offline; four components and retained licenses verified",
+        "host_runtime_functional_probe": "PASS on Apple Silicon: Python 3.12.14, USB tool version commands, Debian field query and extraction",
+        "prerequisite_diagnostics": "PASS: human doctor prints exact repair/install commands for Xcode, Python, Theos, libraries, runtime, signing, and notarization",
+        "distribution_package_build": "PASS: Universal 2 package built through the canonical distribution pipeline",
+        "distribution_signing_and_notarization": "PASS: Developer ID app/installer signing, hardened runtime, entitlements, notary acceptance, and staple validation",
+        "independent_release_verification": "PASS: four-file allowlist and checksums, extracted package, signatures, architectures, kit, privacy, Gatekeeper, and staple; FINAL_RESULT=PASS",
+        "release_sanitizer": "PASS: zero blockers; reviewed upstream/debug findings summarized as advisories; public test fixtures exact-hash bound",
+        "intel_setup_failure_diagnosis": "PASS (read-only live inspection): fresh SRD was USB-visible, while the Set Up New Device action invoked host pairing before SRDssh existed; incomplete primary and preserved previous profiles explained pairing exit 2 and duplicate-UUID state"
+    },
+    "not_executed_or_blocked": {
+        "fresh_account_install": "NOT_EXECUTED",
+        "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
+        "intel_runtime_uat": "PARTIAL: on MacBookPro16,1 x86_64 macOS 26.5.2, installed pre.11 app signature, Universal 2 slices, readable embedded kit, exact-device USB discovery, and developer services were observed; complete pre.13 fresh-SRD setup remains pending",
+        "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
+        "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
+        "publication": "NOT_EXECUTED: release artifacts were not pushed, uploaded, or published"
+    },
+    "release_result": "AUTOMATED_RELEASE_GATES_PASS; HARDWARE_UAT_PENDING",
+    "release_blockers": [
+        "execute clean-account Apple Silicon installation, repair, upgrade, and uninstall UAT",
+        "execute physical Intel installation and runtime UAT",
+        "execute the documented exact-device SRD compatibility matrix on available hardware",
+        "obtain explicit release-owner approval before publication"
+    ]
 }

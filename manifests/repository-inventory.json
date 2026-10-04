@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 138,
-    "required-source-or-maintenance-test": 2101,
+    "required-source-or-maintenance-test": 2102,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "68a59927d1d3cddeac5054de4ad0a5e32baf220451add51327347cf468364a3b",
-      "size": 5898
+      "sha256": "a91a0c3bac9d34f58896bfb07e166fbc40a64282d8d03d76c029c3a5af2dac26",
+      "size": 6687
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10635,8 +10635,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/0SkyBridge/BridgeAppModel.swift",
-      "sha256": "db1a66181486c0fe87d6c41fd3faf8be40aeca1fee9597c7d9cbbfe5e491fdab",
-      "size": 69850
+      "sha256": "0928c4f015d497361855ab927661aca5b357e62302663034ad25d9b585ab9509",
+      "size": 69978
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -10713,8 +10713,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/0SkyBridge/Views.swift",
-      "sha256": "05dd0e4669b9f8115523177972b6bc5bd939b106f84a2866454db92d6dca187f",
-      "size": 65284
+      "sha256": "91661f7e559d5bc84c2b10bff64195b924e778f926be7498c8e74f182793346e",
+      "size": 65390
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13575,8 +13575,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "d73043ee6f2057b45120c803f4f403840903f3896ef5de0416b26b81b728a02d",
-      "size": 12462
+      "sha256": "a136b709c2589a425203459736050ee9c6c4a8795f3687710f0b98651a95db7e",
+      "size": 13075
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13593,8 +13593,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "59bb3ee727ea0fc5b498f9337b73c30765e0592bc0218f7ce640517bd1803c3b",
-      "size": 9721
+      "sha256": "28f14c98f3a20f58546e48ea530b250bc75ec5242ce6f834bbc97c12d7cabdd0",
+      "size": 10275
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13649,6 +13649,12 @@
       "path": "docs/release-notes-v1.0.0-pre.12.md",
       "sha256": "b5b71aff59e22dcac76bffca9fe0630c60d7bdc7595740fa719766a06a040a7d",
       "size": 1578
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/release-notes-v1.0.0-pre.13.md",
+      "sha256": "d2600cc33896ead2c21b753809343531c6ba47a3eb69befb13566fafab9f3828",
+      "size": 1715
     },
     {
       "category": "required-source-or-maintenance-test",
