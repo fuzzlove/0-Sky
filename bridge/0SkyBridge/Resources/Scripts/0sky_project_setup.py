@@ -124,7 +124,8 @@ def safe_manifest_entry(root: Path, path: Path) -> bool:
 
 def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = None,
         capture: bool = False, input_data: bytes | None = None,
-        log_file: Path | None = None) -> subprocess.CompletedProcess:
+        log_file: Path | None = None,
+        stream_output: bool = False) -> subprocess.CompletedProcess:
     command = [str(value) for value in argv]
     executable = Path(command[0]).name
     phase = Path(command[1]).stem if len(command) > 1 and command[1].endswith(".py") else executable
@@ -144,7 +145,11 @@ def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = Non
 
     def drain(name: str, stream: Any) -> None:
         try:
-            for block in iter(lambda: stream.read(64 * 1024), b""):
+            # Child stages flush progress one line at a time. A large buffered
+            # read waits for 64 KiB or EOF and made the GUI show only its
+            # heartbeat for long-running native stages. Read complete lines so
+            # the private artifact and expandable technical log update live.
+            for block in iter(stream.readline, b""):
                 output_queue.put((name, block))
         finally:
             output_queue.put((name, None))
@@ -199,7 +204,7 @@ def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = Non
                 if log_handle:
                     log_handle.write(block)
                     log_handle.flush()
-                if not capture:
+                if stream_output or not capture:
                     console = sys.stdout.buffer if stream_name == "stdout" else sys.stderr.buffer
                     console.write(block)
                     console.flush()
@@ -211,6 +216,11 @@ def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = Non
                 next_heartbeat = now + 10
     finally:
         _ACTIVE_CHILD = None
+        for reader in readers:
+            reader.join(timeout=1)
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
         if log_handle:
             log_handle.close()
     completed = subprocess.CompletedProcess(
@@ -1422,11 +1432,11 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
             begin_stage(report, "stage-verified-companion-assets")
             stage_companion_assets(python, target, args.identity, run_dir)
         begin_stage(report, "dropbear-procursus")
-        first = run(bootstrap, check=False, capture=True, timeout=1800,
+        first = run(bootstrap, check=False, capture=True, stream_output=True, timeout=1800,
                     log_file=run_dir / "dropbear-procursus.log")
         if first.returncode and args.pair_remotexpc:
             pair_remotexpc(python, run_dir)
-            first = run(bootstrap, check=False, capture=True, timeout=1800,
+            first = run(bootstrap, check=False, capture=True, stream_output=True, timeout=1800,
                         log_file=run_dir / "dropbear-procursus-retry.log")
         if first.returncode:
             detail = (first.stdout + first.stderr).decode("utf-8", "replace")

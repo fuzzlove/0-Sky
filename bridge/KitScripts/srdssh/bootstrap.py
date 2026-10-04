@@ -478,7 +478,7 @@ def wait_for_root(base: list[str], *, timeout: int = 120) -> None:
     raise ChainError("authenticated Dropbear did not become ready before the timeout")
 
 
-def remote_xpc_preflight(python: Path, udid: str) -> None:
+def remote_xpc_preflight(python: Path, udid: str) -> str:
     # Exercise the service actually required by installation rather than
     # treating Bonjour/native browse output as proof.  Keep native remoted and
     # the paired userspace USB route in separate, process-bounded attempts.
@@ -537,10 +537,17 @@ asyncio.run(main())'''
     payload = json.loads(result.stdout)
     if payload.get("udid") != udid or int(payload.get("nonce_length", 0)) < 1:
         raise ChainError("RemoteXPC did not prove the exact UDID and domain-3 nonce")
+    selected_transport = {
+        "macOS native": "native",
+        "userspace USB": "userspace",
+    }.get(payload.get("transport"))
+    if selected_transport is None:
+        raise ChainError("RemoteXPC returned an unrecognized transport")
     # img4_chip_rsch is advisory on current iOS 27 builds.  The following TSS
     # preflight is the authorization boundary: it binds Apple's live response
     # to this exact UDID, fresh domain-3 nonce, and personalized input set.
     pulse("RemoteXPC/cryptexd preflight: " + json.dumps(payload, sort_keys=True))
+    return selected_transport
 
 
 def wait_usb(udid: str, timeout: int = 180) -> None:
@@ -588,12 +595,16 @@ def ticket_cache_options(ticket_cache: Path | None,
 
 def install_srdssh(python: Path, kit: Path, inputs: dict[str, Path], udid: str,
                    *, ticket_cache: Path | None = None,
-                   require_cached_ticket: bool = False) -> None:
+                   require_cached_ticket: bool = False,
+                   transport: str) -> None:
+    if transport not in {"native", "userspace"}:
+        raise ChainError(f"unsupported verified RemoteXPC transport: {transport}")
     run([
         str(python), str(kit / "install_cryptex_native.py"),
         "com.liquidsky.srdssh", str(inputs["image"]),
         str(inputs["trust_cache"]), str(inputs["volume_hash"]), SRDSH_CRYPTEX_VERSION,
         udid, str(kit / "BuildManifest.plist"),
+        "--transport", transport,
         *ticket_cache_options(ticket_cache, require_cached_ticket),
     ])
 
@@ -771,7 +782,7 @@ def main() -> int:
     report["checks"]["local_inputs"] = True
     if args.check:
         stage(3, "RemoteXPC handshake", "read-only pairing visibility check")
-        remote_xpc_preflight(Path(sys.executable), udid)
+        transport = remote_xpc_preflight(Path(sys.executable), udid)
         # Prove that the research nonce can be turned into a valid TSS ticket
         # without uninstalling or installing anything. This is the final
         # read-only authorization transition before Cryptex mutation.
@@ -781,6 +792,7 @@ def main() -> int:
             str(kit / "srdsh-minimal.gtcd"),
             str(kit / "srdsh-minimal-apfs-sealed.hash"), SRDSH_CRYPTEX_VERSION, udid,
             str(kit / "BuildManifest.plist"), "--preflight",
+            "--transport", transport,
             *ticket_cache_options(ticket_cache, args.require_cached_ticket),
         ])
         report["checks"]["remotexpc"] = True
@@ -824,7 +836,7 @@ def main() -> int:
     # Procursus/package path below.  Pair/Verify Trusted Mac is implemented by
     # the separate read-only pairing coordinator and does not call this path.
     stage(3, "RemoteXPC handshake", "current exact-UDID SRD eligibility check")
-    remote_xpc_preflight(Path(sys.executable), udid)
+    transport = remote_xpc_preflight(Path(sys.executable), udid)
     report["checks"]["remotexpc"] = True
 
     if existing_ssh and not args.force_srdssh:
@@ -838,6 +850,7 @@ def main() -> int:
             Path(sys.executable), kit, inputs, udid,
             ticket_cache=ticket_cache,
             require_cached_ticket=args.require_cached_ticket,
+            transport=transport,
         )
         stage(5, "Persistence reboot", "activating and testing the installed Cryptex")
         if args.no_reboot:

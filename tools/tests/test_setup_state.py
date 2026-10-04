@@ -22,6 +22,19 @@ SPEC.loader.exec_module(setup)
 
 
 class SetupStateTests(unittest.TestCase):
+    def test_child_progress_is_streamed_and_still_captured(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            log_file = Path(folder) / "child.log"
+            with mock.patch.object(setup, "log"):
+                completed = setup.run(
+                    [sys.executable, "-c", "print('stage one', flush=True); print('stage two', flush=True)"],
+                    capture=True, stream_output=True, log_file=log_file, timeout=10,
+                )
+            self.assertEqual(completed.returncode, 0)
+            self.assertIn(b"stage one", completed.stdout)
+            self.assertIn("stage one", log_file.read_text(encoding="utf-8"))
+            self.assertIn("stage two", log_file.read_text(encoding="utf-8"))
+
     def test_interrupted_profile_reuses_its_busy_reserved_port(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

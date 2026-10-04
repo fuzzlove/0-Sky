@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Personalize and install one Cryptex on an authorized iOS 17+ SRD.
 
-The installer tries Apple's native remoted transport first and then the
-pymobiledevice3 userspace USB transport.  It obtains the research nonce and TSS
-ticket before retiring an existing generation.  No retail-device bypass is
-implemented: if neither authorized service path succeeds, the enforcement
-boundary is reported and left intact.
+The bootstrap passes the exact transport proved by its process-bounded
+preflight. A direct automatic invocation prefers pymobiledevice3's paired
+userspace USB transport before Apple's native remoted transport. The installer
+obtains the research nonce and TSS ticket before retiring an existing
+generation. No retail-device bypass is implemented: if neither authorized
+service path succeeds, the enforcement boundary is reported and left intact.
 """
 from __future__ import annotations
 
@@ -434,8 +435,8 @@ def parse_args() -> argparse.Namespace:
     p.add_argument(
         "--transport", choices=("auto", "native", "userspace"), default="auto",
         help=(
-            "RemoteXPC route: auto tries native then USB userspace; use userspace "
-            "to recover when macOS remoted accepts a connection but stalls"
+            "RemoteXPC route: auto tries paired USB userspace before native; "
+            "bootstrap passes the exact route that its process-bounded preflight proved"
         ),
     )
     return p.parse_args()
@@ -456,11 +457,12 @@ def main() -> int:
         if not item.is_file():
             raise SystemExit(f"missing Cryptex input: {item}")
     errors: list[str] = []
-    # Attempt 1 prefers Apple's native remoted route. Attempt 2 explicitly
-    # forces the no-root userspace USB route, including cases where the native
-    # tunnel connected but the service transition was denied or interrupted.
+    # Prefer the paired no-root userspace USB route for a direct invocation.
+    # Native RemoteXPC can block inside libxpc/libffi before asyncio can enforce
+    # its timeout on some Intel hosts. The bootstrap normally avoids ambiguity
+    # altogether by passing the exact route its process-bounded preflight proved.
     attempts = {
-        "auto": (("native-preferred", True), ("userspace-usb", False)),
+        "auto": (("userspace-usb", False), ("native-preferred", True)),
         "native": (("native-only", True),),
         "userspace": (("userspace-usb", False),),
     }[args.transport]

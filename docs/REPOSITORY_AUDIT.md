@@ -190,6 +190,18 @@ identifier.
     native timeout plus userspace success, and dual-path actionable failure.
     Live read-only Intel validation proved the pre-existing record reached the
     exact USB iPhone12,8 on iOS 27.0 and returned a 48-byte domain-3 nonce.
+18. **The actual Cryptex installer retried a transport that preflight had
+    already rejected, while its detailed output was buffered.** Live pre.18
+    Intel testing proved the userspace USB route, then `install_cryptex_native`
+    opened native RemoteXPC again and spun inside ctypes/libffi callback
+    allocation. The controller's 64-KiB pipe reads withheld each flushed child
+    line until EOF, leaving only a generic heartbeat. **Status:** fixed. The
+    exact preflight-proven route is now passed to both TSS preflight and the
+    mutating installer; standalone automatic use prefers paired userspace USB.
+    Child stdout/stderr is drained line-by-line, simultaneously captured for
+    failure handling, written to the owner-only stage artifact, and relayed to
+    the expandable technical log. Regression tests cover route propagation,
+    Intel-safe automatic ordering, and streamed-plus-captured output.
 
 ### Low severity
 
@@ -235,7 +247,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 301 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, interrupted-profile port recovery, and paired-USB RemoteXPC fallback |
+| Tool/release unit tests | PASS — 304 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, interrupted-profile port recovery, paired-USB RemoteXPC fallback, selected-route propagation, and live child-output streaming |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 3 skipped for unavailable external fixtures, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |

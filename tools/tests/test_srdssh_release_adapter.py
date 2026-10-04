@@ -49,9 +49,10 @@ class SRDSSHReleaseAdapterTests(unittest.TestCase):
             bootstrap, "run",
             side_effect=[subprocess.TimeoutExpired(["python"], 30), success],
         ) as runner:
-            bootstrap.remote_xpc_preflight(
+            selected = bootstrap.remote_xpc_preflight(
                 Path("python"), "00000000-0000000000000000"
             )
+        self.assertEqual(selected, "userspace")
         self.assertEqual(runner.call_count, 2)
         self.assertEqual(runner.call_args_list[0].args[0][-1], "native")
         self.assertEqual(runner.call_args_list[0].kwargs["timeout"], 30)
@@ -68,9 +69,10 @@ class SRDSSHReleaseAdapterTests(unittest.TestCase):
             stderr="",
         )
         with mock.patch.object(bootstrap, "run", return_value=success) as runner:
-            bootstrap.remote_xpc_preflight(
+            selected = bootstrap.remote_xpc_preflight(
                 Path("python"), "00000000-0000000000000000"
             )
+        self.assertEqual(selected, "native")
         self.assertEqual(runner.call_count, 1)
         self.assertEqual(runner.call_args.args[0][-1], "native")
 
@@ -85,6 +87,27 @@ class SRDSSHReleaseAdapterTests(unittest.TestCase):
                 bootstrap.remote_xpc_preflight(
                     Path("python"), "00000000-0000000000000000"
                 )
+
+    def test_direct_cryptex_auto_prefers_userspace_on_intel_safe_path(self):
+        text = INSTALLER.read_text(encoding="utf-8")
+        self.assertIn(
+            '"auto": (("userspace-usb", False), ("native-preferred", True))',
+            text,
+        )
+
+    def test_installer_receives_the_preflight_proven_transport(self):
+        inputs = {
+            "image": Path("image.dmg"),
+            "trust_cache": Path("trust.gtcd"),
+            "volume_hash": Path("volume.hash"),
+        }
+        with mock.patch.object(bootstrap, "run") as runner:
+            bootstrap.install_srdssh(
+                Path("python"), Path("kit"), inputs,
+                "00000000-0000000000000000", transport="userspace",
+            )
+        command = runner.call_args.args[0]
+        self.assertEqual(command[command.index("--transport") + 1], "userspace")
 
     def test_release_root_manifest_verifies_srdssh_subtree(self):
         with tempfile.TemporaryDirectory() as folder:
