@@ -149,6 +149,17 @@ identifier.
     rebuilds from bundled Python, validates its exact base and dependencies,
     and restores the old environment if repair fails. Release signing now
     rehashes the path-confined Frida sub-manifest after wheel signing.
+14. **An exact-device profile staged by an earlier verified kit could not be
+    resumed after an app update.** The installer correctly rejected a manifest
+    mismatch, but its suggested refresh command only repaired device runtime
+    files and could not update host-staged assets. **Status:** fixed. Setup,
+    Resume, and Repair now opt into a narrowly scoped host asset refresh after
+    validating the immutable device endpoint. The refresh pre-stages every new
+    manifest-selected directory, moves old assets/config/completion marker to
+    an owner-only checkpoint, preserves pairing material, keys, logs, Python,
+    and other runtime state, and restores the exact prior state after any
+    failure. Regression tests cover migration, endpoint-conflict refusal,
+    injected rollback, state preservation, and idempotency.
 
 ### Low severity
 
@@ -194,8 +205,8 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 282 run, 3 skipped for unavailable private paid fixtures |
-| Host-tool unit tests with pinned Python 3.12 | PASS — 123 run, 1 skipped for absent external source kit, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
+| Tool/release unit tests | PASS — 295 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency |
+| Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 1 skipped for absent external source kit, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
 | BridgeCore tests | PASS — 33/33 |

@@ -174,12 +174,151 @@ def atomic_json(path: Path, value: dict) -> None:
     os.chmod(path, 0o600)
 
 
-def stage_instance(kit: Path, directory: Path, config: dict) -> None:
+def _manifest_files(kit: Path) -> list[str]:
+    return [raw.split(None, 1)[1].strip().lstrip("*").removeprefix("./")
+            for raw in (kit / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
+            if raw.strip()]
+
+
+def _stage_directory(kit: Path, destination: Path, name: str,
+                     entries: list[str]) -> None:
+    """Copy one manifest-selected directory without following source links."""
+    destination.mkdir(mode=0o700)
+    for relative in entries:
+        source = kit / relative
+        target = destination / Path(relative).relative_to(name)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        if source.is_symlink():
+            target.symlink_to(os.readlink(source))
+        else:
+            shutil.copy2(source, target, follow_symlinks=False)
+
+
+def _write_private_bytes(path: Path, payload: bytes) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "wb") as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def _refresh_staged_directories(kit: Path, directory: Path, config_path: Path,
+                                old_config: dict, new_config: dict,
+                                manifest_files: list[str]) -> Path:
+    """Replace only immutable kit assets, retaining a local atomic rollback.
+
+    Pairing records, generated keys, logs, the managed Python environment and
+    every other per-device state file remain in place. Existing kit assets and
+    the prior config are moved to an owner-only checkpoint before the new
+    assets become visible. Any failure restores the exact previous state.
+    """
+    old_digest = str(old_config.get("source_manifest_sha256") or "unknown")
+    new_digest = str(new_config["source_manifest_sha256"])
+    old_label = (old_digest[:12] if re.fullmatch(r"[a-f0-9]{64}", old_digest)
+                 else "legacy-" + hashlib.sha256(old_digest.encode()).hexdigest()[:12])
+    new_label = (new_digest[:12] if re.fullmatch(r"[a-f0-9]{64}", new_digest)
+                 else "invalid-" + hashlib.sha256(new_digest.encode()).hexdigest()[:12])
+    staging = directory / f".kit-refresh.{os.getpid()}.{time.time_ns()}.tmp"
+    backups = directory / "kit-refresh-backups"
+    if backups.exists() and (backups.is_symlink() or not backups.is_dir()):
+        raise InstallError("kit refresh backup directory is unsafe")
+    backups.mkdir(mode=0o700, exist_ok=True)
+    os.chmod(backups, 0o700)
+    checkpoint = backups / (
+        f"{old_label}-to-{new_label}."
+        f"{time.strftime('%Y%m%d-%H%M%S')}.{time.time_ns()}"
+    )
+    checkpoint.mkdir(mode=0o700)
+    staging.mkdir(mode=0o700)
+    replaced: list[tuple[Path, Path | None]] = []
+    completion = directory / ".install-complete"
+    completion_backup = checkpoint / ".install-complete"
+    try:
+        _write_private_bytes(
+            checkpoint / "config.json",
+            json.dumps(old_config, indent=2, sort_keys=True).encode("utf-8") + b"\n",
+        )
+        atomic_json(checkpoint / "refresh.json", {
+            "schema": 1,
+            "instance": new_config["instance"],
+            "udid": new_config["udid"],
+            "old_source_manifest_sha256": old_digest,
+            "new_source_manifest_sha256": new_digest,
+            "created_utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "preserved_state": ["logs", "venv", "pairing material", "generated keys"],
+        })
+        for name in STAGED_DIRS:
+            entries = [relative for relative in manifest_files
+                       if relative.startswith(name + "/")]
+            if not entries:
+                continue
+            target = directory / name
+            if target.exists() and (target.is_symlink() or not target.is_dir()):
+                raise InstallError(f"existing staged directory is unsafe: {name}")
+            _stage_directory(kit, staging / name, name, entries)
+
+        # Move the previous revision out of the way before installing each
+        # fully staged replacement. Path.rename/os.replace stays atomic on the
+        # per-user Application Support volume.
+        for name in STAGED_DIRS:
+            incoming = staging / name
+            if not incoming.exists():
+                continue
+            target = directory / name
+            previous: Path | None = None
+            if target.exists():
+                previous = checkpoint / name
+                os.replace(target, previous)
+            try:
+                os.replace(incoming, target)
+            except Exception:
+                if previous is not None and previous.exists() and not target.exists():
+                    os.replace(previous, target)
+                raise
+            replaced.append((target, previous))
+        if completion.exists():
+            if completion.is_symlink() or not completion.is_file():
+                raise InstallError("existing install completion marker is unsafe")
+            os.replace(completion, completion_backup)
+        atomic_json(config_path, new_config)
+        return checkpoint
+    except Exception:
+        for target, previous in reversed(replaced):
+            if target.exists():
+                if target.is_dir() and not target.is_symlink():
+                    shutil.rmtree(target)
+                else:
+                    target.unlink()
+            if previous is not None and previous.exists():
+                os.replace(previous, target)
+        if completion_backup.exists() and not completion.exists():
+            os.replace(completion_backup, completion)
+        _write_private_bytes(
+            config_path,
+            json.dumps(old_config, indent=2, sort_keys=True).encode("utf-8") + b"\n",
+        )
+        raise
+    finally:
+        if staging.exists():
+            shutil.rmtree(staging)
+
+
+def stage_instance(kit: Path, directory: Path, config: dict,
+                   refresh_staged_assets: bool = False) -> Path | None:
     if directory.is_symlink():
         raise InstallError("instance directory is a symbolic link")
     directory.mkdir(parents=True, exist_ok=True, mode=0o700)
     os.chmod(directory, 0o700)
     existing = directory / "config.json"
+    old_config: dict | None = None
+    revision_changed = False
     if existing.exists():
         if existing.is_symlink() or not existing.is_file():
             raise InstallError("existing profile is unsafe")
@@ -187,15 +326,26 @@ def stage_instance(kit: Path, directory: Path, config: dict) -> None:
             value = json.loads(existing.read_text(encoding="utf-8"))
         except (OSError, ValueError) as error:
             raise InstallError("existing profile is unparseable; use host-profile repair") from error
-        for key in ("udid", "instance", "ssh_port", "ssh_key"):
+        for key in ("udid", "instance", "ssh_host", "ssh_port",
+                    "ssh_remote_port", "ssh_key"):
             if key in value and str(value[key]) != str(config[key]):
                 raise InstallError(f"existing profile {key} belongs to another endpoint")
-        if value.get("source_manifest_sha256") not in (None, config["source_manifest_sha256"]):
-            raise InstallError("instance uses another kit revision; use the audited refresh path")
+        old_config = value
+        revision_changed = value.get("source_manifest_sha256") not in (
+            None, config["source_manifest_sha256"])
+        if revision_changed and not refresh_staged_assets:
+            raise InstallError(
+                "instance uses another kit revision; run Setup, Resume, or Repair "
+                "from the current 0-Sky Bridge app to create a rollback checkpoint "
+                "and refresh only the staged kit assets"
+            )
         config = {**value, **config}
-    manifest_files = [raw.split(None, 1)[1].strip().lstrip("*").removeprefix("./")
-                      for raw in (kit / "SHA256SUMS").read_text(encoding="utf-8").splitlines()
-                      if raw.strip()]
+    manifest_files = _manifest_files(kit)
+    if revision_changed:
+        assert old_config is not None
+        return _refresh_staged_directories(
+            kit, directory, existing, old_config, config, manifest_files
+        )
     for name in STAGED_DIRS:
         entries = [relative for relative in manifest_files if relative.startswith(name + "/")]
         target = directory / name
@@ -208,18 +358,11 @@ def stage_instance(kit: Path, directory: Path, config: dict) -> None:
         temporary = directory / f".{name}.{os.getpid()}.tmp"
         if temporary.exists():
             raise InstallError(f"interrupted staging requires review: {name}")
-        temporary.mkdir(mode=0o700)
-        for relative in entries:
-            source = kit / relative
-            destination = temporary / Path(relative).relative_to(name)
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            if source.is_symlink():
-                destination.symlink_to(os.readlink(source))
-            else:
-                shutil.copy2(source, destination, follow_symlinks=False)
+        _stage_directory(kit, temporary, name, entries)
         os.replace(temporary, target)
     (directory / "logs").mkdir(mode=0o700, exist_ok=True)
     atomic_json(existing, config)
+    return None
 
 
 def select_python() -> Path:
@@ -347,6 +490,12 @@ def main() -> int:
     parser.add_argument("--support", type=Path,
                         default=Path.home() / "Library/Application Support/0-Sky")
     parser.add_argument("--stage-only", action="store_true")
+    parser.add_argument(
+        "--refresh-staged-assets", action="store_true",
+        help=("when the exact-device profile belongs to an older verified kit, "
+              "checkpoint and replace only immutable staged assets; pairing, keys, "
+              "logs, and the managed Python environment are preserved"),
+    )
     parser.add_argument("--skip-dependencies", action="store_true")
     parser.add_argument("--no-launchagents", action="store_true")
     parser.add_argument("--verify-pairing-only", action="store_true")
@@ -379,7 +528,15 @@ def main() -> int:
                   "ssh_host_alias": device_alias(args.udid),
                   "bluetooth_port": bluetooth_port(args.udid),
                   "source_manifest_sha256": manifest_digest}
-        stage_instance(kit, directory, config)
+        checkpoint = stage_instance(
+            kit, directory, config,
+            refresh_staged_assets=args.refresh_staged_assets,
+        )
+        if checkpoint is not None:
+            print(
+                "KIT_REFRESH=PASS; old staged assets preserved in owner-only "
+                f"checkpoint {checkpoint}; pairing, keys, logs, and Python runtime preserved"
+            )
         verify_helper_architecture(directory / "host-mac/zero-sky-bluetooth-tunnel", arch)
         verify_helper_architecture(
             directory / "automation/CrypStoreAutomation/device_bridge_supervisor", arch)

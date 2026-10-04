@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import plistlib
@@ -38,6 +39,113 @@ OTHER = "00000000-0000000000000002"
 
 
 class InstallerLifecycleTests(unittest.TestCase):
+    def _kit(self, root: Path, revision: str) -> Path:
+        kit = root / revision
+        paths = []
+        for name in installer.STAGED_DIRS:
+            path = kit / name / "revision.txt"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(revision, encoding="utf-8")
+            paths.append(path)
+        (kit / "SHA256SUMS").write_text("".join(
+            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  "
+            f"./{path.relative_to(kit).as_posix()}\n"
+            for path in paths
+        ), encoding="utf-8")
+        return kit
+
+    def _instance_config(self, root: Path, digest: str, udid: str = UDID) -> dict:
+        return {
+            "schema": 2, "instance": "fixture-srd", "udid": udid,
+            "ssh_host": "127.0.0.1", "ssh_port": "2222",
+            "ssh_remote_port": "22", "ssh_key": str(root / "identity"),
+            "source_manifest_sha256": digest,
+        }
+
+    def test_kit_revision_refresh_is_explicit_private_and_idempotent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old_kit = self._kit(root, "old-kit")
+            new_kit = self._kit(root, "new-kit")
+            directory = root / "support/instances/fixture-srd"
+            old = self._instance_config(root, "old-digest")
+            new = self._instance_config(root, "new-digest")
+            installer.stage_instance(old_kit, directory, old)
+            (directory / "logs/preserved.log").write_text("diagnostic evidence")
+            (directory / "venv").mkdir()
+            (directory / "venv/runtime").write_text("managed runtime")
+            (directory / "pairing-state.json").write_text("pairing material")
+            (directory / ".install-complete").write_text("old-digest\n")
+
+            with self.assertRaisesRegex(installer.InstallError, "another kit revision"):
+                installer.stage_instance(new_kit, directory, new)
+            self.assertEqual((directory / "host-mac/revision.txt").read_text(), "old-kit")
+
+            checkpoint = installer.stage_instance(
+                new_kit, directory, new, refresh_staged_assets=True
+            )
+            self.assertIsNotNone(checkpoint)
+            assert checkpoint is not None
+            self.assertEqual((directory / "host-mac/revision.txt").read_text(), "new-kit")
+            self.assertEqual((checkpoint / "host-mac/revision.txt").read_text(), "old-kit")
+            self.assertEqual((directory / "logs/preserved.log").read_text(), "diagnostic evidence")
+            self.assertEqual((directory / "venv/runtime").read_text(), "managed runtime")
+            self.assertEqual((directory / "pairing-state.json").read_text(), "pairing material")
+            self.assertFalse((directory / ".install-complete").exists())
+            self.assertEqual(checkpoint.stat().st_mode & 0o777, 0o700)
+            self.assertEqual((checkpoint / "config.json").stat().st_mode & 0o777, 0o600)
+            checkpoints = list((directory / "kit-refresh-backups").iterdir())
+            self.assertIsNone(installer.stage_instance(
+                new_kit, directory, new, refresh_staged_assets=True
+            ))
+            self.assertEqual(list((directory / "kit-refresh-backups").iterdir()), checkpoints)
+
+    def test_kit_revision_refresh_refuses_endpoint_change_before_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old_kit = self._kit(root, "old-kit")
+            new_kit = self._kit(root, "new-kit")
+            directory = root / "support/instances/fixture-srd"
+            old = self._instance_config(root, "old-digest")
+            installer.stage_instance(old_kit, directory, old)
+            changed = self._instance_config(root, "new-digest", OTHER)
+            with self.assertRaisesRegex(installer.InstallError, "another endpoint"):
+                installer.stage_instance(
+                    new_kit, directory, changed, refresh_staged_assets=True
+                )
+            self.assertEqual((directory / "host-mac/revision.txt").read_text(), "old-kit")
+            self.assertFalse((directory / "kit-refresh-backups").exists())
+
+    def test_failed_kit_revision_refresh_restores_previous_assets_and_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old_kit = self._kit(root, "old-kit")
+            new_kit = self._kit(root, "new-kit")
+            directory = root / "support/instances/fixture-srd"
+            old = self._instance_config(root, "old-digest")
+            new = self._instance_config(root, "new-digest")
+            installer.stage_instance(old_kit, directory, old)
+            marker = directory / ".install-complete"
+            marker.write_text("old-digest\n")
+            original_atomic_json = installer.atomic_json
+
+            def fail_final_config(path, value):
+                if path == directory / "config.json":
+                    raise OSError("injected final config failure")
+                return original_atomic_json(path, value)
+
+            with patch.object(installer, "atomic_json", side_effect=fail_final_config):
+                with self.assertRaisesRegex(OSError, "injected final config failure"):
+                    installer.stage_instance(
+                        new_kit, directory, new, refresh_staged_assets=True
+                    )
+            self.assertEqual((directory / "host-mac/revision.txt").read_text(), "old-kit")
+            self.assertEqual(marker.read_text(), "old-digest\n")
+            self.assertEqual(
+                json.loads((directory / "config.json").read_text())["source_manifest_sha256"],
+                "old-digest",
+            )
+
     def test_device_bridge_supervisor_uses_unauthenticated_health_probe(self):
         supervisor = (HOST.parent /
                       "KitScripts/automation/CrypStoreAutomation/device_bridge_supervisor.sh")

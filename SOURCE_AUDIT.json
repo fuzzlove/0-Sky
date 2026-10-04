@@ -27,7 +27,7 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 292 run, 3 skipped for unavailable private paid fixtures; includes contained runtime symlink acceptance, SRDssh release-adapter preservation, bundled-runtime venv migration, signed Frida sub-manifest rehashing, iOS 26/27 image-slot selection, and absolute, traversal, and broken-link rejection",
+        "tools_unit_tests": "PASS: 295 run, 3 skipped for unavailable private paid fixtures; includes rollback-backed staged-kit revision migration, wrong-endpoint refusal, idempotent rerun, contained runtime symlink acceptance, SRDssh release-adapter preservation, bundled-runtime venv migration, signed Frida sub-manifest rehashing, iOS 26/27 image-slot selection, and absolute, traversal, and broken-link rejection",
         "host_tools_unit_tests": "PASS: 126 run, 1 skipped because the external source kit is absent; includes private pairing transcript permissions, redacted actionable pairing errors, and symlink rejection",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
@@ -61,7 +61,7 @@
         "distribution_signing_and_notarization": "PASS: Developer ID app/installer signing, hardened runtime, entitlements, notary acceptance, and staple validation",
         "independent_release_verification": "PASS: four-file allowlist and checksums, extracted package, signatures, architectures, kit, privacy, Gatekeeper, and staple; FINAL_RESULT=PASS",
         "release_sanitizer": "PASS: zero blockers; reviewed upstream/debug findings summarized as advisories; public test fixtures exact-hash bound",
-        "intel_setup_failure_diagnosis": "PASS (live host repair plus read-only device inspection): fresh SRD was USB-visible; old setup ordering invoked host pairing before SRDssh; incomplete profiles explained pairing exit 2 and duplicate-UUID state; corrected controller verified 3771 kit entries, all 19 SRDssh assets, native exact-device RemoteXPC, a 48-byte domain-3 nonce, and a live Apple TSS ticket without device mutation; stale Homebrew-backed venv was preserved and rebuilt from signed bundled Python"
+        "intel_setup_failure_diagnosis": "PASS (live host repair plus read-only device inspection): fresh SRD was USB-visible; old setup ordering invoked host pairing before SRDssh; incomplete profiles explained pairing exit 2 and duplicate-UUID state; corrected controller verified 3771 kit entries, all 19 SRDssh assets, native exact-device RemoteXPC, a 48-byte domain-3 nonce, and a live Apple TSS ticket without device mutation; stale Homebrew-backed venv was preserved and rebuilt from signed bundled Python; the remaining host-only failure was traced to a pre.14 profile manifest differing from the current kit and is covered by atomic checkpoint/refresh/rollback tests"
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",

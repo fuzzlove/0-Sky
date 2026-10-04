@@ -784,6 +784,7 @@ def setup_companion(python: Path, target: dict[str, Any], identity: Path,
         python, KIT / "host-mac/install.py", "--udid", target["udid"],
         "--ssh-key", identity, "--host", "127.0.0.1", "--port", str(target["port"]),
         "--instance-name", target["instance"], "--support", SUPPORT,
+        "--refresh-staged-assets",
     ]
     if not repair_pairing:
         # Normal install may show Apple's Lockdown Trust UI if required. The
@@ -796,13 +797,23 @@ def stage_companion_assets(python: Path, target: dict[str, Any],
                            identity: Path, run_dir: Path) -> None:
     """Stage the verified per-device recovery tree before SSH exists."""
     support = SUPPORT / "instances" / target["instance"]
-    if (support / ".install-complete").is_file():
+    current_manifest = sha256(KIT / "SHA256SUMS")
+    try:
+        installed_manifest = json.loads(
+            (support / "config.json").read_text(encoding="utf-8")
+        ).get("source_manifest_sha256")
+        completed_manifest = (support / ".install-complete").read_text(
+            encoding="ascii"
+        ).strip()
+    except (OSError, ValueError):
+        installed_manifest = completed_manifest = None
+    if installed_manifest == current_manifest and completed_manifest == current_manifest:
         return
     run([
         python, KIT / "host-mac/install.py", "--udid", target["udid"],
         "--ssh-key", identity, "--host", "127.0.0.1",
         "--port", str(target["port"]), "--instance-name", target["instance"],
-        "--support", SUPPORT, "--stage-only",
+        "--support", SUPPORT, "--stage-only", "--refresh-staged-assets",
     ], timeout=600, log_file=run_dir / "stage-companion.log")
 
 
