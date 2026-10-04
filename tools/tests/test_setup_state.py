@@ -22,6 +22,67 @@ SPEC.loader.exec_module(setup)
 
 
 class SetupStateTests(unittest.TestCase):
+    def test_interrupted_profile_reuses_its_busy_reserved_port(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            support = root / "support"
+            device = {
+                "udid": "00000000000000000001", "product_type": "iPhone12,8",
+                "product_version": "26.0",
+            }
+            instance = setup.slug_for(device, None)
+            directory = support / "instances" / instance
+            directory.mkdir(parents=True)
+            (directory / "config.json").write_text(json.dumps({
+                "schema": 2, "udid": device["udid"], "instance": instance,
+                "ssh_host": "127.0.0.1", "ssh_port": "2222",
+            }), encoding="utf-8")
+            with mock.patch.object(setup, "SUPPORT", support), \
+                    mock.patch.object(setup, "launchagent_bindings", return_value={}), \
+                    mock.patch.object(setup, "tcp_free", return_value=False):
+                targets = setup.assign_targets([device], [device["udid"]], 2222)
+            self.assertEqual(targets[0]["instance"], instance)
+            self.assertEqual(targets[0]["port"], 2222)
+
+    def test_new_target_does_not_take_another_profile_reserved_port(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            support = root / "support"
+            other = support / "instances/other-device"
+            other.mkdir(parents=True)
+            (other / "config.json").write_text(json.dumps({"ssh_port": "2222"}))
+            device = {
+                "udid": "00000000000000000001", "product_type": "iPhone12,8",
+                "product_version": "26.0",
+            }
+            with mock.patch.object(setup, "SUPPORT", support), \
+                    mock.patch.object(setup, "launchagent_bindings", return_value={}), \
+                    mock.patch.object(setup, "tcp_free", return_value=True):
+                targets = setup.assign_targets([device], [device["udid"]], 2222)
+            self.assertEqual(targets[0]["port"], 2223)
+
+    def test_interrupted_profile_endpoint_mismatch_fails_before_port_allocation(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            support = root / "support"
+            device = {
+                "udid": "00000000000000000001", "product_type": "iPhone12,8",
+                "product_version": "26.0",
+            }
+            instance = setup.slug_for(device, None)
+            directory = support / "instances" / instance
+            directory.mkdir(parents=True)
+            (directory / "config.json").write_text(json.dumps({
+                "udid": "00000000000000000002", "instance": instance,
+                "ssh_host": "127.0.0.1", "ssh_port": "2222",
+            }))
+            with mock.patch.object(setup, "SUPPORT", support), \
+                    mock.patch.object(setup, "launchagent_bindings", return_value={}), \
+                    mock.patch.object(setup, "tcp_free") as tcp_free:
+                with self.assertRaisesRegex(setup.PoCError, "invalid udid"):
+                    setup.assign_targets([device], [device["udid"]], 2222)
+            tcp_free.assert_not_called()
+
     def test_stage_progress_is_private_atomic_and_resumable(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             state = Path(folder) / "device/setup-state.json"

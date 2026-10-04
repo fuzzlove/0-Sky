@@ -160,6 +160,15 @@ identifier.
     and other runtime state, and restores the exact prior state after any
     failure. Regression tests cover migration, endpoint-conflict refusal,
     injected rollback, state preservation, and idempotency.
+15. **The Python setup controller did not reuse an interrupted profile's local
+    SSH port.** After pre.15 refreshed the profile, an earlier exact-device USB
+    tunnel still occupied port 2222. Resume treated the port as unavailable,
+    selected 2223, and the installer correctly rejected that endpoint change.
+    **Status:** fixed. The controller now validates and reuses the deterministic
+    exact-device profile's saved port, reserves ports owned by every other
+    profile, rejects LaunchAgent/profile disagreement, and fails before
+    allocation on unsafe or wrong-device state. Tests cover a busy saved port,
+    another profile's idle reserved port, and endpoint mismatch.
 
 ### Low severity
 
@@ -205,7 +214,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 295 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency |
+| Tool/release unit tests | PASS — 298 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency and interrupted-profile port recovery |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 1 skipped for absent external source kit, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |

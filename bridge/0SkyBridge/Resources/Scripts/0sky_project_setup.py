@@ -366,6 +366,68 @@ def slug_for(device: dict[str, str], existing: dict[str, str] | None) -> str:
     return f"{family}-srd-{suffix}"
 
 
+def canonical_profile_binding(device: dict[str, str]) -> dict[str, str] | None:
+    """Recover the endpoint reserved by an interrupted deterministic setup."""
+    instance = slug_for(device, None)
+    directory = SUPPORT / "instances" / instance
+    config = directory / "config.json"
+    if not directory.exists():
+        return None
+    if directory.is_symlink() or not directory.is_dir():
+        raise PoCError("the deterministic setup directory is unsafe; export Diagnostics")
+    if not config.exists():
+        return None
+    if config.is_symlink() or not config.is_file():
+        raise PoCError("the deterministic setup profile is unsafe; export Diagnostics")
+    try:
+        value = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise PoCError(
+            "the deterministic setup profile is unreadable; use Repair Host Profile"
+        ) from error
+    raw_port = value.get("ssh_port")
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError) as error:
+        raise PoCError(
+            "the interrupted setup profile has no valid local SSH port; use Repair Host Profile"
+        ) from error
+    expected = {
+        "udid": device["udid"], "instance": instance, "ssh_host": "127.0.0.1",
+    }
+    mismatch = next(
+        (key for key, wanted in expected.items() if str(value.get(key, "")) != wanted),
+        None,
+    )
+    if mismatch is not None or not 1024 <= port <= 65535:
+        field = mismatch or "ssh_port"
+        raise PoCError(
+            f"the interrupted setup profile has an invalid {field} field; "
+            "use Repair Host Profile"
+        )
+    return {"instance": instance, "port": str(port)}
+
+
+def configured_profile_ports() -> set[int]:
+    """Reserve other profiles' valid ports without trusting their identity."""
+    instances = SUPPORT / "instances"
+    if not instances.is_dir() or instances.is_symlink():
+        return set()
+    ports: set[int] = set()
+    for directory in instances.iterdir():
+        config = directory / "config.json"
+        if (directory.is_symlink() or not directory.is_dir()
+                or config.is_symlink() or not config.is_file()):
+            continue
+        try:
+            port = int(json.loads(config.read_text(encoding="utf-8")).get("ssh_port"))
+        except (OSError, ValueError, TypeError):
+            continue
+        if 1024 <= port <= 65535:
+            ports.add(port)
+    return ports
+
+
 def assign_targets(devices: list[dict[str, str]], requested: list[str],
                    base_port: int) -> list[dict[str, Any]]:
     by_udid = {item["udid"]: item for item in devices}
@@ -374,17 +436,27 @@ def assign_targets(devices: list[dict[str, str]], requested: list[str],
     if missing:
         raise PoCError("requested USB device(s) not visible: " + ", ".join(missing))
     bindings = launchagent_bindings()
+    reserved = configured_profile_ports()
     used: set[int] = set()
     targets: list[dict[str, Any]] = []
     next_port = base_port
     for udid in selected:
         item = dict(by_udid[udid])
-        existing = bindings.get(udid)
+        agent = bindings.get(udid)
+        profile = canonical_profile_binding(item)
+        if agent and profile and agent != profile:
+            raise PoCError(
+                "the exact-device LaunchAgent and interrupted profile disagree; "
+                "use Repair Host Profile before setup"
+            )
+        existing = agent or profile
         port = int(existing["port"]) if existing and existing.get("port", "").isdigit() else 0
         if not port:
-            while next_port in used or not tcp_free(next_port):
+            while next_port in used or next_port in reserved or not tcp_free(next_port):
                 next_port += 1
             port, next_port = next_port, next_port + 1
+        elif port in used:
+            raise PoCError("selected device profiles claim the same local SSH port")
         used.add(port)
         item.update(port=port, instance=slug_for(item, existing))
         targets.append(item)
