@@ -42,13 +42,14 @@ package, run:
 ```sh
 scripts/build_release.sh --mode distribution --kit KIT --output dist \
   --theos THEOS \
-  --app-identity APP_CERT_SHA1 \
-  --installer-identity INSTALLER_CERT_SHA1 \
   --notary-profile PROFILE
 ```
 
-Use the exact SHA-1 fingerprints of Keychain identities classified as
-Developer ID Application and Developer ID Installer. An Apple Development
+When exactly one valid Developer ID Application identity and one valid
+Developer ID Installer identity are available, the release builder selects
+them automatically. If the Keychain contains more than one identity of either
+type, use `security find-identity -v -p basic` and pass the intended SHA-1
+fingerprints through `--app-identity` and `--installer-identity`. An Apple Development
 certificate is accepted only in `--mode development` for a non-public build.
 Identity fingerprints may instead be supplied through
 `ZERO_SKY_APP_IDENTITY` and `ZERO_SKY_INSTALLER_IDENTITY`; the optional
@@ -60,6 +61,17 @@ file outside Git. The build creates an additional temporary, mode-0600
 denylist for its own home, username, hostname, private host addresses,
 checkout, and staging paths. `ZERO_SKY_RELEASE_DEVICE_IDS` optionally adds a
 comma-separated list of known test-device identifiers for local-only matching.
+
+Create a notarization profile without putting the app-specific password in
+shell history:
+
+```sh
+xcrun notarytool store-credentials 0-sky-release \
+  --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID
+# Enter the app-specific password only when notarytool prompts.
+python3 tools/environment_preflight.py --human --mode release \
+  --kit KIT --theos THEOS --notary-profile 0-sky-release --skip-device
+```
 
 The single release entry point verifies the canonical EULA, stages the
 manifest-listed kit, builds both Mac slices with Xcode, signs nested Mac code

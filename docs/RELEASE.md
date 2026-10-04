@@ -24,7 +24,10 @@ or local test output from being published with the installer.
 2. Configure caller-owned Developer ID Application and Developer ID Installer
    identities in the keychain. Public distribution also requires a `notarytool`
    keychain profile; the build now blocks before compilation when it is absent.
-   Keep all credentials outside the source tree and output logs.
+   Keep all credentials outside the source tree and output logs. The builder
+   automatically selects an identity only when exactly one valid identity of
+   each required category is present; multiple identities require explicit
+   fingerprints and are never guessed.
 3. Run the documented build command in [BUILDING.md](BUILDING.md). The pipeline
    fails closed on invalid kit hashes, signed payload PII, EULA mismatch,
    missing Mac architecture slices, incomplete Python wheel coverage,

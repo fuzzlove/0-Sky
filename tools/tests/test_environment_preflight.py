@@ -70,6 +70,28 @@ class EnvironmentPreflightTests(unittest.TestCase):
         self.assertIn("python3 tools/build_host_runtime.py", rendered)
         self.assertIn("git clone --recursive", rendered)
 
+    @patch.object(preflight, "discover_signing_identities", return_value=[])
+    def test_release_signing_lists_each_missing_requirement(self, _discover) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            result = preflight.report(mode="release", kit=Path(folder) / "missing-kit",
+                                      environment={}, discover_device=False)
+        security = result["security"]
+        self.assertEqual(security["status"], "BLOCKED")
+        self.assertIn("Developer ID Application", security["detail"])
+        self.assertIn("Developer ID Installer", security["detail"])
+        self.assertIn("notarytool", security["remediation"])
+
+    @patch.object(preflight, "discover_signing_identities")
+    def test_release_signing_accepts_one_identity_of_each_type(self, discover) -> None:
+        from tools.signing_identities import Identity
+        discover.return_value = [Identity("A" * 40, "Developer ID Application"),
+                                 Identity("B" * 40, "Developer ID Installer")]
+        with tempfile.TemporaryDirectory() as folder:
+            result = preflight.report(mode="release", kit=Path(folder) / "missing-kit",
+                                      notary_profile="release-profile", environment={},
+                                      discover_device=False)
+        self.assertEqual(result["security"]["status"], "PASS")
+
 
 if __name__ == "__main__":
     unittest.main()

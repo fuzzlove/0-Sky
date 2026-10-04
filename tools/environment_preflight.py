@@ -21,9 +21,11 @@ sys.path.insert(0, str(ROOT / "bridge"))
 from zero_sky_user_config import UserConfigError, config_path, load  # noqa: E402
 try:
     from .host_runtime_manifest import RuntimeManifestError, verify as verify_host_runtime
+    from .signing_identities import discover as discover_signing_identities
     from .theos_preflight import THEOS_INSTALL, TheosError, verify as verify_theos
 except ImportError:
     from host_runtime_manifest import RuntimeManifestError, verify as verify_host_runtime
+    from signing_identities import discover as discover_signing_identities
     from theos_preflight import THEOS_INSTALL, TheosError, verify as verify_theos
 
 
@@ -168,6 +170,7 @@ def inspect_device(udid: str | None, xcrun: str | None) -> dict[str, object]:
 def report(*, mode: str, kit: Path | None = None, udid: str | None = None,
            config_file: Path | None = None,
            theos: Path | None = None,
+           notary_profile: str | None = None,
            environment: Mapping[str, str] | None = None,
            search_path: str | None = None,
            discover_device: bool = True) -> dict[str, object]:
@@ -211,11 +214,60 @@ def report(*, mode: str, kit: Path | None = None, udid: str | None = None,
     except (OSError, RuntimeManifestError, subprocess.SubprocessError) as error:
         host_runtime = {"status": "REPAIRABLE", "detail": str(error),
                         "remediation": "No global install is required. The canonical build assembles the pinned Intel/Apple-silicon runtime automatically; manually run: python3 tools/build_host_runtime.py '/absolute/path/to/a-writable-kit-copy'"}
-    signing = bool(env.get("ZERO_SKY_SIGNING_IDENTITY"))
-    security = {"status": "PASS" if signing else ("BLOCKED" if mode == "release" else "DEGRADED"),
-                "signing_identity_configured": signing,
-                "remediation": None if signing else (
-                    "For a public package, create/import Developer ID Application and Developer ID Installer certificates in Keychain Access, then list fingerprints with: security find-identity -v -p codesigning. Pass the exact fingerprints through --app-identity and --installer-identity. Configure notarization with: xcrun notarytool store-credentials 0-sky-release --apple-id YOUR_APPLE_ID --team-id YOUR_TEAM_ID --password YOUR_APP_SPECIFIC_PASSWORD. For an unsigned local development build, no certificate is required.")}
+    profile = notary_profile or env.get("ZERO_SKY_NOTARY_PROFILE")
+    try:
+        identity_categories = [item.category for item in discover_signing_identities()]
+        app_count = identity_categories.count("Developer ID Application")
+        installer_count = identity_categories.count("Developer ID Installer")
+        discovery_error = False
+    except RuntimeError:
+        app_count = installer_count = 0
+        discovery_error = True
+    missing: list[str] = []
+    if discovery_error:
+        missing.append("Keychain identity discovery failed")
+    if app_count == 0:
+        missing.append("Developer ID Application certificate and private key")
+    elif app_count > 1:
+        missing.append("an explicit Developer ID Application fingerprint (multiple are installed)")
+    if installer_count == 0:
+        missing.append("Developer ID Installer certificate and private key")
+    elif installer_count > 1:
+        missing.append("an explicit Developer ID Installer fingerprint (multiple are installed)")
+    if not profile:
+        missing.append("a notarytool keychain profile")
+    release_ready = not missing
+    security_status = ("PASS" if release_ready else
+                       ("BLOCKED" if mode == "release" else "DEGRADED"))
+    remediation_parts: list[str] = []
+    if app_count == 0 or installer_count == 0:
+        remediation_parts.append(
+            "Create the missing certificate type at https://developer.apple.com/account/resources/certificates/list, "
+            "upload the CSR that matches the private key, download the .cer file, and open it in Keychain Access.")
+    if app_count > 1 or installer_count > 1:
+        remediation_parts.append(
+            "List valid SHA-1 fingerprints with: security find-identity -v -p basic; pass the intended values "
+            "to scripts/build_release.sh with --app-identity and --installer-identity.")
+    if not profile:
+        remediation_parts.append(
+            "Create an app-specific password at https://account.apple.com, then store it without placing the "
+            "password in shell history: xcrun notarytool store-credentials 0-sky-release --apple-id "
+            "YOUR_APPLE_ID --team-id YOUR_TEAM_ID; enter the app-specific password only at the secure prompt. "
+            "Then rerun preflight with --notary-profile 0-sky-release.")
+    if discovery_error:
+        remediation_parts.append(
+            "Open Keychain Access, unlock the login keychain, and verify with: security find-identity -v -p basic")
+    security = {
+        "status": security_status,
+        "developer_id_application": "available" if app_count == 1 else
+        ("missing" if app_count == 0 else "ambiguous"),
+        "developer_id_installer": "available" if installer_count == 1 else
+        ("missing" if installer_count == 0 else "ambiguous"),
+        "notary_profile": "configured" if profile else "missing",
+        "detail": "All distribution credentials are selected." if release_ready else
+        "Missing or ambiguous: " + "; ".join(missing),
+        "remediation": "\n".join(remediation_parts) or None,
+    }
     theos_input = theos or (Path(env["THEOS"]).expanduser() if env.get("THEOS") else None)
     if theos_input is None:
         theos_result: dict[str, object] = {
@@ -297,6 +349,8 @@ def main() -> int:
     parser.add_argument("--kit", type=Path)
     parser.add_argument("--theos", type=Path,
                         help="locked Theos checkout (or set THEOS)")
+    parser.add_argument("--notary-profile",
+                        help="notarytool keychain profile (or set ZERO_SKY_NOTARY_PROFILE)")
     parser.add_argument("--udid")
     parser.add_argument("--config", type=Path)
     parser.add_argument("--skip-device", action="store_true")
@@ -304,7 +358,8 @@ def main() -> int:
                         help="print a user-facing checklist and exact repair actions")
     args = parser.parse_args()
     value = report(mode=args.mode, kit=args.kit, udid=args.udid, theos=args.theos,
-                   config_file=args.config, discover_device=not args.skip_device)
+                   config_file=args.config, notary_profile=args.notary_profile,
+                   discover_device=not args.skip_device)
     print(human_report(value) if args.human else json.dumps(value, indent=2, sort_keys=True),
           end="" if args.human else "\n")
     return 0 if value["status"] in {"READY", "DEGRADED"} else 2

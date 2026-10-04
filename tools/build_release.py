@@ -18,12 +18,12 @@ import tempfile
 try:
     from .release_manifest import ManifestError, generate as generate_release_manifest
     from .release_paths import ReleasePaths
-    from .signing_identities import discover, require_identity
+    from .signing_identities import discover, require_identity, resolve_identity
     from .verify_release import REQUIRED_MAC_BINARIES, report_text
 except ImportError:
     from release_manifest import ManifestError, generate as generate_release_manifest
     from release_paths import ReleasePaths
-    from signing_identities import discover, require_identity
+    from signing_identities import discover, require_identity, resolve_identity
     from verify_release import REQUIRED_MAC_BINARIES, report_text
 
 
@@ -73,8 +73,11 @@ def remediation_for(code: str) -> str:
                 "device credentials, or an installed app's kit into the source tree")
     if "SIGNING_IDENTITY" in code:
         return ("Import valid Developer ID Application and Developer ID Installer certificates "
-                "into the login keychain; list SHA-1 fingerprints with `security find-identity "
-                "-v -p codesigning`, then pass --app-identity and --installer-identity")
+                "with their private keys into the login keychain. If exactly one valid identity "
+                "of each type is present, the release command selects them automatically. If "
+                "multiple identities of either type are present, list SHA-1 fingerprints with "
+                "`security find-identity -v -p basic`, then pass the intended values through "
+                "--app-identity and --installer-identity")
     if code == "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID" or "HOST_RUNTIME_SOURCE_MISSING" in code:
         return ("Run `python3 tools/build_host_runtime.py /absolute/path/to/a-writable-kit-copy`; "
                 "the command prints the exact pinned archive URL, cache destination, expected "
@@ -210,9 +213,9 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
         state["Build mode"] = mode
         if mode == "distribution":
             try:
-                app_identity = require_identity(
+                app_identity = resolve_identity(
                     app_identity, "Developer ID Application", identities)
-                installer_identity = require_identity(
+                installer_identity = resolve_identity(
                     installer_identity, "Developer ID Installer", identities)
             except RuntimeError as error:
                 raise ReleaseFailure("SIGNING_PREFLIGHT", str(error)) from error

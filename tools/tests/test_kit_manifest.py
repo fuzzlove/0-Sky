@@ -14,7 +14,8 @@ from tools.kit_manifest import APPROVAL_NAME, APPROVAL_STATES, REQUIRED, generat
 from tools.build_release import build as build_release, preflight_failure_code, remediation_for
 from tools.release_paths import ReleasePaths, RuntimePaths
 from tools.release_sanitize import audit
-from tools.signing_identities import Identity, parse_identities, require_identity
+from tools.signing_identities import (Identity, parse_identities, require_identity,
+                                      resolve_identity)
 from tools.test_offline_install import verify as verify_offline_install
 from tools.wheel_inventory import write as write_wheel_inventory
 
@@ -167,6 +168,13 @@ class KitManifestTests(unittest.TestCase):
             require_identity(fingerprint, "Developer ID Application", identities)
         with self.assertRaisesRegex(RuntimeError, "BLOCKED_MISSING"):
             require_identity(None, "Developer ID Installer", identities)
+
+    def test_unique_distribution_identity_can_be_selected_automatically(self) -> None:
+        identity = Identity("A" * 40, "Developer ID Application")
+        self.assertEqual(resolve_identity(None, "Developer ID Application", [identity]),
+                         identity.fingerprint)
+        with self.assertRaisesRegex(RuntimeError, "AMBIGUOUS"):
+            resolve_identity(None, "Developer ID Application", [identity, identity])
 
     def test_offline_install_never_uses_network_index(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
