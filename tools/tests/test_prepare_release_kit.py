@@ -49,6 +49,13 @@ class PrepareReleaseKitTests(unittest.TestCase):
                              (release.ROOT / "bridge/DeviceRuntime/zero_sky_core/research_toolkit_manifest.json").read_bytes())
             self.assertIn(f"{digest(catalog)}  ./automation/tools/srd-runtime-manager/zero_sky_core/research_toolkit_manifest.json",
                           manifest.read_text(encoding="utf-8"))
+            injector_license = kit / "automation/tools/srd-runtime-manager/sandboxed-injector/LICENSE"
+            self.assertEqual(injector_license.read_bytes(),
+                             release.RUNTIME_MANAGER_ADDITIONS[
+                                 "automation/tools/srd-runtime-manager/sandboxed-injector/LICENSE"
+                             ].read_bytes())
+            self.assertIn(f"{digest(injector_license)}  ./automation/tools/srd-runtime-manager/sandboxed-injector/LICENSE",
+                          manifest.read_text(encoding="utf-8"))
 
     def test_unprepared_kit_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

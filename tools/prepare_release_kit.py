@@ -51,6 +51,7 @@ OVERRIDES = {
 }
 
 RUNTIME_MANAGER_SOURCE = ROOT / "bridge/KitScripts/automation/tools/srd-runtime-manager"
+RUNTIME_MANAGER_ADDITIONS: dict[str, Path] = {}
 for relative in (
     "runtime_manager_launcher.c",
     "codes.openai.research.srd-runtime-manager.plist",
@@ -73,7 +74,7 @@ for relative in (
     "sandboxed-injector/thread_utils.h",
     "sandboxed-injector/thread_utils.m",
 ):
-    OVERRIDES["automation/tools/srd-runtime-manager/" + relative] = (
+    RUNTIME_MANAGER_ADDITIONS["automation/tools/srd-runtime-manager/" + relative] = (
         RUNTIME_MANAGER_SOURCE / relative
     )
 
@@ -117,6 +118,7 @@ def apply_portability_overrides(kit: Path) -> None:
     overlays = {
         "automation/CrypStoreAutomation/trollstorelite-srd-bridge.py": ROOT / "bridge/DeviceRuntime/trollstorelite-srd-bridge.py",
         "automation/CrypStoreAutomation/bootsplash-launch.py": ROOT / "bridge/DeviceRuntime/bootsplash_launch.py",
+        **RUNTIME_MANAGER_ADDITIONS,
     }
     for package, destinations in (
         (compatibility, ("automation/CrypStoreAutomation/zero_sky_compat", "automation/tools/srd-runtime-manager/zero_sky_compat")),
