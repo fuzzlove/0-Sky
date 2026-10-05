@@ -15,7 +15,7 @@ import tempfile
 try:
     from .kit_manifest import (APPROVAL_NAME, APPROVAL_STATES,
                                generate as generate_kit_manifest, verify as verify_kit_manifest)
-    from .stage_verified_kit import digest, stage
+    from .stage_verified_kit import REQUIRED_RUNTIME_BUILD_INPUTS, digest, stage
     from .stage_control_payload import stage as stage_control_payload
     from .verify_release import architecture_of, platform_of, wheel_coverage
     from .host_runtime_manifest import verify as verify_host_runtime
@@ -24,7 +24,7 @@ try:
 except ImportError:
     from kit_manifest import (APPROVAL_NAME, APPROVAL_STATES,
                               generate as generate_kit_manifest, verify as verify_kit_manifest)
-    from stage_verified_kit import digest, stage
+    from stage_verified_kit import REQUIRED_RUNTIME_BUILD_INPUTS, digest, stage
     from stage_control_payload import stage as stage_control_payload
     from verify_release import architecture_of, platform_of, wheel_coverage
     from host_runtime_manifest import verify as verify_host_runtime
@@ -141,6 +141,23 @@ def verify_runtime_manager_package(kit: Path) -> Path:
         flush=True,
     )
     return package
+
+
+def verify_runtime_builder_inputs(kit: Path) -> None:
+    """Require every source file compiled during first-device enrollment."""
+    missing = [
+        relative for relative in sorted(REQUIRED_RUNTIME_BUILD_INPUTS)
+        if (kit / relative).is_symlink() or not (kit / relative).is_file()
+    ]
+    if missing:
+        raise RuntimeError(
+            "required first-runtime Xcode inputs are missing: " + ", ".join(missing)
+        )
+    print(
+        "FIRST_RUNTIME_BUILD_INPUTS=PASS files="
+        + str(len(REQUIRED_RUNTIME_BUILD_INPUTS)),
+        flush=True,
+    )
 
 
 def stage_link_control_only(verified_kit: Path, destination: Path) -> None:
@@ -279,6 +296,7 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
         candidate = work / "release-kit"
         count = stage(source, candidate, release=True)
         apply_portability_overrides(candidate)
+        verify_runtime_builder_inputs(candidate)
         if not (candidate / "host-mac/HOST_RUNTIME_MANIFEST.json").is_file():
             print("HOST_RUNTIME_BUILD=START pinned dual-architecture runtime", flush=True)
             build_host_runtime(candidate, ROOT / ".build/host-runtime-cache")
@@ -371,6 +389,8 @@ def main() -> int:
             ("required runtime-manager bootstrap package is missing:",
              "DEVICE_RUNTIME_BOOTSTRAP_MISSING"),
             ("runtime-manager package ", "DEVICE_RUNTIME_BOOTSTRAP_METADATA_MISMATCH"),
+            ("required first-runtime Xcode inputs are missing:",
+             "FIRST_RUNTIME_XCODE_INPUTS_MISSING"),
         )
         code = next((value for text, value in known if text in message),
                     type(error).__name__.upper())
@@ -390,6 +410,16 @@ def main() -> int:
                 "Package=com.liquidskysecurity.srd-runtime-manager, matching Version, "
                 "and Architecture=iphoneos-arm64. Rebuild and verify the DEB; do not "
                 "rename a different package to bypass this gate.",
+                file=sys.stderr,
+            )
+        elif code == "FIRST_RUNTIME_XCODE_INPUTS_MISSING":
+            print(f"DETAIL={message}", file=sys.stderr)
+            print("REQUIRED_ACTION:", file=sys.stderr)
+            print(
+                "  Recreate the external kit from its manifest-verified source. "
+                "It must include test_host.c, test_tweak.c, and test_tweak.plist "
+                "under automation/tools/srd-runtime-manager. These historical "
+                "test-named files are production enrollment compiler inputs.",
                 file=sys.stderr,
             )
         return 2

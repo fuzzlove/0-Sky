@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import patch
 
 from tools import prepare_release_kit as release
-from tools.stage_verified_kit import digest
+from tools.stage_verified_kit import REQUIRED_RUNTIME_BUILD_INPUTS, digest
 from tools.verify_prepared_kit import verify
 
 
@@ -41,6 +41,17 @@ class PrepareReleaseKitTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             with self.assertRaisesRegex(RuntimeError, "bootstrap package is missing"):
                 release.verify_runtime_manager_package(Path(folder))
+
+    def test_first_runtime_builder_inputs_are_release_requirements(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            with self.assertRaisesRegex(RuntimeError, "Xcode inputs are missing"):
+                release.verify_runtime_builder_inputs(kit)
+            for relative in REQUIRED_RUNTIME_BUILD_INPUTS:
+                path = kit / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            release.verify_runtime_builder_inputs(kit)
 
     def test_overrides_are_manifest_bound_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

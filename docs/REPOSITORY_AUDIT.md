@@ -214,6 +214,19 @@ identifier.
     exists and bundled `dpkg-deb` proves its package ID, version, and
     `iphoneos-arm64` architecture. Tests cover matching and missing packages,
     and failures print an exact remediation without permitting a rename bypass.
+20. **Release pruning removed production inputs solely because their names
+    began with `test_`.** Live pre.20 Intel Resume successfully found and
+    uploaded the verified 2.4.10 bootstrap package, then Xcode stopped because
+    `test_host.c` was absent from the staged per-device kit. The same builder
+    also requires `test_tweak.c` and `test_tweak.plist`. **Status:** fixed. A
+    narrow release allowlist now preserves exactly these three enrollment-time
+    compiler inputs while continuing to exclude maintenance tests and generated
+    caches. Release preparation fails before signing with
+    `FIRST_RUNTIME_XCODE_INPUTS_MISSING` and exact remediation if any input is
+    absent. The controller performs the same pre-build check and tells users
+    that Xcode itself is not missing. A direct clean Xcode/iPhoneOS SDK build
+    of both arm64 and arm64e inputs, Universal lipo products, and both Debian
+    outputs passed before packaging.
 
 ### Low severity
 
@@ -259,8 +272,8 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 306 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, and runtime-manager semantic package validation |
-| Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 3 skipped for unavailable external fixtures, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
+| Tool/release unit tests | PASS — 308 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, and production compiler-input retention |
+| Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
 | BridgeCore tests | PASS — 33/33 |

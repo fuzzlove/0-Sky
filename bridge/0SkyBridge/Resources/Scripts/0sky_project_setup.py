@@ -913,6 +913,26 @@ def ensure_first_runtime(python: Path, target: dict[str, Any],
         check=False, capture=True, timeout=20,
     ).returncode == 0:
         return
+    instance = SUPPORT / "instances" / target["instance"]
+    builder = instance / "automation/tools/srd-runtime-manager/build_poc.py"
+    builder_root = builder.parent
+    required_builder_inputs = (
+        builder,
+        builder_root / "test_host.c",
+        builder_root / "test_tweak.c",
+        builder_root / "test_tweak.plist",
+    )
+    missing_builder_inputs = [
+        path.name for path in required_builder_inputs
+        if path.is_symlink() or not path.is_file()
+    ]
+    if missing_builder_inputs:
+        raise PoCError(
+            "the installed 0-Sky kit is incomplete: first-runtime Xcode input(s) "
+            + ", ".join(missing_builder_inputs)
+            + " are missing. Install the complete current 0-Sky Bridge package "
+              "and choose Resume; Xcode itself is not the missing dependency."
+        )
     token_command = r'''T=
 for C in /private/var/run/com.apple.security.cryptexd/mnt/com.liquidsky.srdssh.*/usr/bin/toybox; do
  [ -x "$C" ] && T="$C" && break
@@ -953,8 +973,6 @@ test "$("$T" wc -c < /var/jb/etc/trollstorelite-srd-bridge.token)" -eq 65'''
         + " ".join(shlex.quote(path) for path in remote_paths),
         check=False, timeout=600, log_file=run_dir / "first-runtime.log",
     )
-    instance = SUPPORT / "instances" / target["instance"]
-    builder = instance / "automation/tools/srd-runtime-manager/build_poc.py"
     build_output = instance / "automation/artifacts/srd-runtime-poc/build"
     run([python, builder, "--output", build_output], timeout=600,
         log_file=run_dir / "first-runtime-build.log")

@@ -12,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from tools.release_sanitize import audit
-from tools.stage_verified_kit import digest, stage
+from tools.stage_verified_kit import REQUIRED_RUNTIME_BUILD_INPUTS, digest, stage
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -303,6 +303,30 @@ class InstallerLifecycleTests(unittest.TestCase):
             self.assertEqual(output.stat().st_mode & 0o777, 0o755)
             self.assertEqual((output / "asset-0").stat().st_mode & 0o777, 0o644)
             self.assertEqual((output / "asset-1").stat().st_mode & 0o777, 0o755)
+
+    def test_release_staging_keeps_first_runtime_compiler_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "kit", root / "output"
+            files = [source / f"asset-{index}" for index in range(10)]
+            files += [source / relative for relative in REQUIRED_RUNTIME_BUILD_INPUTS]
+            files += [source / "automation/tools/srd-runtime-manager/test_manager.py"]
+            for index, path in enumerate(files):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(f"fixture {index}".encode())
+            (source / "SHA256SUMS").write_text("".join(
+                f"{digest(path)}  ./{path.relative_to(source).as_posix()}\n"
+                for path in files))
+
+            self.assertEqual(
+                stage(source, output, release=True),
+                10 + len(REQUIRED_RUNTIME_BUILD_INPUTS),
+            )
+            for relative in REQUIRED_RUNTIME_BUILD_INPUTS:
+                self.assertTrue((output / relative).is_file(), relative)
+            self.assertFalse(
+                (output / "automation/tools/srd-runtime-manager/test_manager.py").exists()
+            )
 
     def test_sanitizer_reports_categories_without_values(self):
         with tempfile.TemporaryDirectory() as temporary:

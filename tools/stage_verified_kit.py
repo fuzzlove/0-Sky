@@ -15,6 +15,19 @@ class StageError(RuntimeError):
     pass
 
 
+# These files have historical ``test_*`` names, but they are not disposable
+# test output.  ``build_poc.py`` compiles them on the Mac during first-device
+# enrollment to produce the trust-cached runtime host and dylib.  Omitting
+# them makes an otherwise valid release fail only after it has modified the
+# device.  Keep this narrow allowlist rather than broadly shipping maintenance
+# tests in the end-user package.
+REQUIRED_RUNTIME_BUILD_INPUTS = frozenset({
+    "automation/tools/srd-runtime-manager/test_host.c",
+    "automation/tools/srd-runtime-manager/test_tweak.c",
+    "automation/tools/srd-runtime-manager/test_tweak.plist",
+})
+
+
 def digest(path: Path) -> str:
     value = hashlib.sha256()
     with path.open("rb") as stream:
@@ -62,9 +75,11 @@ def stage(source: Path, destination: Path, *, release: bool = False,
             relative = parts[1].strip().lstrip("*").removeprefix("./")
             if not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
                 raise StageError("kit manifest path escapes its root")
+            is_test_named = (Path(relative).name.startswith("test_")
+                             or "tests" in Path(relative).parts)
+            required_runtime_input = relative in REQUIRED_RUNTIME_BUILD_INPUTS
             if ((release or link_embed) and
-                    (Path(relative).name.startswith("test_")
-                     or "tests" in Path(relative).parts
+                    ((is_test_named and not required_runtime_input)
                      or "__pycache__" in Path(relative).parts
                      or Path(relative).suffix in {".pyc", ".pyo"})):
                 continue
