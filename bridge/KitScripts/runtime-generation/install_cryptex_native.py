@@ -81,39 +81,77 @@ def build(root,identifier,version,work):
     (work/'sdk-assets.json').write_text(json.dumps(record,indent=2)+'\n')
     return manifest
 
-async def install(manifest,identifier,udid):
-    enable_flow_control_accounting()
-    from pymobiledevice3.remote.native_tunnel import NativeRemotedTunnel
+async def install_with_rsd(rsd, identity, data, identifier, udid):
     from pymobiledevice3.remote.xpc_message import XpcUInt64Type
     from pymobiledevice3.restore.tss import TSSRequest
+    from pymobiledevice3.services.cryptexd import CryptexdService
+    identity=copy.deepcopy(identity)
+    identity.update({'Cryptex1,UseProductClass':True,'Cryptex1,ChipID':'0xff10','Cryptex1,ProductClass':'0xf2','Cryptex1,Type':3,'Cryptex1,SubType':255,'Cryptex1,NonceDomain':3,'Cryptex1,Version':'999.999.999.999.999,999','Cryptex1,PreauthorizationVersion':'999.999.999.999.999,999'})
+    for k,v in data.items():
+        identity['Manifest'][k]['Digest']=hashlib.sha384(v).digest();identity['Manifest'][k].setdefault('Info',{})['Personalize']=True
+    if str(rsd.udid)!=udid:raise RuntimeError('Exact-device identity mismatch')
+    image_type_index=image_type_index_for(getattr(rsd,'product_version',None))
+    print('Selected GenericDmg image index',image_type_index,'for iOS',rsd.product_version,flush=True)
+    service=CryptexdService(rsd)
+    identifiers=await service.read_personalization_identifiers();nonce=await service.cryptex_nonce(3)
+    if not nonce:raise RuntimeError('Research nonce unavailable')
+    request=TSSRequest();request.add_cryptex1_tags(identity,identifiers,nonce)
+    response=await asyncio.wait_for(request.send_receive(),timeout=90)
+    ticket=response.get('Cryptex1,Ticket')
+    if not isinstance(ticket,bytes) or not ticket:raise RuntimeError('Apple did not authorize the Cryptex')
+    print('Live Apple research authorization accepted for',udid,identifier,flush=True)
+    existing=await asyncio.wait_for(service.copy_installed(),timeout=30)
+    matches=[item for item in existing if item.identifier==identifier]
+    if len(matches)>1:raise RuntimeError('Multiple generations claim this identifier')
+    if matches:await asyncio.wait_for(service.uninstall(identifier),timeout=30)
+    properties={'Cryptex1,UseProductClass':True,'MountedCryptex':False,'Cryptex1,SubType':XpcUInt64Type(255),'Cryptex1,NonceDomain':XpcUInt64Type(3),'Cryptex1,Version':identity['Cryptex1,Version'],'Cryptex1,PreauthVersion':identity['Cryptex1,PreauthorizationVersion']}
+    await asyncio.wait_for(service.install(data['Cryptex1,GenericDmg'],data['Cryptex1,GenericTrustCache'],ticket,data['Cryptex1,CryptexInfoPlist'],data['Cryptex1,GenericVolume'],properties,image_type_index=image_type_index,persistence=2,nonce_persistence=1,auth=0),timeout=900)
+
+async def install(manifest,identifier,udid):
+    enable_flow_control_accounting()
+    from pymobiledevice3.exceptions import StreamClosedError
+    from pymobiledevice3.remote.native_tunnel import NativeRemotedTunnel
+    from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
     from pymobiledevice3.services.cryptexd import CryptexdService
     identity,paths=assets_from_manifest(manifest)
     data={k:p.read_bytes() for k,p in paths.items()}
     info=plistlib.loads(data['Cryptex1,CryptexInfoPlist'])
     if info.get('CFBundleIdentifier')!=identifier:raise ValueError('Cryptex identifier mismatch')
-    identity=copy.deepcopy(identity)
-    identity.update({'Cryptex1,UseProductClass':True,'Cryptex1,ChipID':'0xff10','Cryptex1,ProductClass':'0xf2','Cryptex1,Type':3,'Cryptex1,SubType':255,'Cryptex1,NonceDomain':3,'Cryptex1,Version':'999.999.999.999.999,999','Cryptex1,PreauthorizationVersion':'999.999.999.999.999,999'})
-    for k,v in data.items():
-        identity['Manifest'][k]['Digest']=hashlib.sha384(v).digest();identity['Manifest'][k].setdefault('Info',{})['Personalize']=True
-    async with NativeRemotedTunnel(serial=udid) as rsd:
-        if str(rsd.udid)!=udid:raise RuntimeError('Exact-device identity mismatch')
-        image_type_index=image_type_index_for(getattr(rsd,'product_version',None))
-        print('Selected GenericDmg image index',image_type_index,'for iOS',rsd.product_version,flush=True)
-        service=CryptexdService(rsd)
-        identifiers=await service.read_personalization_identifiers();nonce=await service.cryptex_nonce(3)
-        if not nonce:raise RuntimeError('Research nonce unavailable')
-        request=TSSRequest();request.add_cryptex1_tags(identity,identifiers,nonce)
-        response=await asyncio.wait_for(request.send_receive(),timeout=90)
-        ticket=response.get('Cryptex1,Ticket')
-        if not isinstance(ticket,bytes) or not ticket:raise RuntimeError('Apple did not authorize the Cryptex')
-        print('Live Apple research authorization accepted for',udid,identifier,flush=True)
-        existing=await asyncio.wait_for(service.copy_installed(),timeout=30)
-        matches=[item for item in existing if item.identifier==identifier]
-        if len(matches)>1:raise RuntimeError('Multiple generations claim this identifier')
-        if matches:await asyncio.wait_for(service.uninstall(identifier),timeout=30)
-        properties={'Cryptex1,UseProductClass':True,'MountedCryptex':False,'Cryptex1,SubType':XpcUInt64Type(255),'Cryptex1,NonceDomain':XpcUInt64Type(3),'Cryptex1,Version':identity['Cryptex1,Version'],'Cryptex1,PreauthVersion':identity['Cryptex1,PreauthorizationVersion']}
-        await asyncio.wait_for(service.install(data['Cryptex1,GenericDmg'],data['Cryptex1,GenericTrustCache'],ticket,data['Cryptex1,CryptexInfoPlist'],data['Cryptex1,GenericVolume'],properties,image_type_index=image_type_index,persistence=2,nonce_persistence=1,auth=0),timeout=900)
+    # A paired userspace USB channel is already proven by the setup preflight.
+    # Prefer it for the actual transfer on every host: Intel native remoted can
+    # block inside ctypes/libffi callback allocation before asyncio can enforce
+    # a timeout. This path never silently pairs and remains bound to the exact
+    # selected UDID. Native remains an explicit recovery backend only.
+    transport = os.environ.get("ZERO_SKY_CRYPTEX_TRANSPORT", "userspace")
+    if transport not in {"userspace", "native"}:
+        raise RuntimeError("ZERO_SKY_CRYPTEX_TRANSPORT must be userspace or native")
+    if transport == "userspace":
+        print("Cryptex transport: existing paired userspace USB", flush=True)
+        async with UserspaceRsdTunnel(serial=udid, autopair=False) as rsd:
+            await install_with_rsd(rsd,identity,data,identifier,udid)
         print('INSTALL SUCCESS',identifier,flush=True)
+        return
+    print("Cryptex transport: explicit macOS native remoted", flush=True)
+    try:
+        async with NativeRemotedTunnel(serial=udid) as rsd:
+            await install_with_rsd(rsd,identity,data,identifier,udid)
+    except StreamClosedError as error:
+        # iOS can reset a large native RemoteXPC transfer after accepting all
+        # bytes. Re-enter through the independent, paired userspace transport,
+        # first checking whether the exact identifier committed. This is a
+        # bounded one-time backend change, never a repeat of the failed method.
+        print('Native RemoteXPC transfer reset; verifying through paired userspace transport',flush=True)
+        async with UserspaceRsdTunnel(serial=udid,autopair=False) as rsd:
+            if str(rsd.udid)!=udid:raise RuntimeError('Exact-device identity mismatch')
+            existing=await asyncio.wait_for(CryptexdService(rsd).copy_installed(),timeout=30)
+            matches=[item for item in existing if item.identifier==identifier]
+            if len(matches)>1:raise RuntimeError('Multiple generations claim this identifier')
+            if matches:
+                print('INSTALL COMMITTED before native reset',identifier,flush=True)
+            else:
+                print('Retrying once with paired userspace transport',flush=True)
+                await install_with_rsd(rsd,identity,data,identifier,udid)
+    print('INSTALL SUCCESS',identifier,flush=True)
 
 def main():
     if sys.argv[1:]==['--build-and-install']:

@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 140,
-    "required-source-or-maintenance-test": 2114,
+    "required-source-or-maintenance-test": 2115,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "875197cd122fa64e320d25d2d3375203adabb5283ecf1f86ba532460b40815bc",
-      "size": 9475
+      "sha256": "d9789b308dfdca533369eb754b2a92bc5a141aa110077815c0bf6f627da38ebb",
+      "size": 9876
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -11517,8 +11517,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
-      "sha256": "d725e0505b5b82b87172eb5ded29b2594bee5abcbd6db70a4a70ed68d871dad6",
-      "size": 14669
+      "sha256": "074d5ffba1b8b21cbc17f8acd33e85f280a442a6bfe0c430f15313ae9362b29e",
+      "size": 15666
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11655,8 +11655,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/runtime-generation/install_cryptex_native.py",
-      "sha256": "aea39b212b08af165f9a6682fcb7f0a5aa87845ee64f0b13c5f913ffb6e8b35a",
-      "size": 13218
+      "sha256": "074d5ffba1b8b21cbc17f8acd33e85f280a442a6bfe0c430f15313ae9362b29e",
+      "size": 15666
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11739,8 +11739,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/Tests/HostToolsTests/test_cryptex_transport_fallback.py",
-      "sha256": "c6827c01e5ef73cfc6422c4c0fcc498b4901312327a8540db46456682313d23c",
-      "size": 4456
+      "sha256": "2513ab33764c8cbf62efda9ff70b1df272f0bd03d0eb49f430523412a50f274f",
+      "size": 6223
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13587,8 +13587,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "27188fc0734d1ab0226d30e59d576cb3a9c7bf68be924a84e56fa3e463781839",
-      "size": 23623
+      "sha256": "9730f0f5bc9d2c5f2837309a199376f7cce6b6968bb2318276e3fcbc02f4c2f5",
+      "size": 24497
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13605,8 +13605,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "2fee675e8bdfa302b436d485b9f2878392d97ed76dd70f1c9e2420cfb3b092b0",
-      "size": 19330
+      "sha256": "27b7d28ff80b0d2a5b4762eca5fd765726c8327e864578baabcbd3848ba2007f",
+      "size": 20243
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13727,6 +13727,12 @@
       "path": "docs/release-notes-v1.0.0-pre.23.md",
       "sha256": "99e45b8a889247ac6a760b7f2ca92cf2a73d1c9fa2fde29de86670d2ff159606",
       "size": 2182
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/release-notes-v1.0.0-pre.24.md",
+      "sha256": "9f575abe5ef4f6f9a77e449c5ce2f8cdaa4973f600c26ea9edefc6d1e786a87a",
+      "size": 1739
     },
     {
       "category": "required-source-or-maintenance-test",

@@ -254,6 +254,18 @@ identifier.
     actions. Hidden child output is included as a bounded failure tail, and the
     release gate now extracts a real locked Zstandard Procursus package rather
     than relying only on its gzip-generated probe.
+23. **The first trusted-runtime installer repeated an Intel native-RemoteXPC
+    deadlock already avoided by SRDssh.** Live pre.23 passed Zstandard extraction,
+    rebuilt all runtime assets, and reached Cryptex construction. Its generated
+    installer then selected `NativeRemotedTunnel`; a process sample proved it
+    blocked inside `_ctypes_alloc_callback`/`ffi_closure_alloc` before any
+    asyncio timeout or Cryptex mutation. **Status:** fixed. Runtime-generation
+    and automation now ship byte-identical installers that default to the
+    existing exact-UDID paired userspace USB transport with automatic pairing
+    disabled. Native remoted is retained only as an explicit recovery backend.
+    Regression tests prove the default never constructs the native tunnel and
+    preserve the bounded native-reset commit-verification path when explicitly
+    selected.
 
 ### Low severity
 

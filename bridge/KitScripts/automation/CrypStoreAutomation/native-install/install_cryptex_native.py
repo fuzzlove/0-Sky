@@ -117,6 +117,21 @@ async def install(manifest,identifier,udid):
     data={k:p.read_bytes() for k,p in paths.items()}
     info=plistlib.loads(data['Cryptex1,CryptexInfoPlist'])
     if info.get('CFBundleIdentifier')!=identifier:raise ValueError('Cryptex identifier mismatch')
+    # A paired userspace USB channel is already proven by the setup preflight.
+    # Prefer it for the actual transfer on every host: Intel native remoted can
+    # block inside ctypes/libffi callback allocation before asyncio can enforce
+    # a timeout. This path never silently pairs and remains bound to the exact
+    # selected UDID. Native remains an explicit recovery backend only.
+    transport = os.environ.get("ZERO_SKY_CRYPTEX_TRANSPORT", "userspace")
+    if transport not in {"userspace", "native"}:
+        raise RuntimeError("ZERO_SKY_CRYPTEX_TRANSPORT must be userspace or native")
+    if transport == "userspace":
+        print("Cryptex transport: existing paired userspace USB", flush=True)
+        async with UserspaceRsdTunnel(serial=udid, autopair=False) as rsd:
+            await install_with_rsd(rsd,identity,data,identifier,udid)
+        print('INSTALL SUCCESS',identifier,flush=True)
+        return
+    print("Cryptex transport: explicit macOS native remoted", flush=True)
     try:
         async with NativeRemotedTunnel(serial=udid) as rsd:
             await install_with_rsd(rsd,identity,data,identifier,udid)
