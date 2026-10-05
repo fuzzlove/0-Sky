@@ -156,6 +156,47 @@ class WorkerIPAHashTests(unittest.TestCase):
             self.assertEqual(install[install.index("--device") + 2], str(app))
             self.assertNotIn("pymobiledevice3", " ".join(map(str, install)))
 
+    def test_control_native_launch_uses_exact_device_devicectl(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+
+            def execute(argv, **kwargs):
+                if argv == ["/usr/bin/xcrun", "--find", "devicectl"]:
+                    return subprocess.CompletedProcess(
+                        argv, 0, b"/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl\n", b"")
+                result = Path(argv[argv.index("--json-output") + 1])
+                result.write_text(json.dumps({
+                    "result": {"process": {"processIdentifier": 4242}}
+                }))
+                return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+            with mock.patch.object(worker, "DEVICE_UDID", "selected-device"), \
+                    mock.patch.object(worker, "run", side_effect=execute) as run:
+                worker.launch_app_with_devicectl("com.liquidsky.CrypStore", root)
+
+            launch = run.call_args_list[1].args[0]
+            self.assertEqual(launch[0],
+                             Path("/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl"))
+            self.assertEqual(launch[1:4], ["device", "process", "launch"])
+            self.assertEqual(launch[launch.index("--device") + 1], "selected-device")
+            self.assertIn("--terminate-existing", launch)
+            self.assertEqual(launch[-1], "com.liquidsky.CrypStore")
+
+    def test_native_launch_proof_does_not_repeat_uiopen(self):
+        running = subprocess.CompletedProcess(
+            ["ssh"], 0,
+            b"/var/containers/Bundle/Application/F/CrypStore.app/CrypStore\n",
+            b"")
+        with mock.patch.object(worker, "ssh", return_value=running) as ssh, \
+                mock.patch.object(worker.time, "sleep"):
+            worker.verify_foreground_launch(
+                "com.liquidsky.CrypStore",
+                "/private/var/containers/Bundle/Application/F/CrypStore.app",
+                "CrypStore", observation_seconds=0.01,
+                launch_already_requested=True)
+        self.assertTrue(all("uiopen" not in call.args[0]
+                            for call in ssh.call_args_list))
+
     def test_fresh_link_uses_bounded_cryptex_registration(self):
         source = WORKER.read_text(encoding="utf-8")
         start = source.index("def process_link_install(")

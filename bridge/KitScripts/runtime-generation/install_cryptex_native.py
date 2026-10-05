@@ -1,7 +1,10 @@
 """Build SDK-prepared APFS assets and install one exact SRD Cryptex."""
-import argparse,asyncio,copy,hashlib,json,os,pathlib,plistlib,shutil,subprocess,sys,uuid
+import argparse,asyncio,copy,hashlib,json,os,pathlib,plistlib,shutil,subprocess,sys,tempfile,uuid
 
 CTL='/System/Library/SecurityResearch/usr/bin/cryptexctl'
+
+class CryptexTransferTimeout(TimeoutError):
+    """The bounded cryptexd install call did not return before commit proof."""
 
 def run(argv,timeout=180):
     print('+',pathlib.Path(str(argv[0])).name,' '.join(str(a) for a in argv[1:3]),flush=True)
@@ -21,6 +24,48 @@ def assets_from_manifest(path):
         if h.digest()!=entry['Digest']:raise ValueError('Cryptex asset digest mismatch: '+key)
         assets[key]=source
     return identities[0],assets
+
+def file_sha256(path):
+    h=hashlib.sha256()
+    with pathlib.Path(path).open('rb') as f:
+        for chunk in iter(lambda:f.read(1024*1024),b''):h.update(chunk)
+    return h.hexdigest()
+
+def rebuild_legacy_image(image,identifier,version,work):
+    """Convert one reviewed flattened Filza image into an SDK Cryptex bundle."""
+    image=pathlib.Path(image).resolve();base=image.parent
+    source=base/'source-manifest.json';generator=base/'generate_trust_cache.py'
+    if image.name!='Filza-4.0-permanent.dmg' or not image.is_file() or image.is_symlink():
+        raise ValueError('Unexpected legacy Cryptex image')
+    if not source.is_file() or source.is_symlink() or not generator.is_file() or generator.is_symlink():
+        raise ValueError('Legacy Cryptex review metadata is incomplete')
+    review=json.loads(source.read_text(encoding='utf-8'))
+    expected={'bundle_id':'com.tigisoftware.Filza','app_name':'FilzaFixed.6907.app','cryptex_id':identifier,'cryptex_version':version}
+    if any(review.get(k)!=v for k,v in expected.items()):raise ValueError('Legacy Cryptex identity mismatch')
+    for key in ('sealed_image_sha256','sealed_executable_sha256','sealed_info_sha256'):
+        value=review.get(key)
+        if not isinstance(value,str) or len(value)!=64 or any(c not in '0123456789abcdef' for c in value):
+            raise ValueError('Legacy Cryptex review hash is invalid: '+key)
+    if file_sha256(image)!=review['sealed_image_sha256']:raise ValueError('Legacy Cryptex image hash mismatch')
+    mount=pathlib.Path(work)/'mounted';mount.mkdir()
+    run(['hdiutil','attach','-readonly','-nobrowse','-mountpoint',mount,image],timeout=120)
+    try:
+        apps=list((mount/'Applications').glob('*.app'))
+        app=mount/'Applications'/review['app_name']
+        if apps!=[app] or not app.is_dir() or not app.resolve().is_relative_to(mount.resolve()):
+            raise ValueError('Legacy Cryptex image does not contain the reviewed single app')
+        info_path=app/'Info.plist';info=plistlib.loads(info_path.read_bytes())
+        executable=app/str(info.get('CFBundleExecutable',''))
+        if (info.get('CFBundleIdentifier')!=review['bundle_id'] or executable.name!='Filza'
+                or not executable.is_file() or executable.is_symlink()
+                or not executable.resolve().is_relative_to(app.resolve())
+                or file_sha256(info_path)!=review['sealed_info_sha256']
+                or file_sha256(executable)!=review['sealed_executable_sha256']):
+            raise ValueError('Legacy Cryptex app differs from its reviewed bytes')
+        shutil.copy2(generator,pathlib.Path(work)/'generate_trust_cache.py')
+        return build(mount,identifier,version,work)
+    finally:
+        subprocess.run(['hdiutil','detach',str(mount)],capture_output=True,timeout=60,check=False)
 
 def der(tag,data):
     n=len(data);length=bytes([n]) if n<128 else bytes([0x80+(n.bit_length()+7)//8])+n.to_bytes((n.bit_length()+7)//8,'big')
@@ -105,7 +150,10 @@ async def install_with_rsd(rsd, identity, data, identifier, udid):
     if len(matches)>1:raise RuntimeError('Multiple generations claim this identifier')
     if matches:await asyncio.wait_for(service.uninstall(identifier),timeout=30)
     properties={'Cryptex1,UseProductClass':True,'MountedCryptex':False,'Cryptex1,SubType':XpcUInt64Type(255),'Cryptex1,NonceDomain':XpcUInt64Type(3),'Cryptex1,Version':identity['Cryptex1,Version'],'Cryptex1,PreauthVersion':identity['Cryptex1,PreauthorizationVersion']}
-    await asyncio.wait_for(service.install(data['Cryptex1,GenericDmg'],data['Cryptex1,GenericTrustCache'],ticket,data['Cryptex1,CryptexInfoPlist'],data['Cryptex1,GenericVolume'],properties,image_type_index=image_type_index,persistence=2,nonce_persistence=1,auth=0),timeout=900)
+    try:
+        await asyncio.wait_for(service.install(data['Cryptex1,GenericDmg'],data['Cryptex1,GenericTrustCache'],ticket,data['Cryptex1,CryptexInfoPlist'],data['Cryptex1,GenericVolume'],properties,image_type_index=image_type_index,persistence=2,nonce_persistence=1,auth=0),timeout=900)
+    except asyncio.TimeoutError as error:
+        raise CryptexTransferTimeout('Timed out waiting for cryptexd install completion') from error
 
 async def install(manifest,identifier,udid):
     enable_flow_control_accounting()
@@ -130,14 +178,15 @@ async def install(manifest,identifier,udid):
         try:
             async with UserspaceRsdTunnel(serial=udid, autopair=False) as rsd:
                 await install_with_rsd(rsd,identity,data,identifier,udid)
-        except ProtocolError as error:
-            if "Timed out waiting for flow-control credit" not in str(error):
+        except (ProtocolError,CryptexTransferTimeout) as error:
+            if (isinstance(error,ProtocolError)
+                    and "Timed out waiting for flow-control credit" not in str(error)):
                 raise
             # A newly opened paired USB RemoteXPC connection has repeatedly
             # resumed large Intel transfers that stopped receiving window
             # credit on their first connection. Retry this one diagnosed,
             # pre-commit transport failure once; do not loop or change trust.
-            print("Userspace flow-control credit stalled; retrying once on a fresh exact-device paired USB connection",flush=True)
+            print("Userspace transfer stalled before commit; retrying once on a fresh exact-device paired USB connection",flush=True)
             await asyncio.sleep(3)
             async with UserspaceRsdTunnel(serial=udid, autopair=False) as rsd:
                 if str(rsd.udid)!=udid:raise RuntimeError('Exact-device identity mismatch')
@@ -179,7 +228,15 @@ def main():
         if os.environ.get('SRDSH_BUILD_ONLY')=='1':return
     else:
         if len(sys.argv)!=8:raise SystemExit('Expected --build-and-install or seven legacy asset arguments')
-        identifier,_,_,_,version,udid,manifest=sys.argv[1:]
+        identifier,image,_,_,version,udid,manifest=sys.argv[1:]
+        try:
+            assets_from_manifest(manifest)
+        except ValueError as error:
+            if 'Unsafe or missing Cryptex asset' not in str(error):raise
+            with tempfile.TemporaryDirectory(prefix='0sky-reviewed-filza-') as folder:
+                manifest=rebuild_legacy_image(image,identifier,version,pathlib.Path(folder))
+                asyncio.run(install(manifest,identifier,udid))
+                return
     asyncio.run(install(manifest,identifier,udid))
 
 

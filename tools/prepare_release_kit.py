@@ -37,6 +37,8 @@ LINK_NAME = "0-Sky-Link-1.9.0-universal.ipa"
 SETUP_CONTROLLER = ROOT / "bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py"
 OVERRIDES = {
     "automation/CrypStoreAutomation/native-install/install_cryptex_native.py": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
+    "filza/install_cryptex_native.py": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
+    "filza/generate_trust_cache.py": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/generate_trust_cache.py",
     "runtime-generation/install_cryptex_native.py": ROOT / "bridge/KitScripts/runtime-generation/install_cryptex_native.py",
     "host-mac/install.py": ROOT / "bridge/HostTools/install.py",
     "host-mac/uninstall.py": ROOT / "bridge/HostTools/uninstall.py",
@@ -286,7 +288,6 @@ def apply_portability_overrides(kit: Path) -> None:
     # transactional adapters and must remain executable for fresh devices.
     guard = ROOT / "bridge/HostTools/compatibility_guard.py"
     for relative in (
-        "filza/install_cryptex_native.py",
         "automation/CrypStoreAutomation/crypstore_keeper.py",
         "automation/CrypStoreAutomation/sileo-package-bridge-v8.py",
         "automation/CrypStoreAutomation/sileo-research-bridge.py",

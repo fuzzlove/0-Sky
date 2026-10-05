@@ -1369,7 +1369,7 @@ def install_filza(python: Path, target: dict[str, Any], identity: Path,
         target["udid"],
         filza / "BuildManifest.plist",
     ]
-    run(command, timeout=960, log_file=run_dir / "filza-install.log")
+    run(command, timeout=2100, log_file=run_dir / "filza-install.log")
 
     register = r'''import hashlib,json,os,pathlib,plistlib,subprocess,sys
 root=pathlib.Path("/private/var/run/com.apple.security.cryptexd/mnt")

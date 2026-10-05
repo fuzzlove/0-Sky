@@ -41,8 +41,11 @@ class SRDSSHReleaseAdapterTests(unittest.TestCase):
         control = ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py"
         self.assertEqual(runtime.read_bytes(), control.read_bytes())
         text = runtime.read_text(encoding="utf-8")
-        self.assertEqual(text.count("except ProtocolError as error:"), 1)
+        self.assertEqual(
+            text.count("except (ProtocolError,CryptexTransferTimeout) as error:"), 1
+        )
         self.assertIn('"Timed out waiting for flow-control credit"', text)
+        self.assertIn("CryptexTransferTimeout", text)
         self.assertIn("retrying once on a fresh exact-device paired USB connection", text)
         self.assertEqual(text.count("UserspaceRsdTunnel(serial=udid, autopair=False)"), 2)
 

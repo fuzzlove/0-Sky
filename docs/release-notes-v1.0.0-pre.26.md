@@ -28,6 +28,18 @@ pre.25 GitHub-package upgrade test on the Intel Mac.
   flow-control credit before commit gets one bounded retry on a fresh
   exact-device connection. Other protocol errors are not retried, and the
   transport never silently pairs or falls back to an unverified endpoint.
+- A newly replaced 0-Sky Control is now launched through Apple's exact-device
+  `devicectl` service and must return a concrete process identifier before the
+  existing eight-second survival check begins. This removes the false failure
+  where `uiopen` returned success but discarded the first post-install launch.
+- Release preparation now restores the reviewed transactional Cryptex
+  installer for Filza instead of wrapping that active setup route in the
+  legacy compatibility blocker. The kit gate also requires Filza's sealed
+  image, executable, and `Info.plist` identities and verifies the image hash
+  before the package can be built. Its flattened reviewed image is mounted
+  read-only and rebuilt as a current SDK Cryptex with a measured trust cache;
+  a bounded install-completion timeout receives the same single fresh paired-
+  USB retry and pre-commit check as a flow-control stall.
 
 ## Root cause
 

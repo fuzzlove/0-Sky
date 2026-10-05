@@ -1,6 +1,7 @@
 """Release kit inventory must fail closed on portability and integrity faults."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -29,6 +30,15 @@ def fixture(root: Path) -> None:
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("fixture", encoding="utf-8")
+    filza_image = root / "filza/Filza-4.0-permanent.dmg"
+    (root / "filza/source-manifest.json").write_text(json.dumps({
+        "bundle_id": "com.tigisoftware.Filza",
+        "app_name": "FilzaFixed.6907.app",
+        "cryptex_id": "codes.rambo.research.filza.permanent",
+        "sealed_image_sha256": hashlib.sha256(filza_image.read_bytes()).hexdigest(),
+        "sealed_executable_sha256": "a" * 64,
+        "sealed_info_sha256": "b" * 64,
+    }), encoding="utf-8")
     (root / "srdssh/payload-root/usr/bin/sh").symlink_to("toybox")
     for relative in ("automation/CrypStoreAutomation/device_bridge_supervisor.sh",
                      "runtime-generation/build_and_install.sh"):
@@ -205,6 +215,28 @@ class KitManifestTests(unittest.TestCase):
                 "SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh",
                 verify(root),
             )
+
+    def test_filza_sealed_identity_is_mandatory(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            generate(root)
+            manifest = root / "filza/source-manifest.json"
+            data = json.loads(manifest.read_text())
+            data.pop("sealed_executable_sha256")
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn(
+                "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+                verify(root),
+            )
+
+    def test_filza_image_must_match_sealed_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            generate(root)
+            (root / "filza/Filza-4.0-permanent.dmg").write_bytes(b"different")
+            self.assertIn("FILZA_SEALED_IMAGE_HASH_MISMATCH", verify(root))
 
     def test_external_symlink_and_unexpected_file(self) -> None:
         with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as elsewhere:

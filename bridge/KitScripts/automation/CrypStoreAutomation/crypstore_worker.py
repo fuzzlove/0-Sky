@@ -1385,6 +1385,22 @@ print(json.dumps({'stopped':len(pids)}))'''
         raise RuntimeError("first-party foreground stop result is invalid")
 
 
+def resolve_devicectl() -> pathlib.Path:
+    """Return Xcode's supported CoreDevice client or fail actionably."""
+    discovered = run(["/usr/bin/xcrun", "--find", "devicectl"],
+                     timeout=30, check=False)
+    candidate = pathlib.Path(discovered.stdout.decode("utf-8", "replace").strip())
+    if (discovered.returncode or not candidate.is_absolute()
+            or candidate.name != "devicectl"):
+        raise RuntimeError(
+            "Apple devicectl is unavailable. Install the complete supported "
+            "Xcode release, open Xcode once to install its required components, "
+            "then select it with `sudo xcode-select --switch "
+            "/Applications/Xcode.app/Contents/Developer` and press Resume."
+        )
+    return candidate
+
+
 def install_app_with_devicectl(app: pathlib.Path, job_dir: pathlib.Path) -> None:
     """Install one reviewed app through Apple's exact-device native service.
 
@@ -1398,17 +1414,7 @@ def install_app_with_devicectl(app: pathlib.Path, job_dir: pathlib.Path) -> None
     """
     if not DEVICE_UDID:
         raise RuntimeError("native app installation has no explicitly selected device UDID")
-    discovered = run(["/usr/bin/xcrun", "--find", "devicectl"],
-                     timeout=30, check=False)
-    candidate = pathlib.Path(discovered.stdout.decode("utf-8", "replace").strip())
-    if (discovered.returncode or not candidate.is_absolute()
-            or candidate.name != "devicectl"):
-        raise RuntimeError(
-            "Apple devicectl is unavailable. Install the complete supported "
-            "Xcode release, open Xcode once to install its required components, "
-            "then select it with `sudo xcode-select --switch "
-            "/Applications/Xcode.app/Contents/Developer` and press Resume."
-        )
+    candidate = resolve_devicectl()
     result_path = job_dir / "devicectl-install-result.json"
     log_path = job_dir / "devicectl-install.log"
     result_path.unlink(missing_ok=True)
@@ -1437,6 +1443,49 @@ def install_app_with_devicectl(app: pathlib.Path, job_dir: pathlib.Path) -> None
         )
 
 
+def launch_app_with_devicectl(bundle_id: str, job_dir: pathlib.Path) -> None:
+    """Launch a newly installed first-party app on the exact selected SRD.
+
+    ``uiopen`` can return success while SpringBoard discards the first launch
+    request immediately after a native replacement. CoreDevice reports the
+    actual process launch and is already the supported, exact-device transport
+    used for the corresponding install.
+    """
+    if not DEVICE_UDID:
+        raise RuntimeError("native app launch has no explicitly selected device UDID")
+    candidate = resolve_devicectl()
+    result_path = job_dir / "devicectl-launch-result.json"
+    log_path = job_dir / "devicectl-launch.log"
+    result_path.unlink(missing_ok=True)
+    log_path.unlink(missing_ok=True)
+    completed = run([
+        candidate, "device", "process", "launch",
+        "--device", DEVICE_UDID,
+        "--terminate-existing",
+        "--timeout", "30",
+        "--json-output", result_path,
+        "--log-output", log_path,
+        bundle_id,
+    ], timeout=45, check=False)
+    try:
+        report = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            "Apple devicectl did not produce its required launch result. "
+            f"Inspect the private launch log at {log_path}."
+        ) from error
+    process = report.get("result", {}).get("process", {})
+    if (completed.returncode or not isinstance(process, dict)
+            or not isinstance(process.get("processIdentifier"), int)
+            or process["processIdentifier"] <= 0):
+        raise RuntimeError(
+            "Apple devicectl did not confirm native app launch "
+            f"(exit {completed.returncode}). Inspect the private launch log at "
+            f"{log_path}, keep the selected SRD unlocked and connected by USB, "
+            "then press Resume."
+        )
+
+
 def install_native_control(app: pathlib.Path, bundle_id: str,
                            executable: str, job_dir: pathlib.Path) -> str:
     """Register reviewed 0-Sky code with Apple's native service and launch it."""
@@ -1457,7 +1506,9 @@ def install_native_control(app: pathlib.Path, bundle_id: str,
     expected = [file_sha256(app / "Info.plist"), file_sha256(app / executable)]
     if observed != expected:
         raise RuntimeError("native first-party code differs from the signed Cryptex payload")
-    verify_foreground_launch(bundle_id, paths[0], executable)
+    launch_app_with_devicectl(bundle_id, job_dir)
+    verify_foreground_launch(bundle_id, paths[0], executable,
+                             launch_already_requested=True)
     return paths[0]
 
 
@@ -2038,7 +2089,8 @@ for path in sorted(glob.glob('/var/mobile/Library/Logs/CrashReporter/*.ips'),
 
 def verify_foreground_launch(bundle_id: str, registered_app: str,
                              executable: str, *, observation_seconds: float = 8.0,
-                             launch_validation: str | None = None) -> None:
+                             launch_validation: str | None = None,
+                             launch_already_requested: bool = False) -> None:
     """Require an imported foreground app to survive its startup window.
 
     Registration is not a launch postcondition.  The former three-second
@@ -2047,14 +2099,15 @@ def verify_foreground_launch(bundle_id: str, registered_app: str,
     broken imports fail with the device's concise crash reason.
     """
     started_at = int(time.time())
-    opened = ssh(
-        f"/var/jb/usr/bin/uiopen --bundleid {shlex.quote(bundle_id)}",
-        timeout=30, check=False,
-    )
-    if opened.returncode:
-        detail = (opened.stderr or opened.stdout).decode(
-            "utf-8", "replace").strip()
-        raise RuntimeError("installed app could not be launched: " + detail)
+    if not launch_already_requested:
+        opened = ssh(
+            f"/var/jb/usr/bin/uiopen --bundleid {shlex.quote(bundle_id)}",
+            timeout=30, check=False,
+        )
+        if opened.returncode:
+            detail = (opened.stderr or opened.stdout).decode(
+                "utf-8", "replace").strip()
+            raise RuntimeError("installed app could not be launched: " + detail)
 
     if launch_validation == "controlled-exit-v1":
         time.sleep(1.0)

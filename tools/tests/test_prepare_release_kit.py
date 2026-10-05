@@ -86,7 +86,6 @@ class PrepareReleaseKitTests(unittest.TestCase):
             target.write_text("print('old')\n", encoding="utf-8")
             manifest = kit / "SHA256SUMS"
             retired = (
-                "filza/install_cryptex_native.py",
                 "automation/CrypStoreAutomation/crypstore_keeper.py",
                 "automation/CrypStoreAutomation/sileo-package-bridge-v8.py",
                 "automation/CrypStoreAutomation/sileo-research-bridge.py",
@@ -118,6 +117,18 @@ class PrepareReleaseKitTests(unittest.TestCase):
                              ].read_bytes())
             self.assertIn(f"{digest(injector_license)}  ./automation/tools/srd-runtime-manager/sandboxed-injector/LICENSE",
                           manifest.read_text(encoding="utf-8"))
+
+    def test_filza_uses_the_reviewed_transactional_installer(self) -> None:
+        source = release.OVERRIDES["filza/install_cryptex_native.py"]
+        canonical = release.ROOT / (
+            "bridge/KitScripts/automation/CrypStoreAutomation/native-install/"
+            "install_cryptex_native.py")
+        self.assertEqual(source, canonical)
+        text = source.read_text(encoding="utf-8")
+        self.assertIn("UserspaceRsdTunnel", text)
+        self.assertIn("rebuild_legacy_image", text)
+        self.assertIn("INSTALL SUCCESS", text)
+        self.assertNotIn("Compatibility UNKNOWN", text)
 
     def test_unprepared_kit_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

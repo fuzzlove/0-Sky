@@ -328,6 +328,30 @@ identifier.
     diagnosed pre-commit failure once on a fresh exact-device paired USB
     connection, within a 2,100-second outer bound; all other protocol failures
     remain fail-closed.
+29. **Control's first launch after native replacement could be acknowledged but
+    discarded by `uiopen`.** The Intel/iPhone live run installed byte-identical
+    Control 3.5.37 through Apple's native service, then failed its process
+    postcondition even though a direct exact-device CoreDevice launch started
+    the same registered executable and it remained healthy. **Status:** fixed.
+    The reviewed Control path now uses `devicectl` for both installation and
+    launch, requires its JSON result to contain a positive process identifier,
+    and then applies the existing process-path and survival proof. Generic
+    Cryptex applications retain their separate `uiopen` path.
+30. **The Filza setup stage depended on sealed identities absent from the
+    release input and was replaced by a legacy blocker during portability
+    preparation.** Live resume reached the final Filza stage only after every
+    earlier device stage passed, then first rejected the incomplete source
+    manifest and, after its reviewed hashes were restored, correctly refused
+    the non-transactional wrapper. **Status:** fixed. The kit schema now
+    requires all Filza assets, validates the three sealed hash fields and exact
+    image digest, and release preparation overlays the same reviewed
+    exact-device transactional installer used by the authenticated worker.
+    Because the retained vendor image was flattened rather than stored as an
+    SDK bundle, the adapter mounts it read-only, verifies the reviewed app
+    bytes, rebuilds a current SDK Cryptex with 71 measured trust-cache entries,
+    and then uses the bounded paired-USB installer. Live Intel resume installed
+    and registered Filza 4.0, proved exact mounted/MCM bytes, and passed its
+    foreground-launch check; the complete ten-stage setup report passed.
 
 ### Low severity
 
@@ -373,8 +397,8 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 327 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback classification, selected-route propagation, single-session UID/device proof, exact-USB-to-worker host-pin commit, signed first-runtime package-builder selection, bounded large-transfer reconnect, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
-| Host-tool unit tests with pinned Python 3.12 | PASS — 136 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
+| Tool/release unit tests | PASS — 330 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback classification, selected-route propagation, single-session UID/device proof, exact-USB-to-worker host-pin commit, signed first-runtime package-builder selection, bounded large-transfer reconnect, mandatory Filza sealed identities and transactional installer selection, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
+| Host-tool unit tests with pinned Python 3.12 | PASS — 138 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection, exact-device native Control launch, and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 22 run, including fail-closed privileged-update coverage |
 | BridgeCore tests | PASS — 33/33 |
@@ -392,7 +416,8 @@ identifier.
 | Control package build | PASS — clean 3.5.37 arm64 rootless package using an explicit Theos checkout |
 | Signed/notarized Universal 2 `.pkg` | PASS — canonical distribution build, Developer ID app/installer signing, notary acceptance, staple validation, user-readable root-owned kit, four-file manifest, and independent package-only verification |
 | Exact iOS 26 Cryptex/device workflow | PASS in retained separate session — iPhone15,4, iOS 26.0 build 23A341, fresh nonce/live ticket, userspace USB transport, durable Link/Control MCM registration; CatVNC backboardd hook remained a documented optional partial result |
-| Replacement clean-account install, Intel runtime, broader live SRD matrix | NOT_EXECUTED |
+| Intel runtime and live iPhone12,8/iOS 27 setup | PASS from the manifest-verified pre.26 staged source: all ten stages converged, including Dropbear/Procursus, first runtime, Control 3.5.37, Link 1.9.0 build 48, CatVNC 0.0.2, Filza 4.0, MCM parity, and foreground launches; exact final `.pkg` upgrade remains a separate publication gate |
+| Replacement clean-account install and broader live SRD matrix | NOT_EXECUTED |
 
 Machine-readable results in `SOURCE_AUDIT.json` distinguish executed tests from
 blocked hardware work. The distribution artifact now passes the automated
