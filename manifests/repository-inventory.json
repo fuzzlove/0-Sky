@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 140,
-    "required-source-or-maintenance-test": 2113,
+    "required-source-or-maintenance-test": 2114,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "c4760b26f370e070997bd4d95518925e69c9d78deeb34fd95501c362e9228bd9",
-      "size": 9018
+      "sha256": "875197cd122fa64e320d25d2d3375203adabb5283ecf1f86ba532460b40815bc",
+      "size": 9475
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10671,8 +10671,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py",
-      "sha256": "35bce1af05a648f3d11a44c9e432937bdabce76396bb0ed137684920449e29b9",
-      "size": 84114
+      "sha256": "e999566cedcc94ffddc7a678f31036528efa9486d97637e2b2a13b8286b3feeb",
+      "size": 84148
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11409,8 +11409,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/HostRuntime/dpkg_deb.py",
-      "sha256": "9d007661670510a6aeeb99392b873667cb2cefe0d2eaffb45e3aa8e2572d0f9c",
-      "size": 9631
+      "sha256": "bfec10f515116df6e56257a8cbc0f60c1bf4d589e95874d2e48ab4b1890a19c3",
+      "size": 12421
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -11643,8 +11643,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/automation/tools/srd-runtime-manager/sync_runtime_cryptex.py",
-      "sha256": "f7bbc43620077ef791baeac3c92eede907dce27f62697f7fba24f54bc51675a4",
-      "size": 82220
+      "sha256": "5f304b95c79af970bd552ff873f4bc1978bae64378cb14e6afa1f0709a545d80",
+      "size": 82931
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11805,8 +11805,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/Tests/HostToolsTests/test_runtime_cryptex.py",
-      "sha256": "0166934fdf9c2956a30559b3e324b04760a273b97c04b23e98d440d7b13fb40a",
-      "size": 9932
+      "sha256": "0bb226fa25b9dd2478dd5daba0fbab37b800b5ee7dce95fd8447de01b9c016ea",
+      "size": 11739
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13587,8 +13587,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "d3dd343a912c8b4af197ac5230a15ed8315ebb9bc47cf2cd4b8de8cce64bdede",
-      "size": 22693
+      "sha256": "27188fc0734d1ab0226d30e59d576cb3a9c7bf68be924a84e56fa3e463781839",
+      "size": 23623
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13605,8 +13605,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "44ce12f5429c142e5469c1d08723d4439ef0e95df94bfdcd103484cdfd91986f",
-      "size": 18492
+      "sha256": "2fee675e8bdfa302b436d485b9f2878392d97ed76dd70f1c9e2420cfb3b092b0",
+      "size": 19330
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13721,6 +13721,12 @@
       "path": "docs/release-notes-v1.0.0-pre.22.md",
       "sha256": "a726444578ee0ad701e0b15ecd7d28ec3602516322fd334f01c59ce80183c8db",
       "size": 2111
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/release-notes-v1.0.0-pre.23.md",
+      "sha256": "99e45b8a889247ac6a760b7f2ca92cf2a73d1c9fa2fde29de86670d2ff159606",
+      "size": 2182
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14043,7 +14049,7 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/build_host_runtime.py",
-      "sha256": "46ca512fc24bc19ae33223dbff63184466caa5b8aad95900c83dd023b2f58c88",
+      "sha256": "7d466b939106c10569f52b7f9a65f3dd18a121f2590350a3af0bdf5eae1ac4df",
       "size": 9141
     },
     {
@@ -14487,8 +14493,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/test_offline_install.py",
-      "sha256": "571726b45362eef5a574dcc8e6bfaedd1d3447446d714bc1059e813c478e40df",
-      "size": 2956
+      "sha256": "e432b50d80be26a102d1303db7f2037259895a01a4a6d382fed51a1e2efa1390",
+      "size": 4126
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14517,8 +14523,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_build_host_runtime.py",
-      "sha256": "c831fe66b8cee172861f6f67d677f529d5a1e73d2869faead1b2c2e0a35f2996",
-      "size": 8055
+      "sha256": "710abd7bd6393a3ebdb34b78412abe8f27bdd138af75bd4c2d7eabbae7988a7b",
+      "size": 10763
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14613,8 +14619,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_kit_manifest.py",
-      "sha256": "38b21a5831c54cb1b5abba5b959f979c3c54e20d91151e6cd323b4688e814ffe",
-      "size": 14859
+      "sha256": "8e5e86d38bd8435142a9f43d8880e30c51f8c0255cb755b64f804cfc6858c28a",
+      "size": 15626
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14703,8 +14709,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_setup_state.py",
-      "sha256": "30e807b8c146c5cc7b89f4c114b48c1ae7735803dd0f97fd166c192080a512c1",
-      "size": 8157
+      "sha256": "c8c4b542d11997ba7298ae2ce5df1cd1b3ecaf6eec0ab79349daa28f3395ac81",
+      "size": 8531
     },
     {
       "category": "required-source-or-maintenance-test",

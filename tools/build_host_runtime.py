@@ -117,7 +117,7 @@ def build(kit: pathlib.Path, cache: pathlib.Path, *, offline: bool=False) -> pat
     for name,source_path,version in (
         ("iproxy",ROOT/"bridge/HostRuntime/usbmux_tool.py","0-Sky compatibility 1.0"),
         ("idevice_id",ROOT/"bridge/HostRuntime/usbmux_tool.py","0-Sky compatibility 1.0"),
-        ("dpkg-deb",ROOT/"bridge/HostRuntime/dpkg_deb.py","0-Sky compatibility 1.1"),
+        ("dpkg-deb",ROOT/"bridge/HostRuntime/dpkg_deb.py","0-Sky compatibility 1.2"),
     ):
         target=runtime/"bin"/name; shutil.copy2(source_path,target); target.chmod(0o755)
         components.append(component(name,target,kit,first_party_license,version))

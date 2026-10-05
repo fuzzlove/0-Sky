@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import importlib
 import importlib.util
 import io
 import os
@@ -70,6 +71,49 @@ class BuildHostRuntimeTests(unittest.TestCase):
                 stream.truncate(module.MAX_PACKAGE_SIZE + 1)
             with self.assertRaisesRegex(ValueError, "1 GiB"):
                 module.members(package)
+
+    @unittest.skipUnless(importlib.util.find_spec("zstandard"),
+                         "zstandard is supplied by the locked build environment")
+    def test_dpkg_extractor_handles_zstandard_without_external_program(self) -> None:
+        module_path = Path(__file__).resolve().parents[2] / "bridge/HostRuntime/dpkg_deb.py"
+        specification = importlib.util.spec_from_file_location("zero_sky_dpkg_zstd", module_path)
+        assert specification and specification.loader
+        module = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(module)
+        zstandard = importlib.import_module("zstandard")
+        archive = io.BytesIO()
+        with tarfile.open(fileobj=archive, mode="w") as bundle:
+            payload = b"offline-zstandard-proof\n"
+            member = tarfile.TarInfo("./var/jb/usr/share/0sky-zstd-proof")
+            member.size = len(payload)
+            bundle.addfile(member, io.BytesIO(payload))
+        compressed = zstandard.ZstdCompressor().compress(archive.getvalue())
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "extract"
+            module.extract_archive(compressed, destination)
+            self.assertEqual(
+                (destination / "var/jb/usr/share/0sky-zstd-proof").read_bytes(), payload
+            )
+
+    def test_dpkg_zstandard_missing_dependency_has_exact_repair_action(self) -> None:
+        module_path = Path(__file__).resolve().parents[2] / "bridge/HostRuntime/dpkg_deb.py"
+        specification = importlib.util.spec_from_file_location("zero_sky_dpkg_no_zstd", module_path)
+        assert specification and specification.loader
+        module = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(module)
+        with patch.object(module.importlib, "import_module", side_effect=ImportError):
+            with self.assertRaisesRegex(RuntimeError, "Repair Host Dependencies"):
+                module._write_uncompressed_tar(b"\x28\xb5\x2f\xfd", io.BytesIO())
+
+    def test_dpkg_decompression_enforces_expanded_size_limit(self) -> None:
+        module_path = Path(__file__).resolve().parents[2] / "bridge/HostRuntime/dpkg_deb.py"
+        specification = importlib.util.spec_from_file_location("zero_sky_dpkg_bound", module_path)
+        assert specification and specification.loader
+        module = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(module)
+        with patch.object(module, "MAX_EXPANDED_ARCHIVE_SIZE", 3):
+            with self.assertRaisesRegex(RuntimeError, "4 GiB safety limit"):
+                module._copy_bounded(io.BytesIO(b"four"), io.BytesIO())
 
     def test_dpkg_builder_is_reproducible_root_owned_and_extractable(self) -> None:
         module_path = Path(__file__).resolve().parents[2] / "bridge/HostRuntime/dpkg_deb.py"

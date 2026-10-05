@@ -923,12 +923,12 @@ def require_offline_device_package_builder() -> Path:
             "the installed 0-Sky kit cannot run its offline device-package "
             "builder. Reinstall the complete current package and choose Resume."
         ) from error
-    if result.returncode or result.stdout.strip() != "0-Sky dpkg-deb compatibility 1.1":
+    if result.returncode or result.stdout.strip() != "0-Sky dpkg-deb compatibility 1.2":
         raise PoCError(
-            "the installed 0-Sky kit has an extract-only dpkg-deb helper and "
-            "cannot build the first trusted runtime. Install the complete current "
-            "0-Sky Bridge package and choose Resume; Xcode and Homebrew are not "
-            "the missing dependencies."
+            "the installed 0-Sky kit has an outdated dpkg-deb helper that cannot "
+            "both build and unpack the Zstandard-compressed first trusted runtime. "
+            "Install the complete current 0-Sky Bridge package and choose Resume; "
+            "Xcode and Homebrew are not the missing dependencies."
         )
     return helper
 

@@ -242,6 +242,18 @@ identifier.
     missing. The exact pre.21 runtime builder completed locally with only the
     corrected bundled helper, and the system Debian tool independently accepted
     both generated packages and their maintainer scripts.
+22. **Intel first-runtime extraction accidentally depended on a developer-installed
+    Zstandard decoder.** Live pre.22 enrollment completed the Xcode arm64/arm64e
+    build and deterministic Debian package creation, then Apple's `bsdtar`
+    rejected the locked Procursus `data.tar.zst` member. The Apple-silicon build
+    host had masked this gap with a Homebrew `zstd` executable. **Status:** fixed.
+    The signed compatibility helper now performs bounded streaming decompression
+    for Zstandard, gzip, xz, and bzip2; first-runtime sync invokes it with the
+    managed, offline-locked Python environment that contains `zstandard`.
+    Missing support reports the exact **Repair Host Dependencies** and **Resume**
+    actions. Hidden child output is included as a bounded failure tail, and the
+    release gate now extracts a real locked Zstandard Procursus package rather
+    than relying only on its gzip-generated probe.
 
 ### Low severity
 

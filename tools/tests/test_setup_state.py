@@ -33,10 +33,18 @@ class SetupStateTests(unittest.TestCase):
             )
             helper.chmod(0o755)
             with mock.patch.object(setup, "KIT", kit):
-                with self.assertRaisesRegex(setup.PoCError, "extract-only"):
+                with self.assertRaisesRegex(setup.PoCError, "outdated"):
                     setup.require_offline_device_package_builder()
             helper.write_text(
                 "#!/bin/sh\necho '0-Sky dpkg-deb compatibility 1.1'\n",
+                encoding="utf-8",
+            )
+            helper.chmod(0o755)
+            with mock.patch.object(setup, "KIT", kit):
+                with self.assertRaisesRegex(setup.PoCError, "outdated"):
+                    setup.require_offline_device_package_builder()
+            helper.write_text(
+                "#!/bin/sh\necho '0-Sky dpkg-deb compatibility 1.2'\n",
                 encoding="utf-8",
             )
             helper.chmod(0o755)

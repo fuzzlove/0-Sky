@@ -213,7 +213,11 @@ def include_offline_python(root: pathlib.Path,
                 raise RuntimeError(f"immutable offline Python package is unavailable: {package}")
             destination = stage / package.stem
             destination.mkdir()
-            run([dpkg_deb, "-x", package, destination], env=tool_environment,
+            # Execute the signed helper with this process's managed interpreter.
+            # Its locked environment supplies zstandard for Procursus .tar.zst
+            # packages; the helper's shebang intentionally has no site packages.
+            run([sys.executable, dpkg_deb, "-x", package, destination],
+                env=tool_environment,
                 show_output=False)
             payload = destination / "var/jb"
             if not payload.is_dir() or payload.is_symlink():
@@ -232,7 +236,15 @@ def run(argv, *, data=None, timeout=1200, cwd=None, env=None, check=True, show_o
     if result.stdout and show_output:
         print(result.stdout.decode("utf-8", "replace"), end="", flush=True)
     if check and result.returncode:
-        raise RuntimeError(f"command failed with status {result.returncode}: {argv}")
+        output = result.stdout.decode("utf-8", "replace").strip()
+        # Bound failure propagation. The host app applies its diagnostic
+        # redactor before display/export, while this tail preserves the actual
+        # missing dependency or compiler error needed for recovery.
+        tail = output[-8192:]
+        detail = f"\n--- command output (last 8192 characters) ---\n{tail}" if tail else ""
+        raise RuntimeError(
+            f"command failed with status {result.returncode}: {argv}{detail}"
+        )
     return result
 
 

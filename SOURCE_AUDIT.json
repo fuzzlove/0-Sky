@@ -27,8 +27,8 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 314 run, 3 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction/build-capability gating, signed-bundle bytecode-write prevention, and symlink-chain escape rejection",
-        "host_tools_unit_tests": "PASS: 126 run under pinned Python 3.12, 1 skipped because the external source kit is intentionally absent from the cleanup checkout",
+        "tools_unit_tests": "PASS: 317 run, 3 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, and symlink-chain escape rejection",
+        "host_tools_unit_tests": "PASS: 128 run under pinned Python 3.12, 1 skipped because the external source kit is intentionally absent from the cleanup checkout; includes managed-interpreter extraction and bounded hidden-failure output",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
         "bridge_core_tests": "PASS: 33/33, including iOS 27 guided RemoteXPC pairing selection, iOS 26 fallback exclusion, incomplete-duplicate profile resume, deterministic candidate selection, complete-profile conflict rejection, and stale-port reservation",
@@ -64,17 +64,18 @@
         "intel_setup_failure_diagnosis": "PASS (live host repair plus read-only device inspection): fresh SRD was USB-visible; old setup ordering invoked host pairing before SRDssh; incomplete profiles explained pairing exit 2 and duplicate-UUID state; corrected controller verified 3771 kit entries, all 19 SRDssh assets, native exact-device RemoteXPC, a 48-byte domain-3 nonce, and a live Apple TSS ticket without device mutation; stale Homebrew-backed venv was preserved and rebuilt from signed bundled Python; the remaining host-only failure was traced to a pre.14 profile manifest differing from the current kit and is covered by atomic checkpoint/refresh/rollback tests",
         "intel_existing_pairing_remotexpc": "PASS (live read-only): on MacBookPro16,1 x86_64 macOS 26.5.2, forced userspace USB reused the existing exact-device pairing for iPhone12,8 iOS 27.0 and cryptexd returned a 48-byte domain-3 nonce; no device mutation was performed",
         "intel_native_remotexpc_stall_diagnosis": "PASS (live read-only process inspection): pre.18 proved userspace USB, then actual install retried native and stalled before Cryptex mutation in hardened Intel Python ctypes/libffi callback allocation; process tree and stack sample retained privately",
-        "intel_first_runtime_diagnosis": "PASS (live Intel): pre.19 exposed the bootstrap-version mismatch; pre.20 exposed removal of production compiler inputs; pre.21 compiled and signed all arm64/arm64e inputs, then proved the bundled Debian helper lacked package-build support. Pre.22 adds a reproducible offline builder, forces current host-runtime reconstruction, and gates release plus runtime on build capability.",
+        "intel_first_runtime_diagnosis": "PASS (live Intel): pre.19 exposed the bootstrap-version mismatch; pre.20 exposed removal of production compiler inputs; pre.21 exposed missing package-build support; pre.22 compiled/signed both architecture inputs and built both DEBs, then proved Apple bsdtar could not decode locked Procursus data.tar.zst without the developer Mac's accidental Homebrew zstd. Pre.23 removes that undeclared dependency.",
         "first_runtime_xcode_build_probe": "PASS on Apple Silicon build host with Xcode 26.5 SDK: compiled arm64 and arm64e host/dylib sources, produced Universal binaries, ad-hoc signed them, and built runtime-manager 2.4.20 plus runtime-test-tweak 1.0.0 Debian packages from the same manifest-verified source inputs",
-        "offline_device_package_builder": "PASS: exact pre.21 runtime builder completed using only source-controlled dpkg-deb compatibility 1.1; two device DEBs passed metadata/content inspection by both the bundled helper and the independent system dpkg-deb"
+        "offline_device_package_builder": "PASS: source-controlled dpkg-deb compatibility 1.2 deterministically builds device DEBs and, through the managed locked Python environment, extracted the actual libgdbm6_1.23_iphoneos-arm64.deb Zstandard payload without an external zstd program",
+        "offline_zstandard_release_gate": "PASS: locked zstandard==0.25.0 is imported from the offline wheelhouse; release validation now invokes the signed helper with that managed interpreter against a real data.tar.zst Procursus package and requires a nonempty rootless payload"
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",
         "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
-        "intel_runtime_uat": "PARTIAL: MacBookPro16,1 x86_64 macOS 26.5.2 has passed existing pairing, exact-device userspace RemoteXPC, SRDssh Cryptex, reboot/reconnect, UID-0 SSH, Procursus, the corrected package upload, and arm64/arm64e Xcode compilation/signing. Pre.21 stopped at its extract-only Debian helper; pre.22 requires live Resume UAT.",
+        "intel_runtime_uat": "PARTIAL: MacBookPro16,1 x86_64 macOS 26.5.2 has passed existing pairing, exact-device userspace RemoteXPC, SRDssh Cryptex, reboot/reconnect, UID-0 SSH, Procursus, package upload, arm64/arm64e Xcode compilation/signing, and deterministic DEB creation. Pre.22 stopped at undeclared external Zstandard decoding; pre.23 requires live Resume UAT.",
         "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
         "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
-        "publication": "PARTIAL: prior experimental releases through pre.21 were published manually; pre.22 publication is pending build verification"
+        "publication": "PARTIAL: experimental releases through pre.22 are published; pre.23 publication is pending signed build verification"
     },
     "release_result": "AUTOMATED_RELEASE_GATES_PASS; HARDWARE_UAT_PENDING",
     "release_blockers": [

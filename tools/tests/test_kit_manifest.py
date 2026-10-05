@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import patch
 import zipfile
 
@@ -242,8 +243,21 @@ class KitManifestTests(unittest.TestCase):
             (root / "host-mac/wheelhouse").mkdir(parents=True)
             (root / "host-mac/requirements-lock.txt").write_text(
                 "demo==1.0\n", encoding="utf-8")
+            helper = root / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            package = root / "offline-python/libgdbm6_1.23_iphoneos-arm64.deb"
+            package.parent.mkdir(parents=True)
+            package.write_bytes(b"fixture")
             with patch("tools.test_offline_install.subprocess.run") as run:
-                run.return_value.returncode = 0
+                def completed(argv, **_kwargs):
+                    result = mock.Mock(returncode=0, stdout=b"", stderr=b"")
+                    if "--extract" in argv:
+                        payload = Path(argv[-1]) / "var/jb/usr/lib"
+                        payload.mkdir(parents=True)
+                        (payload / "fixture").write_bytes(b"payload")
+                    return result
+                run.side_effect = completed
                 self.assertEqual(verify_offline_install(root, Path("/usr/bin/python3")), "PASS")
                 install = run.call_args_list[1]
                 argv = install.args[0]

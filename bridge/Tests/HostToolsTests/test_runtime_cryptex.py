@@ -10,6 +10,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+import sys
 
 
 SCRIPT = (Path(__file__).resolve().parents[2] /
@@ -22,6 +23,45 @@ SPEC.loader.exec_module(SYNC)
 
 
 class RuntimeCryptexTests(unittest.TestCase):
+    def test_offline_python_extractor_uses_managed_interpreter(self):
+        packages = (
+            "libgdbm6_1.23_iphoneos-arm64.deb",
+            "libpython3.9_3.9.9-1_iphoneos-arm64.deb",
+            "python3.9_3.9.9-1_iphoneos-arm64.deb",
+            "python3_3.9.9-1_iphoneos-arm64.deb",
+        )
+        calls = []
+
+        def extract(argv, **_kwargs):
+            calls.append(argv)
+            payload = Path(argv[-1]) / "var/jb/usr/lib"
+            payload.mkdir(parents=True)
+            (payload / "fixture").write_bytes(b"payload")
+            return SimpleNamespace(returncode=0, stdout=b"")
+
+        with tempfile.TemporaryDirectory() as folder:
+            base = Path(folder)
+            offline = base / "offline-python"
+            offline.mkdir()
+            for package in packages:
+                (offline / package).write_bytes(b"deb")
+            root = base / "generation/root"
+            root.mkdir(parents=True)
+            with (mock.patch.object(
+                    SYNC, "host_tool_environment",
+                    return_value=({"dpkg-deb": "/signed/kit/dpkg-deb"}, {})),
+                  mock.patch.object(SYNC, "run", side_effect=extract)):
+                SYNC.include_offline_python(root, offline)
+        self.assertEqual(len(calls), 4)
+        self.assertTrue(all(call[:2] == [sys.executable, "/signed/kit/dpkg-deb"]
+                            for call in calls))
+
+    def test_hidden_subprocess_output_is_included_on_failure(self):
+        completed = SimpleNamespace(returncode=2, stdout=b"exact dependency failure\n")
+        with mock.patch.object(SYNC.subprocess, "run", return_value=completed):
+            with self.assertRaisesRegex(RuntimeError, "exact dependency failure"):
+                SYNC.run(["/usr/bin/false"], show_output=False)
+
     @staticmethod
     def _preference_archive(bundle_name, files):
         payload = io.BytesIO()

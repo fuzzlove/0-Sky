@@ -1,10 +1,64 @@
 #!/usr/bin/env python3
 """Bounded dpkg-deb compatibility for verified package read, extract, and build."""
 from __future__ import annotations
-import gzip, io, os, pathlib, stat, subprocess, sys, tarfile, tempfile
+import bz2, gzip, importlib, io, lzma, os, pathlib, stat, subprocess, sys, tarfile, tempfile
 
 MAX_PACKAGE_SIZE = 1024 * 1024 * 1024
 MAX_BUILD_FILE_SIZE = 256 * 1024 * 1024
+MAX_EXPANDED_ARCHIVE_SIZE = 4 * 1024 * 1024 * 1024
+COPY_CHUNK_SIZE = 1024 * 1024
+
+
+def _copy_bounded(source, destination) -> None:
+    """Copy a decompressed tar stream with a hard expanded-size ceiling."""
+    total = 0
+    while True:
+        block = source.read(COPY_CHUNK_SIZE)
+        if not block:
+            return
+        total += len(block)
+        if total > MAX_EXPANDED_ARCHIVE_SIZE:
+            raise RuntimeError("Debian payload expands beyond the 4 GiB safety limit")
+        destination.write(block)
+
+
+def _write_uncompressed_tar(blob: bytes, destination) -> None:
+    """Materialize supported Debian tar compression without external tools."""
+    try:
+        if blob.startswith(b"\x28\xb5\x2f\xfd"):
+            try:
+                zstandard = importlib.import_module("zstandard")
+            except ImportError as error:
+                raise RuntimeError(
+                    "Zstandard support is missing from the managed 0-Sky Python "
+                    "environment. In 0-Sky Bridge, choose Repair, run Repair Host "
+                    "Dependencies, then Resume. The signed release includes the "
+                    "required offline zstandard wheel; Homebrew is not required."
+                ) from error
+            try:
+                with zstandard.ZstdDecompressor().stream_reader(io.BytesIO(blob)) as reader:
+                    _copy_bounded(reader, destination)
+            except RuntimeError:
+                raise
+            except zstandard.ZstdError as error:
+                raise RuntimeError("Debian Zstandard payload decompression failed") from error
+        elif blob.startswith(b"\x1f\x8b"):
+            with gzip.GzipFile(fileobj=io.BytesIO(blob), mode="rb") as reader:
+                _copy_bounded(reader, destination)
+        elif blob.startswith(b"\xfd7zXZ\x00"):
+            with lzma.LZMAFile(io.BytesIO(blob), mode="rb") as reader:
+                _copy_bounded(reader, destination)
+        elif blob.startswith(b"BZh"):
+            with bz2.BZ2File(io.BytesIO(blob), mode="rb") as reader:
+                _copy_bounded(reader, destination)
+        else:
+            if len(blob) > MAX_EXPANDED_ARCHIVE_SIZE:
+                raise RuntimeError("Debian payload exceeds the 4 GiB safety limit")
+            destination.write(blob)
+    except RuntimeError:
+        raise
+    except (EOFError, OSError, ValueError) as error:
+        raise RuntimeError("Debian payload decompression failed") from error
 
 
 def members(path: pathlib.Path) -> dict[str, bytes]:
@@ -29,10 +83,13 @@ def members(path: pathlib.Path) -> dict[str, bytes]:
 def extract_archive(blob: bytes, destination: pathlib.Path) -> None:
     destination.mkdir(parents=True, exist_ok=True)
     with tempfile.NamedTemporaryFile(prefix="0sky-deb-", suffix=".tar", delete=True) as stream:
-        stream.write(blob); stream.flush()
+        _write_uncompressed_tar(blob, stream); stream.flush()
         listing=subprocess.run(["/usr/bin/bsdtar","-tf",stream.name],capture_output=True,
                                text=True,timeout=60,check=False)
-        if listing.returncode: raise RuntimeError("bsdtar could not list Debian payload")
+        if listing.returncode:
+            detail=(listing.stderr or listing.stdout).strip()[-2048:]
+            raise RuntimeError("bsdtar could not list Debian payload" +
+                               (f": {detail}" if detail else ""))
         for raw in listing.stdout.splitlines():
             path=pathlib.PurePosixPath(raw.removeprefix("./"))
             if path.is_absolute() or ".." in path.parts:
@@ -41,7 +98,10 @@ def extract_archive(blob: bytes, destination: pathlib.Path) -> None:
                                "-xf",stream.name,"-C",str(destination)],
                               stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                               stderr=subprocess.PIPE, timeout=120, check=False)
-    if result.returncode: raise RuntimeError("bsdtar could not extract Debian payload")
+    if result.returncode:
+        detail=result.stderr.decode("utf-8","replace").strip()[-2048:]
+        raise RuntimeError("bsdtar could not extract Debian payload" +
+                           (f": {detail}" if detail else ""))
     root=destination.resolve()
     for path in destination.rglob("*"):
         if path.is_symlink():
@@ -141,7 +201,7 @@ def build_package(root: pathlib.Path, destination: pathlib.Path) -> None:
 
 def main(argv: list[str]) -> int:
     if argv == ["--version"]:
-        print("0-Sky dpkg-deb compatibility 1.1")
+        print("0-Sky dpkg-deb compatibility 1.2")
         return 0
     if len(argv)==4 and argv[:2]==["--root-owner-group","-b"]:
         build_package(pathlib.Path(argv[2]),pathlib.Path(argv[3])); return 0
