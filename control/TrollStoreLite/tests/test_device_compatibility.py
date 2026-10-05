@@ -79,6 +79,16 @@ class DeviceCompatibilityTests(unittest.TestCase):
         self.assertIn("TSPreferenceIconPath", source)
         self.assertIn("imageWithContentsOfFile:iconPath", source)
 
+    def test_inventory_treats_json_null_results_as_unavailable(self):
+        source = INVENTORY_CONTROLLER.read_text()
+        self.assertIn("NSDictionary* quarantineResult", source)
+        self.assertIn("NSDictionary* packageResult", source)
+        self.assertIn("NSDictionary* result", source)
+        self.assertNotIn('[@"result"][@"quarantines"]', source)
+        self.assertNotIn('[@"result"][@"packages"]', source)
+        self.assertNotIn('[@"result"][@"message"]', source)
+        self.assertNotIn('[@"result"][@"package"]', source)
+
     def test_crane_container_delete_uses_verified_bridge_cleanup(self):
         source = CRANE_CONTROLLER.read_text()
         self.assertIn("TSInstallCraneDeleteAdapter", source)

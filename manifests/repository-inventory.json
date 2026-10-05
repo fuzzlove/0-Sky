@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 140,
-    "required-source-or-maintenance-test": 2115,
+    "required-source-or-maintenance-test": 2117,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "d9789b308dfdca533369eb754b2a92bc5a141aa110077815c0bf6f627da38ebb",
-      "size": 9876
+      "sha256": "26cf8889f49e16fae115383861c5900371a235e382a7db672446896fc90a2487",
+      "size": 10604
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10671,8 +10671,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py",
-      "sha256": "e999566cedcc94ffddc7a678f31036528efa9486d97637e2b2a13b8286b3feeb",
-      "size": 84148
+      "sha256": "f71b4e6bd0d6f9cbf7e821a4cc0a8f0f60900825aad52c118e395df7de810029",
+      "size": 86174
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11445,8 +11445,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/HostTools/bootstrap_device.py",
-      "sha256": "b1dbf65a2d9b50e59060378dbedf13aaa1ddd64755f476d7a725d41a5bd06343",
-      "size": 18929
+      "sha256": "d559da762186d3e1e790989f1c2fccbe93bf63ed049be2f3cc1a8c3c0e2bf6a8",
+      "size": 20495
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -11493,8 +11493,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/automation/CrypStoreAutomation/crypstore_worker.py",
-      "sha256": "19995986e0de62872683caff74dc84d0b973dccec7c20ea326d77ff3a852c237",
-      "size": 160020
+      "sha256": "bcf0cfa78c1a4bbea51881e7b0f021907c5e945e496cbef97ac114a3657c181b",
+      "size": 164411
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11738,6 +11738,12 @@
     },
     {
       "category": "required-source-or-maintenance-test",
+      "path": "bridge/Tests/HostToolsTests/test_bootstrap_payload_identity.py",
+      "sha256": "9c35e4d89d07173c10a2c7108a340ef4c02147e5791325561fd61107f0d8555d",
+      "size": 2154
+    },
+    {
+      "category": "required-source-or-maintenance-test",
       "path": "bridge/Tests/HostToolsTests/test_cryptex_transport_fallback.py",
       "sha256": "2513ab33764c8cbf62efda9ff70b1df272f0bd03d0eb49f430523412a50f274f",
       "size": 6223
@@ -11823,8 +11829,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "bridge/Tests/HostToolsTests/test_worker_ipa_hash.py",
-      "sha256": "e4862787110f7710f9c7e339822696d03fb7022144f1bf22a8555664ba5544ba",
-      "size": 6161
+      "sha256": "3860be058aef6598f6400f312397e0e28e58d72cfa8bc3dc98656881dc9d856f",
+      "size": 9128
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -12501,7 +12507,7 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "control/README.md",
-      "sha256": "f74e184f28c4493fe6b3ce69ade83afdac392060d8ed1cd7c6d095354d0ead6b",
+      "sha256": "b66c1bf26419e9bbae2dafa4d1502378bfe75c39683bbe7ccc170244b19e29ec",
       "size": 2050
     },
     {
@@ -13185,8 +13191,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "control/TrollStore/TSInventoryTableViewController.m",
-      "sha256": "966224f6442461717db2237dc7a67518f48e91dcc2a83b61033c09ad495605d0",
-      "size": 64337
+      "sha256": "d1180b579a06f9e5f362ec5fc40bc3b13df0bbb38d19ada3aa8c01c320657310",
+      "size": 65327
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13461,13 +13467,13 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "control/TrollStoreLite/Resources/Info.plist",
-      "sha256": "00091514801825cad99a4e180e4d3fcb48f1ca5e1c93d897b04d8d7603d0f5c2",
+      "sha256": "c11a4efd3846688db2d98f252f45b6d398107497f548e307e44f5f21eb7de09d",
       "size": 6422
     },
     {
       "category": "required-source-or-maintenance-test",
       "path": "control/TrollStoreLite/control",
-      "sha256": "aa0b616eeb46b716655b5567caceedf823ee68ade7e9f6c48bdc8b8a36fedf6e",
+      "sha256": "b0517b2eb1d2da6075afbcd3769284f4e5971e1631b6755ccfb833b4199ec819",
       "size": 392
     },
     {
@@ -13479,8 +13485,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "control/TrollStoreLite/tests/test_device_compatibility.py",
-      "sha256": "98735704ea63a450e9e6366167335a5aa0f12fab6236773eadb313c3542171b8",
-      "size": 16339
+      "sha256": "859a7d92a93d5bfccee05e9b85c81be133c6a7b0e321e659403f7e0f9658ffee",
+      "size": 16884
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13587,14 +13593,14 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "9730f0f5bc9d2c5f2837309a199376f7cce6b6968bb2318276e3fcbc02f4c2f5",
-      "size": 24497
+      "sha256": "125c3b22a1480ba0bb26b6b72b7349e5cac0c061036693d55c71fedd13aee9e9",
+      "size": 26678
     },
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/SUPPORTED_PLATFORMS.md",
-      "sha256": "54a7ae0e9902b0b3c655c9fa236cd2d47f6f6450b01a5d91d41ea4bdf1381fce",
-      "size": 2649
+      "sha256": "ba93a6e5587c590da8eb0c76e6482b5bce7abefa6507f692bb6cdc20cc36c576",
+      "size": 3081
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13605,8 +13611,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "27b7d28ff80b0d2a5b4762eca5fd765726c8327e864578baabcbd3848ba2007f",
-      "size": 20243
+      "sha256": "300bcc49b0f5d396162fa478ac95c307c7c466ed1b330d91169125bbdce66c69",
+      "size": 21953
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13733,6 +13739,12 @@
       "path": "docs/release-notes-v1.0.0-pre.24.md",
       "sha256": "9f575abe5ef4f6f9a77e449c5ce2f8cdaa4973f600c26ea9edefc6d1e786a87a",
       "size": 1739
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/release-notes-v1.0.0-pre.25.md",
+      "sha256": "03a302bdb1af4a7c316dd6f5ca1984eabace07ad147d4bdc352592733882659f",
+      "size": 2249
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13923,7 +13935,7 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "manifests/component-inventory.json",
-      "sha256": "f468d6bf82efa92271b291c7ac450ca64fcd9f5d2ba6f3de73cac753954dc27c",
+      "sha256": "ba93311d00ea34522f90b388ab0d4a0f614a69601fd2cba282dd37258be885e0",
       "size": 3735
     },
     {
@@ -14631,8 +14643,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_link_worker_transaction.py",
-      "sha256": "3bff0e992ca87a79452d6680b67e66c2726c21928ac14a515e19379c9c136550",
-      "size": 3487
+      "sha256": "2c7e0f2d4fedeaae316b0bf04caa23a9964c74e261231f771c943ef2cdbe8768",
+      "size": 3649
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14685,8 +14697,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_project_setup_manifest.py",
-      "sha256": "73984518b8942a567540e84fcf1328c79179bf59cd4c7d6a3f6ce8073ff516ee",
-      "size": 2061
+      "sha256": "57333ff19afd798248bf95145473aa6b585f0fd05e97bb705e58cb4cd0d56004",
+      "size": 4117
     },
     {
       "category": "required-source-or-maintenance-test",

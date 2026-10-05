@@ -266,6 +266,35 @@ identifier.
     Regression tests prove the default never constructs the native tunnel and
     preserve the bounded native-reset commit-verification path when explicitly
     selected.
+24. **Control crashed when a Core collector returned JSON null, and setup
+    waited for obsolete Control metadata after installing the current IPA.**
+    Seven retained pre.24 crash reports have the same
+    `-[NSNull objectForKeyedSubscript:]` exception and exact Control instruction
+    offset. Disassembly maps that offset to the Tweaks inventory's nested
+    `getQuarantinedTweaks` result. The same run installed Control 3.5.36, but
+    host health remained hardcoded to 3.5.28 and stopped before Link and Filza.
+    **Status:** fixed. Control 3.5.37 validates nested result dictionaries, and
+    both host controllers derive the expected version/build from the verified
+    release IPA. Regression tests reject nested unchecked result access and
+    prove the payload—not duplicated source constants—defines the version gate.
+25. **A cold application-Cryptex replacement exceeded the worker's unrelated
+    five-minute outer deadline, and native app registration reopened the Intel
+    ctypes/libffi path.** The paired-userspace transfer completed successfully
+    after 281 seconds on a warm retry, leaving too little margin for cold
+    retirement. pymobiledevice3's native CoreDevice app installer could then
+    spin before its Python timeout. **Status:** fixed. The worker retains a
+    bounded 1,020-second outer Cryptex deadline around the installer's bounded
+    900-second transfer and uses exact-device Apple `devicectl` for reviewed
+    Control replacement. Post-install byte, registration, and foreground-launch
+    verification remain mandatory.
+26. **A fresh Link registration waited for `devicectl`'s entire four-minute
+    deadline because no existing Link MCM application was available to
+    update.** This was reproduced twice on the Intel/iPhone live matrix after
+    the Link Cryptex itself had installed successfully. **Status:** fixed. A
+    fresh Link is now materialized from its mounted, hash-verified Cryptex by
+    the dedicated bounded appregistrard transaction. Control replacement keeps
+    the proven exact-device `devicectl` route; both paths require byte-identical
+    MCM code, LaunchServices discovery, and foreground launch evidence.
 
 ### Low severity
 
@@ -311,10 +340,10 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 314 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, and deterministic offline Debian construction |
-| Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
+| Tool/release unit tests | PASS — 319 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, and deterministic offline Debian construction |
+| Host-tool unit tests with pinned Python 3.12 | PASS — 136 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
-| Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
+| Control compatibility tests | PASS — 22 run, including fail-closed privileged-update coverage |
 | BridgeCore tests | PASS — 33/33 |
 | Bridge Swift release source build | PASS |
 | Link clean source build, checksum, identity/icon/signature, sanitizer | PASS |
@@ -327,7 +356,7 @@ identifier.
 | Human prerequisite doctor | PASS — missing Xcode, Python, Theos, native libraries, runtime, signing, and notarization states print exact install/repair commands |
 | Resumable setup-state tests | PASS — private atomic progress and read-only non-persistence |
 | Repeated missing-kit release failure | PASS — failed closed and retained only one sanitized audit report |
-| Control package build | PASS — clean 3.5.36 arm64 rootless package using an explicit Theos checkout |
+| Control package build | PASS — clean 3.5.37 arm64 rootless package using an explicit Theos checkout |
 | Signed/notarized Universal 2 `.pkg` | PASS — canonical distribution build, Developer ID app/installer signing, notary acceptance, staple validation, user-readable root-owned kit, four-file manifest, and independent package-only verification |
 | Exact iOS 26 Cryptex/device workflow | PASS in retained separate session — iPhone15,4, iOS 26.0 build 23A341, fresh nonce/live ticket, userspace USB transport, durable Link/Control MCM registration; CatVNC backboardd hook remained a documented optional partial result |
 | Replacement clean-account install, Intel runtime, broader live SRD matrix | NOT_EXECUTED |

@@ -27,10 +27,10 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 317 run, 3 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, and symlink-chain escape rejection",
-        "host_tools_unit_tests": "PASS: 130 run under pinned Python 3.12, 1 skipped because the external source kit is intentionally absent; includes managed Zstandard extraction, userspace-first exact-UDID Cryptex transfer, native reset commit verification, and byte-identical runtime installer copies",
+        "tools_unit_tests": "PASS: 319 run, 4 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, and symlink-chain escape rejection",
+        "host_tools_unit_tests": "PASS: 136 run under pinned Python 3.12, 1 skipped because the external source kit is intentionally absent; includes managed Zstandard extraction, userspace-first exact-UDID Cryptex transfer, native reset commit verification, and byte-identical runtime installer copies",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
-        "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
+        "control_source_compatibility_tests": "PASS: 22 run, including fail-closed privileged-update coverage",
         "bridge_core_tests": "PASS: 33/33, including iOS 27 guided RemoteXPC pairing selection, iOS 26 fallback exclusion, incomplete-duplicate profile resume, deterministic candidate selection, complete-profile conflict rejection, and stale-port reservation",
         "bridge_release_source_build": "PASS",
         "link_source_build": "PASS",
@@ -47,8 +47,8 @@
         "privileged_update_safety": "PASS: moving latest TrollStore and ldid assets are refused",
         "host_runtime_manifest": "PASS: schema-2 component, architecture payload, hash, missing-component, traversal, and notice validation",
         "resumable_setup_state": "PASS: owner-only atomic progress; read-only checks do not persist",
-        "control_package_build": "PASS: clean 3.5.36 arm64 iOS/rootless build with explicit Theos checkout",
-        "control_release_payload_reproducibility": "PASS: two independent deterministic IPA staging runs produced SHA-256 f698d6f4dc5b2f22d66678cc587a584166d5856d7217af5fee3093a4d5338b9c",
+        "control_package_build": "PASS: clean 3.5.37 arm64 iOS/rootless build with explicit Theos checkout",
+        "control_release_payload_reproducibility": "PASS: two independent deterministic IPA staging runs produced SHA-256 bb4f83bba160288b934b6afa9422d9a9956ce370206abc07e60de9089baca869",
         "release_cache_pruning": "PASS: offline validation wrote no bytecode; prepared release kit contained 0 __pycache__, .pyc, or .pyo artifacts",
         "installed_kit_permissions": "PASS: release staging normalizes root-owned kit directories/executables to 0755 and data to 0644; package BOM and expanded-app gates reject inaccessible resources",
         "ios26_cryptex_compatibility": "PASS in retained separate live-device session: iPhone15,4 iOS 26.0 build 23A341 used GenericDmg slot 9, a fresh domain-3 nonce, live TSS ticket, and userspace USB transport; public evidence excludes device identifiers and ticket material",
@@ -68,15 +68,17 @@
         "first_runtime_xcode_build_probe": "PASS on Apple Silicon build host with Xcode 26.5 SDK: compiled arm64 and arm64e host/dylib sources, produced Universal binaries, ad-hoc signed them, and built runtime-manager 2.4.20 plus runtime-test-tweak 1.0.0 Debian packages from the same manifest-verified source inputs",
         "offline_device_package_builder": "PASS: source-controlled dpkg-deb compatibility 1.2 deterministically builds device DEBs and, through the managed locked Python environment, extracted the actual libgdbm6_1.23_iphoneos-arm64.deb Zstandard payload without an external zstd program",
         "offline_zstandard_release_gate": "PASS: locked zstandard==0.25.0 is imported from the offline wheelhouse; release validation now invokes the signed helper with that managed interpreter against a real data.tar.zst Procursus package and requires a nonempty rootless payload",
-        "intel_userspace_cryptex_transport_gate": "PASS: both runtime installer copies are byte-identical; default exact-UDID UserspaceRsdTunnel uses autopair=False and tests prove NativeRemotedTunnel is not constructed unless explicitly selected"
+        "intel_userspace_cryptex_transport_gate": "PASS: both runtime installer copies are byte-identical; default exact-UDID UserspaceRsdTunnel uses autopair=False and tests prove NativeRemotedTunnel is not constructed unless explicitly selected",
+        "intel_pre25_control_live": "PASS on Intel host and iPhone12,8 iOS 27.0: source-built Control 3.5.37/3.5.37.0 installed through the authenticated worker, registered in one MCM container, passed foreground launch verification, and produced no new retained crash report",
+        "intel_pre25_link_live": "PASS on Intel host and iPhone12,8 iOS 27.0: live testing reproduced devicectl timeout for a fresh Link with no MCM target; the bounded appregistrard route then installed Link 1.9.0 build 48 in 448.5 seconds and verified registration, executable, icon, and foreground launch while preserving Control and user data"
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",
         "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
-        "intel_runtime_uat": "PARTIAL: MacBookPro16,1 x86_64 macOS 26.5.2 has passed pairing, exact-device userspace RemoteXPC, SRDssh, reboot/reconnect, UID-0 SSH, Procursus, upload, Zstandard extraction, Xcode arm64/arm64e build/signing, deterministic DEBs, and Cryptex asset construction. Pre.23 stopped before mutation in native libffi callback allocation; pre.24 requires live Resume UAT.",
-        "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
+        "intel_runtime_uat": "PARTIAL: MacBookPro16,1 x86_64 macOS 26.5.2 has passed pairing, exact-device userspace RemoteXPC, SRDssh, reconnect, UID-0 SSH, Procursus, deterministic package construction, Control 3.5.37 and Link 1.9.0 live installation, MCM registration, icons, and foreground launch. Signed pre.25 package upgrade and final Filza health remain pending.",
+        "live_srd_installation": "PARTIAL: iPhone12,8 iOS 27.0 passed live Control 3.5.37 and Link 1.9.0 installation through the Intel companion; final Filza convergence remains pending. A separate retained iOS 26.0 session also passed Link/Control installation.",
         "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
-        "publication": "PARTIAL: experimental releases through pre.23 are published; pre.24 publication is pending signed build verification"
+        "publication": "PARTIAL: experimental releases through pre.24 are published; pre.25 publication is pending signed build verification"
     },
     "release_result": "AUTOMATED_RELEASE_GATES_PASS; HARDWARE_UAT_PENDING",
     "release_blockers": [

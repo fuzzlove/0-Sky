@@ -425,11 +425,22 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
         NSDictionary* quarantineEnvelope = [[TSApplicationsManager sharedInstance]
             coreRequestOperation:@"getQuarantinedTweaks"
             parameters:@{@"limit": @256} error:nil];
-        NSArray* quarantines = [quarantineEnvelope[@"result"][@"quarantines"]
-            isKindOfClass:NSArray.class]
-            ? quarantineEnvelope[@"result"][@"quarantines"] : @[];
-        NSArray* packages = [envelope[@"result"][@"packages"] isKindOfClass:NSArray.class]
-            ? envelope[@"result"][@"packages"] : @[];
+        // Core intentionally serializes unavailable values as JSON null.  A
+        // prior build trusted the nested result object and sent dictionary
+        // subscripting to NSNull, crashing whenever the Tweaks tab refreshed
+        // while one collector was unavailable.  Validate every JSON boundary
+        // before reading nested fields; an unavailable collector is an empty
+        // view, not a process-fatal condition.
+        NSDictionary* quarantineResult =
+            [quarantineEnvelope[@"result"] isKindOfClass:NSDictionary.class]
+                ? quarantineEnvelope[@"result"] : @{};
+        NSDictionary* packageResult =
+            [envelope[@"result"] isKindOfClass:NSDictionary.class]
+                ? envelope[@"result"] : @{};
+        NSArray* quarantines = [quarantineResult[@"quarantines"] isKindOfClass:NSArray.class]
+            ? quarantineResult[@"quarantines"] : @[];
+        NSArray* packages = [packageResult[@"packages"] isKindOfClass:NSArray.class]
+            ? packageResult[@"packages"] : @[];
         NSMutableDictionary* packageHealth = [NSMutableDictionary dictionary];
         for(NSDictionary* row in packages) {
             NSString* identifier = [row[@"package"] isKindOfClass:NSString.class]
@@ -543,8 +554,11 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
             coreRequestOperation:@"clearTweakQuarantine"
             parameters:@{@"package": package, @"target": target} error:&error];
         BOOL success = [envelope[@"success"] boolValue];
+        NSDictionary* result = [envelope[@"result"] isKindOfClass:NSDictionary.class]
+            ? envelope[@"result"] : @{};
         NSString* message = success
-            ? (envelope[@"result"][@"message"] ?: @"The retry was queued.")
+            ? ([result[@"message"] isKindOfClass:NSString.class]
+                ? result[@"message"] : @"The retry was queued.")
             : (error.localizedDescription ?: envelope[@"errorMessage"] ?:
                @"The quarantine state changed before it could be retried.");
         dispatch_async(dispatch_get_main_queue(), ^{
@@ -1049,8 +1063,10 @@ static NSString* TSPreferenceIconPath(NSDictionary* entry, NSString* descriptorP
         NSError* error = nil;
         NSDictionary* envelope = [[TSApplicationsManager sharedInstance]
             coreRequestOperation:@"getPackageDetail" parameters:@{@"package": package} error:&error];
-        NSDictionary* detail = [envelope[@"result"][@"package"] isKindOfClass:NSDictionary.class]
-            ? envelope[@"result"][@"package"] : nil;
+        NSDictionary* result = [envelope[@"result"] isKindOfClass:NSDictionary.class]
+            ? envelope[@"result"] : @{};
+        NSDictionary* detail = [result[@"package"] isKindOfClass:NSDictionary.class]
+            ? result[@"package"] : nil;
         dispatch_async(dispatch_get_main_queue(), ^{
             self.navigationItem.prompt = nil;
             if(!detail) {

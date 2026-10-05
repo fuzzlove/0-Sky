@@ -56,7 +56,7 @@
       "name": "0-Sky Control",
       "platform": "iOS/iPadOS SRD; exact build capability-gated",
       "architectures": ["arm64"],
-      "version": "3.5.36 source; release payload version recorded by kit manifest",
+      "version": "3.5.37 source; release payload version recorded by kit manifest",
       "license": "control/LICENSE",
       "runtime_requirements": ["authorized SRD", "verified local device bridge"],
       "installation_destination": "selected SRD application container",

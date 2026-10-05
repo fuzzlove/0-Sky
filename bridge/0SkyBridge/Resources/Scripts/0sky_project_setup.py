@@ -28,6 +28,7 @@ import sys
 import threading
 import time
 from typing import Any
+import zipfile
 
 _config_module_directory = Path(__file__).resolve().parent
 if not (_config_module_directory / "zero_sky_user_config.py").is_file():
@@ -108,6 +109,29 @@ def sha256(path: Path) -> str:
         for block in iter(lambda: stream.read(1024 * 1024), b""):
             h.update(block)
     return h.hexdigest()
+
+
+def bundled_ipa_identity(path: Path, expected_bundle_id: str) -> dict[str, str]:
+    """Return the release-bound identity instead of duplicating a version."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            unsafe = [name for name in names if (Path(name).is_absolute()
+                      or ".." in Path(name).parts or "\\" in name)]
+            infos = [name for name in names if name.startswith("Payload/")
+                     and name.count("/") == 2 and name.endswith(".app/Info.plist")]
+            if unsafe or len(infos) != 1:
+                raise ValueError("unsafe or ambiguous application archive")
+            info = plistlib.loads(archive.read(infos[0]))
+    except (OSError, ValueError, zipfile.BadZipFile, plistlib.InvalidFileException) as error:
+        raise PoCError(f"invalid bundled application payload: {path.name}: {error}") from error
+    if info.get("CFBundleIdentifier") != expected_bundle_id:
+        raise PoCError(f"bundled application identity mismatch: {path.name}")
+    version = info.get("CFBundleShortVersionString")
+    build = info.get("CFBundleVersion")
+    if not isinstance(version, str) or not version or not isinstance(build, str) or not build:
+        raise PoCError(f"bundled application version is missing: {path.name}")
+    return {"bundle_id": expected_bundle_id, "version": version, "build": build}
 
 
 def safe_manifest_entry(root: Path, path: Path) -> bool:
@@ -1084,10 +1108,14 @@ ps ax -o command= 2>/dev/null | "$G" -q '[f]rida-server$' '''
 
 
 def direct_components_current(target: dict[str, Any], identity: Path) -> bool:
+    control = bundled_ipa_identity(
+        KIT / "packages/Commissary-Universal.ipa", "com.liquidsky.CrypStore")
     link = app_info(target, identity, "codes.liquidsky.research.zerosky")
+    control_app = app_info(target, identity, "com.liquidsky.CrypStore")
     return (
         package_version(target, identity, "com.catvnc.server") == "0.0.2"
-        and app_info(target, identity, "com.liquidsky.CrypStore").get("version") == "3.5.28"
+        and control_app.get("version") == control["version"]
+        and control_app.get("build") == control["build"]
         and link.get("version") == "1.9.0"
         and link.get("build") == "48"
         and link.get("distribution") == "0-Sky Link"
@@ -1572,7 +1600,11 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         if args.force_components or not direct_components_current(target, args.identity):
             bootstrap_components(python, target, args.identity, run_dir)
         else:
-            log(f"{target['instance']}: latest CatVNC 0.0.2, 0-Sky Control 3.5.28, and 0-Sky Link 1.9.0 already present; preserving them")
+            control = bundled_ipa_identity(
+                KIT / "packages/Commissary-Universal.ipa", "com.liquidsky.CrypStore")
+            log(f"{target['instance']}: latest CatVNC 0.0.2, "
+                f"0-Sky Control {control['version']}, and 0-Sky Link 1.9.0 "
+                "already present; preserving them")
 
         ensure_bootsplash_launcher(target, args.identity, run_dir)
 
@@ -1601,13 +1633,16 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
             ).stdout.decode().strip(),
         }
         mcm_prefix = "/private/var/containers/Bundle/Application/"
+        control = bundled_ipa_identity(
+            KIT / "packages/Commissary-Universal.ipa", "com.liquidsky.CrypStore")
         mcm_parity = all(
             str(final[name].get("path", "")).startswith(mcm_prefix)
             for name in ("commissary", "zero_sky", "filza")
         )
         final["mcm_registration_parity"] = mcm_parity
         passed = (final["catvnc"] == "0.0.2" and
-                  final["commissary"].get("version") == "3.5.28" and
+                  final["commissary"].get("version") == control["version"] and
+                  final["commissary"].get("build") == control["build"] and
                   final["zero_sky"].get("version") == "1.9.0" and
                   final["zero_sky"].get("build") == "48" and
                   final["zero_sky"].get("distribution") == "0-Sky Link" and
