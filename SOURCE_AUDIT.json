@@ -27,7 +27,7 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 319 run, 4 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, and symlink-chain escape rejection",
+        "tools_unit_tests": "PASS: 320 run, 4 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, and symlink-chain escape rejection",
         "host_tools_unit_tests": "PASS: 136 run under pinned Python 3.12, 1 skipped because the external source kit is intentionally absent; includes managed Zstandard extraction, userspace-first exact-UDID Cryptex transfer, native reset commit verification, and byte-identical runtime installer copies",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 22 run, including fail-closed privileged-update coverage",

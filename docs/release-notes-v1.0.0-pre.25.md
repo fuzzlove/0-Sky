@@ -24,6 +24,9 @@ deployment failures exposed by the complete pre.24 hardware run.
   proved `devicectl` waits for its full deadline when no Link MCM target exists.
   Both routes independently verify installed bytes, registration, and launch
   over host-key-pinned SRD SSH.
+- Distribution notarization now supplies an explicit 50-minute service wait.
+  Apple's notary queue continued processing pre.25 after `notarytool` exhausted
+  its shorter implicit wait, which discarded an otherwise valid signed build.
 
 ## Export comparison
 

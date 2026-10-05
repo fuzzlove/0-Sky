@@ -12,7 +12,8 @@ from unittest.mock import patch
 import zipfile
 
 from tools.kit_manifest import APPROVAL_NAME, APPROVAL_STATES, REQUIRED, generate, verify
-from tools.build_release import build as build_release, preflight_failure_code, remediation_for
+from tools.build_release import (build as build_release, preflight_failure_code,
+                                 remediation_for, submit_notarization)
 from tools.release_paths import ReleasePaths, RuntimePaths
 from tools.release_sanitize import audit
 from tools.signing_identities import (Identity, parse_identities, require_identity,
@@ -281,6 +282,16 @@ class KitManifestTests(unittest.TestCase):
             self.assertIn("FINAL_RESULT=BLOCKED", report)
             self.assertIn("FIRST_FAILING_STAGE=SIGNING_PREFLIGHT", report)
             self.assertNotIn("FINAL_RESULT=PASS", report)
+
+    def test_notary_wait_has_explicit_service_sized_timeout(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["xcrun", "notarytool"], 0,
+            stdout=json.dumps({"status": "Accepted"}).encode(), stderr=b"")
+        with patch("tools.build_release.subprocess.run", return_value=completed) as run:
+            submit_notarization(Path("release.pkg"), "release-profile")
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[argv.index("--timeout") + 1], "50m")
+        self.assertEqual(run.call_args.kwargs["timeout"], 3600)
 
 
 if __name__ == "__main__":

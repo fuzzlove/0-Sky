@@ -295,6 +295,12 @@ identifier.
     the dedicated bounded appregistrard transaction. Control replacement keeps
     the proven exact-device `devicectl` route; both paths require byte-identical
     MCM code, LaunchServices discovery, and foreground launch evidence.
+27. **Apple notarization could outlive `notarytool`'s implicit wait even though
+    the service continued processing the uploaded installer.** The release
+    pipeline consequently discarded a completely signed package while its
+    submission remained `In Progress`. **Status:** fixed. Distribution builds
+    now give the service an explicit 50-minute wait inside the existing bounded
+    one-hour subprocess deadline, and a regression test locks that contract.
 
 ### Low severity
 
@@ -340,7 +346,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 319 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, and deterministic offline Debian construction |
+| Tool/release unit tests | PASS — 320 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, and deterministic offline Debian construction |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 136 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 22 run, including fail-closed privileged-update coverage |

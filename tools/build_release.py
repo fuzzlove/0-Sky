@@ -148,7 +148,8 @@ def submit_notarization(package: Path, profile: str) -> None:
     try:
         result = subprocess.run(
             ["xcrun", "notarytool", "submit", str(package),
-             "--keychain-profile", profile, "--wait", "--output-format", "json"],
+             "--keychain-profile", profile, "--wait", "--timeout", "50m",
+             "--output-format", "json"],
             cwd=ROOT, capture_output=True, timeout=3600, check=False)
         if result.returncode or json.loads(result.stdout).get("status") != "Accepted":
             raise ReleaseFailure("NOTARIZE", "NOT_ACCEPTED")
