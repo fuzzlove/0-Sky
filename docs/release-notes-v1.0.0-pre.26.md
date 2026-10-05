@@ -21,6 +21,9 @@ pre.25 GitHub-package upgrade test on the Intel Mac.
   Dropbear key, setup atomically commits that verified pin to the persistent
   per-device worker profile. Strict checking remains enabled throughout; no
   LAN key scan or automatic unverified replacement is permitted.
+- First-runtime Xcode packaging now receives a restricted PATH containing the
+  signed, build-capable `dpkg-deb` helper and Apple system tools. It neither
+  depends on nor accidentally selects a Homebrew executable.
 
 ## Root cause
 

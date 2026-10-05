@@ -318,7 +318,11 @@ identifier.
     the former had rotated safely while the latter correctly rejected it.
     Setup now performs an additional UID-0 proof through the exact-USB pin and
     atomically commits those validated records to the owner-only profile before
-    any worker SSH connection.
+    any worker SSH connection. Live resume then reached the first-runtime
+    source builder and showed that the signed `dpkg-deb` had been capability
+    checked but was not added to that child's PATH. The controller now supplies
+    an explicit restricted PATH containing the bundled helper and Apple system
+    tools; Homebrew paths are excluded.
 
 ### Low severity
 
@@ -364,7 +368,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 325 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback classification, selected-route propagation, single-session UID/device proof, exact-USB-to-worker host-pin commit, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
+| Tool/release unit tests | PASS — 326 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback classification, selected-route propagation, single-session UID/device proof, exact-USB-to-worker host-pin commit, signed first-runtime package-builder selection, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 136 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 22 run, including fail-closed privileged-update coverage |

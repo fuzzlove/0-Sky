@@ -155,7 +155,8 @@ def safe_manifest_entry(root: Path, path: Path) -> bool:
 def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = None,
         capture: bool = False, input_data: bytes | None = None,
         log_file: Path | None = None,
-        stream_output: bool = False) -> subprocess.CompletedProcess:
+        stream_output: bool = False,
+        environment: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     command = [str(value) for value in argv]
     executable = Path(command[0]).name
     phase = Path(command[1]).stem if len(command) > 1 and command[1].endswith(".py") else executable
@@ -169,6 +170,7 @@ def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = Non
         stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=environment,
     )
     _ACTIVE_CHILD = process
     output_queue: queue.Queue[tuple[str, bytes | None]] = queue.Queue()
@@ -1029,6 +1031,15 @@ def require_offline_device_package_builder() -> Path:
     return helper
 
 
+def offline_runtime_builder_environment(helper: Path) -> dict[str, str]:
+    """Expose only the signed dpkg-deb plus Apple system build tools."""
+    environment = dict(os.environ)
+    environment["PATH"] = os.pathsep.join((
+        str(helper.parent), "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+    ))
+    return environment
+
+
 def ensure_first_runtime(python: Path, target: dict[str, Any],
                          identity: Path, run_dir: Path) -> None:
     """Establish the first Python-trusted runtime on fresh Procursus."""
@@ -1038,7 +1049,7 @@ def ensure_first_runtime(python: Path, target: dict[str, Any],
         check=False, capture=True, timeout=20,
     ).returncode == 0:
         return
-    require_offline_device_package_builder()
+    package_builder = require_offline_device_package_builder()
     instance = SUPPORT / "instances" / target["instance"]
     builder = instance / "automation/tools/srd-runtime-manager/build_poc.py"
     builder_root = builder.parent
@@ -1101,7 +1112,8 @@ test "$("$T" wc -c < /var/jb/etc/trollstorelite-srd-bridge.token)" -eq 65'''
     )
     build_output = instance / "automation/artifacts/srd-runtime-poc/build"
     run([python, builder, "--output", build_output], timeout=600,
-        log_file=run_dir / "first-runtime-build.log")
+        log_file=run_dir / "first-runtime-build.log",
+        environment=offline_runtime_builder_environment(package_builder))
     known_hosts = STATE_ROOT / target["instance"] / "srdssh/device-known-hosts"
     sync = instance / "automation/tools/srd-runtime-manager/sync_runtime_cryptex.py"
     alias = "0sky-device-" + hashlib.sha256(target["udid"].encode()).hexdigest()[:24]

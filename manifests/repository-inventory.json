@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "2d47ba11ae010795d1db3ea43039a229b4031bf4aeeb2ea17832d29f669f8fe8",
-      "size": 11899
+      "sha256": "e5802dc2ed623bddf4a92a6f61fc23cdbccf91e65bfa806fea7644a82fd1b139",
+      "size": 11947
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10671,8 +10671,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py",
-      "sha256": "9c5e5f7aaa0f8669f623cd15373b3c885e1a6be19af8c9d0a806ad8c30bae1fe",
-      "size": 90581
+      "sha256": "c8204081e8cfac1786734ac58049cbec29ddf9750e823bd569da90944e48a39e",
+      "size": 91076
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -13593,8 +13593,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "9438bdb60fa4c51474dd803268731e2c0cec6580c5afc8b4719138e38b1733e6",
-      "size": 28598
+      "sha256": "9367a5aa88f7f68a59da51deceaf4000facb712e77d36c093eb2afaea7c3130d",
+      "size": 28965
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13611,8 +13611,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "809db7e42ad700bbe53311279c676b41b02e85a58e7e2267d8d122232b8db829",
-      "size": 22985
+      "sha256": "774e346d60157d1d7b6bce422e3b3b2f3bd2b8edfa809c560b502d9a4aff089f",
+      "size": 23500
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13749,8 +13749,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/release-notes-v1.0.0-pre.26.md",
-      "sha256": "4b51dacbd4f3e003850a084090cc8ed02c4d5b7dab09b1caacde94d0db9b2f8f",
-      "size": 2075
+      "sha256": "74c90235a5ad11af7fb0a62c9aa9983b2449b039b8ec1965745d34114268ee7d",
+      "size": 2291
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14733,8 +14733,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_setup_state.py",
-      "sha256": "11564d0761a74662c6abd2e8e7fa768aede55864a39b72cd7f20eb471d7cc962",
-      "size": 10647
+      "sha256": "f717aa4aed2951d3952ea3faf16948ead710e510bc4fe408421512bdeca6778b",
+      "size": 11276
     },
     {
       "category": "required-source-or-maintenance-test",

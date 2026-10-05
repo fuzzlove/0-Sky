@@ -24,6 +24,17 @@ SPEC.loader.exec_module(setup)
 
 
 class SetupStateTests(unittest.TestCase):
+    def test_first_runtime_builder_path_uses_signed_helper_not_homebrew(self) -> None:
+        helper = Path("/Applications/0-Sky Bridge.app/Contents/Resources/Kit/host-mac/runtime/bin/dpkg-deb")
+        with mock.patch.dict(setup.os.environ, {"PATH": "/opt/homebrew/bin:/usr/local/bin"}):
+            environment = setup.offline_runtime_builder_environment(helper)
+        self.assertEqual(
+            environment["PATH"],
+            "/Applications/0-Sky Bridge.app/Contents/Resources/Kit/host-mac/runtime/bin:"
+            "/usr/bin:/bin:/usr/sbin:/sbin",
+        )
+        self.assertNotIn("homebrew", environment["PATH"])
+
     def test_exact_usb_bootstrap_pin_is_committed_after_uid_zero_proof(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
