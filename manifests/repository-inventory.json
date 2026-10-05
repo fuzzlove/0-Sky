@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 140,
-    "required-source-or-maintenance-test": 2110,
+    "required-source-or-maintenance-test": 2111,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -13587,8 +13587,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "fab182741ff8e058b82795aea7edb642f61600b4be21d790f7e02f2881a239b8",
-      "size": 19567
+      "sha256": "21f4813a74f99f841ff8b1a72642bebc26f4da05762895486b6a626f1a71989c",
+      "size": 20503
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13605,8 +13605,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "871eac31184b1452dd8255c8f5057813922ce0eecc2731a6af3ff6a10ab4af20",
-      "size": 16216
+      "sha256": "de7f618cc250016dd79472c3d334a652679d2b258d581cd923f1b579645acdb0",
+      "size": 16980
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13703,6 +13703,12 @@
       "path": "docs/release-notes-v1.0.0-pre.19.md",
       "sha256": "2e2ead8be618f40cc8641dc63c02f38a910e400b05aa5ccd8c58c77ab1b92259",
       "size": 1914
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/release-notes-v1.0.0-pre.20.md",
+      "sha256": "2bb80e325a6a5b13a44c861a642bb6e18b625b86123c35772dad365e3b5fb094",
+      "size": 1806
     },
     {
       "category": "required-source-or-maintenance-test",

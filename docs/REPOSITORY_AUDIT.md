@@ -202,6 +202,18 @@ identifier.
     failure handling, written to the owner-only stage artifact, and relayed to
     the expandable technical log. Regression tests cover route propagation,
     Intel-safe automatic ordering, and streamed-plus-captured output.
+19. **The first-runtime controller named a package absent from the signed
+    kit.** Live pre.19 Intel testing passed SRDssh installation, reboot,
+    exact-device reconnect, UID-0 SSH, and Procursus, then stopped because the
+    controller requested `srd-runtime-manager_2.4.17_iphoneos-arm64.deb` while
+    the checksum-bound kit's current bootstrap is 2.4.10. **Status:** fixed.
+    The controller now selects that verified bootstrap version; current runtime
+    sources are still assembled into the per-device Cryptex immediately after
+    Python becomes available. Release preparation reads the controller version
+    without importing device logic and fails unless the exact regular-file DEB
+    exists and bundled `dpkg-deb` proves its package ID, version, and
+    `iphoneos-arm64` architecture. Tests cover matching and missing packages,
+    and failures print an exact remediation without permitting a rename bypass.
 
 ### Low severity
 
@@ -247,7 +259,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 304 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, interrupted-profile port recovery, paired-USB RemoteXPC fallback, selected-route propagation, and live child-output streaming |
+| Tool/release unit tests | PASS — 306 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, and runtime-manager semantic package validation |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 3 skipped for unavailable external fixtures, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |
