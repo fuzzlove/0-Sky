@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "f2528af68dc89116575f7c44b654400c2a74c6774649601efa44778effccdb76",
-      "size": 13035
+      "sha256": "92e7380dd53c518af5f45cc1cd8e0f6b22cce6a1d8af44fe1d11eaf64d4a3192",
+      "size": 13330
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -13593,8 +13593,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "8b42ebe191e041b5e0809a60c250827d5be80e6005539aaaac35820298412542",
-      "size": 31618
+      "sha256": "4fe3af78bde585b53e40312dca0da21ef35d0d3dccd0f9727b76d570c75c20b3",
+      "size": 31694
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13749,8 +13749,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/release-notes-v1.0.0-pre.26.md",
-      "sha256": "8e985a1bea97d7d7009f3a374bc8a49aed7b4878cd7a00ec8bc7a9eb63f2f14e",
-      "size": 3475
+      "sha256": "d195ed41d8f23e5d7d45d7e0b4cc9159c7d138e39fdbffe8d6f30a808ec101db",
+      "size": 3986
     },
     {
       "category": "required-source-or-maintenance-test",

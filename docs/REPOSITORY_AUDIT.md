@@ -416,7 +416,7 @@ identifier.
 | Control package build | PASS — clean 3.5.37 arm64 rootless package using an explicit Theos checkout |
 | Signed/notarized Universal 2 `.pkg` | PASS — canonical distribution build, Developer ID app/installer signing, notary acceptance, staple validation, user-readable root-owned kit, four-file manifest, and independent package-only verification |
 | Exact iOS 26 Cryptex/device workflow | PASS in retained separate session — iPhone15,4, iOS 26.0 build 23A341, fresh nonce/live ticket, userspace USB transport, durable Link/Control MCM registration; CatVNC backboardd hook remained a documented optional partial result |
-| Intel runtime and live iPhone12,8/iOS 27 setup | PASS from the manifest-verified pre.26 staged source: all ten stages converged, including Dropbear/Procursus, first runtime, Control 3.5.37, Link 1.9.0 build 48, CatVNC 0.0.2, Filza 4.0, MCM parity, and foreground launches; exact final `.pkg` upgrade remains a separate publication gate |
+| Intel runtime and live iPhone12,8/iOS 27 setup | PASS from the exact final Developer ID-signed, Apple-notarized, stapled Universal 2 `.pkg`: SHA-256 transfer parity, Gatekeeper, receipt, strict app signature, embedded-kit identity, normal launch, and all ten device stages passed. The post-install report’s `SHA256SUMS` identity matched the kit in `/Applications` and completed after the package receipt time. |
 | Replacement clean-account install and broader live SRD matrix | NOT_EXECUTED |
 
 Machine-readable results in `SOURCE_AUDIT.json` distinguish executed tests from

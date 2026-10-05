@@ -41,6 +41,11 @@ pre.25 GitHub-package upgrade test on the Intel Mac.
   a bounded install-completion timeout receives the same single fresh paired-
   USB retry and pre-commit check as a flow-control stall.
 
+## Final validation
+
+- The exact final Universal 2 package passed Developer ID signature verification, Apple notarization, stapling, Gatekeeper assessment, independent four-file release verification, and SHA-256 transfer parity on the Intel Mac.
+- Installation over pre.25 succeeded. The installed application launched normally and its post-install run passed all ten setup stages; the report was bound to the `SHA256SUMS` from the kit embedded in `/Applications` and completed after the package receipt time.
+
 ## Root cause
 
 Pre.25 installed a healthy Dropbear server and accepted the caller-owned SSH
