@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import datetime as dt
 import hashlib
 import inspect
@@ -524,6 +525,77 @@ def ssh_base(target: dict[str, Any], identity: Path) -> list[str]:
         "-i", str(identity),
         "-p", str(target["port"]), "root@127.0.0.1",
     ]
+
+
+def synchronize_bootstrap_host_key(target: dict[str, Any], identity: Path) -> None:
+    """Commit the exact-USB bootstrap pin to the persistent host profile.
+
+    SRDssh owns its activation pin below ``STATE_ROOT`` while the long-lived
+    worker uses the instance pin below ``SUPPORT``. A legitimate Cryptex
+    replacement may rotate the former after verified exact-UDID USB
+    installation. Copy it only after proving UID 0 through that new pin; never
+    learn or replace trust from a LAN endpoint.
+    """
+    source = STATE_ROOT / target["instance"] / "srdssh/device-known-hosts"
+    destination = SUPPORT / "instances" / target["instance"] / "device-known-hosts"
+    if (not source.is_file() or source.is_symlink()
+            or source.stat().st_mode & 0o077):
+        raise PoCError("the exact-USB bootstrap host-key pin is missing or unsafe")
+    alias = "0sky-device-" + hashlib.sha256(target["udid"].encode()).hexdigest()[:24]
+    allowed = {"ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256",
+               "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"}
+    records = []
+    for raw in source.read_text(encoding="utf-8").splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        fields = raw.split()
+        try:
+            decoded = base64.b64decode(fields[2], validate=True)
+        except (IndexError, ValueError) as error:
+            raise PoCError("the exact-USB bootstrap host-key pin is malformed") from error
+        if len(fields) != 3 or fields[0] != alias or fields[1] not in allowed or len(decoded) < 32:
+            raise PoCError("the exact-USB bootstrap host-key pin is malformed")
+        records.append(raw.strip())
+    if not records:
+        raise PoCError("the exact-USB bootstrap host-key pin is empty")
+
+    value = str(source).replace("\\", "\\\\").replace(" ", "\\ ")
+    proof = run([
+        "/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+        "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
+        "-o", f"UserKnownHostsFile={value}", "-o", "GlobalKnownHostsFile=/dev/null",
+        "-o", f"HostKeyAlias={alias}", "-o", "PasswordAuthentication=no",
+        "-o", "KbdInteractiveAuthentication=no", "-i", identity,
+        "-p", str(target["port"]), "root@127.0.0.1", "id -u",
+    ], check=False, capture=True, timeout=20)
+    if proof.returncode or proof.stdout.strip() != b"0":
+        raise PoCError("the rotated exact-USB host key did not prove UID 0")
+
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if destination.parent.is_symlink():
+        raise PoCError("the device profile directory is unsafe")
+    os.chmod(destination.parent, 0o700)
+    if destination.exists() and (destination.is_symlink() or not destination.is_file()
+                                 or destination.stat().st_mode & 0o077):
+        raise PoCError("the persistent device host-key pin is unsafe")
+    encoded = ("\n".join(records) + "\n").encode("ascii")
+    if destination.is_file() and destination.read_bytes() == encoded:
+        return
+    temporary = destination.with_name(
+        f".{destination.name}.{os.getpid()}.{time.time_ns()}.tmp"
+    )
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(temporary, flags, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=False) as stream:
+            stream.write(encoded); stream.flush(); os.fsync(stream.fileno())
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, destination)
+    os.chmod(destination, 0o600)
+    log(f"{target['instance']}: committed the exact-USB verified Dropbear host key to the persistent profile")
 
 
 def remote(target: dict[str, Any], identity: Path, command: str, *,
@@ -1533,6 +1605,8 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         if first.returncode:
             detail = (first.stdout + first.stderr).decode("utf-8", "replace")
             raise PoCError("Dropbear/Procursus stage failed after supported transport fallbacks:\n" + detail[-6000:])
+        if not args.check:
+            synchronize_bootstrap_host_key(target, args.identity)
         if args.check:
             report["stage_results"]["dropbear-procursus"] = "passed"
             report.update(passed=True, check_only=True)

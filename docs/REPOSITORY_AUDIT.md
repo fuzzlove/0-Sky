@@ -313,7 +313,12 @@ identifier.
     race: the UID-0 command passed while an immediate redundant identity
     connection was reset. The proof now collects both results in one session,
     and only a specifically diagnosed RemoteXPC trust failure may start
-    Paired Macs enrollment.
+    Paired Macs enrollment. The next stage also proved that SRDssh's exact-USB
+    activation pin and the persistent worker-profile pin were separate files;
+    the former had rotated safely while the latter correctly rejected it.
+    Setup now performs an additional UID-0 proof through the exact-USB pin and
+    atomically commits those validated records to the owner-only profile before
+    any worker SSH connection.
 
 ### Low severity
 
@@ -359,7 +364,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 324 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback classification, selected-route propagation, single-session UID/device proof, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
+| Tool/release unit tests | PASS — 325 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback classification, selected-route propagation, single-session UID/device proof, exact-USB-to-worker host-pin commit, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 136 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 22 run, including fail-closed privileged-update coverage |

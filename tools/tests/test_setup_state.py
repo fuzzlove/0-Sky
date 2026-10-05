@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import importlib.util
+import base64
+import hashlib
 import json
 from pathlib import Path
 import sys
@@ -22,6 +24,31 @@ SPEC.loader.exec_module(setup)
 
 
 class SetupStateTests(unittest.TestCase):
+    def test_exact_usb_bootstrap_pin_is_committed_after_uid_zero_proof(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            support, state = root / "support", root / "state"
+            target = {"udid": "00000000000000000000", "instance": "test", "port": 2222}
+            alias = "0sky-device-" + hashlib.sha256(
+                target["udid"].encode()
+            ).hexdigest()[:24]
+            source = state / "test/srdssh/device-known-hosts"
+            destination = support / "instances/test/device-known-hosts"
+            source.parent.mkdir(parents=True)
+            destination.parent.mkdir(parents=True)
+            new_blob = base64.b64encode(b"n" * 32).decode()
+            old_blob = base64.b64encode(b"o" * 32).decode()
+            source.write_text(f"{alias} ssh-ed25519 {new_blob}\n")
+            destination.write_text(f"{alias} ssh-ed25519 {old_blob}\n")
+            source.chmod(0o600); destination.chmod(0o600)
+            proof = types.SimpleNamespace(returncode=0, stdout=b"0\n", stderr=b"")
+            with mock.patch.object(setup, "SUPPORT", support), \
+                    mock.patch.object(setup, "STATE_ROOT", state), \
+                    mock.patch.object(setup, "run", return_value=proof):
+                setup.synchronize_bootstrap_host_key(target, root / "identity")
+            self.assertEqual(destination.read_bytes(), source.read_bytes())
+            self.assertEqual(destination.stat().st_mode & 0o777, 0o600)
+
     def test_pairing_fallback_is_limited_to_remotexpc_trust_failure(self) -> None:
         remote_failure = types.SimpleNamespace(
             stdout=b"", stderr=b"[0-Sky Chain] FAILED CLOSED: RemoteXPC/cryptexd preflight failed"

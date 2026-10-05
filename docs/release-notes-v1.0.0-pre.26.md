@@ -17,6 +17,10 @@ pre.25 GitHub-package upgrade test on the Intel Mac.
   SSH session, removing a launchd-settling race between two redundant
   connections. A later SSH or package failure also retains its real diagnosis
   instead of incorrectly opening the unrelated Paired Macs enrollment flow.
+- After the exact-UDID USB bootstrap proves UID 0 through a newly rotated
+  Dropbear key, setup atomically commits that verified pin to the persistent
+  per-device worker profile. Strict checking remains enabled throughout; no
+  LAN key scan or automatic unverified replacement is permitted.
 
 ## Root cause
 
