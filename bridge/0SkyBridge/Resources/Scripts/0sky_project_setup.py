@@ -1392,6 +1392,17 @@ def pair_remotexpc(python: Path, run_dir: Path) -> None:
         timeout=210, log_file=run_dir / "remote-pairing.log")
 
 
+def needs_remotexpc_pairing(completed: subprocess.CompletedProcess[bytes]) -> bool:
+    """Offer Paired Macs only when the bootstrap failed at RemoteXPC trust.
+
+    A later SSH, package, or runtime failure must retain its real diagnosis;
+    treating every nonzero bootstrap result as missing pairing hides the root
+    cause and starts an unrelated three-minute pair-host wait.
+    """
+    detail = (completed.stdout + completed.stderr).decode("utf-8", "replace")
+    return "FAILED CLOSED: RemoteXPC/cryptexd preflight failed" in detail
+
+
 def enforcement_report(error: BaseException) -> str:
     text = str(error).lower()
     if any(marker in text for marker in ("pair", "lockdown", "trust", "remotexpc", "tunnel")):
@@ -1515,7 +1526,7 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         begin_stage(report, "dropbear-procursus")
         first = run(bootstrap, check=False, capture=True, stream_output=True, timeout=1800,
                     log_file=run_dir / "dropbear-procursus.log")
-        if first.returncode and args.pair_remotexpc:
+        if first.returncode and args.pair_remotexpc and needs_remotexpc_pairing(first):
             pair_remotexpc(python, run_dir)
             first = run(bootstrap, check=False, capture=True, stream_output=True, timeout=1800,
                         log_file=run_dir / "dropbear-procursus-retry.log")

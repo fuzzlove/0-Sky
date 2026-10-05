@@ -309,7 +309,11 @@ identifier.
     fixed. The kit schema now requires the Dropbear payload and its confined
     shell link, personalized-image construction validates the exact link before
     mutation, and release tests reject both missing and incorrectly targeted
-    links.
+    links. The live corrected payload then exposed a narrow post-activation
+    race: the UID-0 command passed while an immediate redundant identity
+    connection was reset. The proof now collects both results in one session,
+    and only a specifically diagnosed RemoteXPC trust failure may start
+    Paired Macs enrollment.
 
 ### Low severity
 
@@ -355,7 +359,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 322 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
+| Tool/release unit tests | PASS — 324 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback classification, selected-route propagation, single-session UID/device proof, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 136 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 22 run, including fail-closed privileged-update coverage |

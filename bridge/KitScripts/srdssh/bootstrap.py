@@ -464,14 +464,24 @@ def start_forward(python: Path, udid: str, port: int, state: Path) -> None:
     raise ChainError(f"USB tunnel did not listen on port {port}; inspect {log_path}")
 
 
-def wait_for_root(base: list[str], *, timeout: int = 120) -> None:
+def wait_for_root(base: list[str], *, timeout: int = 120) -> str:
     deadline = time.monotonic() + timeout
     attempt = 0
     while time.monotonic() < deadline:
         attempt += 1
-        if root_ssh_ready(base):
+        # Prove UID 0 and collect the device identity in one authenticated
+        # session. Immediately opening a second session used to race the
+        # just-activated launchd generation: the first command passed and the
+        # redundant second connection could be reset while Dropbear settled.
+        result = ssh_call(
+            base, 'test "$(id -u)" = 0 && id -u && uname -a',
+            check=False, capture=True, timeout=10,
+        )
+        stdout = (result.stdout.decode("utf-8", "replace")
+                  if isinstance(result.stdout, bytes) else result.stdout or "")
+        if result.returncode == 0 and stdout.splitlines()[:1] == ["0"]:
             pulse(f"authenticated UID 0 proof received on attempt {attempt}")
-            return
+            return stdout
         if attempt % 5 == 0:
             pulse(f"Dropbear handshake still converging… attempt {attempt}")
         time.sleep(2)
@@ -873,9 +883,8 @@ def main() -> int:
     stage(7, "Root SSH proof", "trust is measured by result, not animation")
     if base is None:
         raise ChainError("secure device SSH configuration was not established")
-    wait_for_root(base)
-    uid = ssh_call(base, "id -u; uname -a", capture=True).stdout
-    pulse("device proof:\n" + str(uid).strip())
+    proof = wait_for_root(base)
+    pulse("device proof:\n" + proof.strip())
     report["checks"]["ssh_uid_zero"] = True
     if args.ssh_only:
         stage(8, "Procursus rootless bootstrap", "omitted by --ssh-only")

@@ -22,6 +22,17 @@ SPEC.loader.exec_module(setup)
 
 
 class SetupStateTests(unittest.TestCase):
+    def test_pairing_fallback_is_limited_to_remotexpc_trust_failure(self) -> None:
+        remote_failure = types.SimpleNamespace(
+            stdout=b"", stderr=b"[0-Sky Chain] FAILED CLOSED: RemoteXPC/cryptexd preflight failed"
+        )
+        ssh_failure = types.SimpleNamespace(
+            stdout=b"authenticated UID 0 proof received\n",
+            stderr=b"[0-Sky Chain] FAILED CLOSED: root SSH connection reset",
+        )
+        self.assertTrue(setup.needs_remotexpc_pairing(remote_failure))
+        self.assertFalse(setup.needs_remotexpc_pairing(ssh_failure))
+
     def test_offline_dpkg_builder_requires_build_capable_signed_helper(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             kit = Path(folder)

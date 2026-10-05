@@ -13,6 +13,10 @@ pre.25 GitHub-package upgrade test on the Intel Mac.
   incorrectly targeted shell links fail before device mutation.
 - Release-manifest fixtures and regression tests cover both the positive link
   shape and the missing-link failure that pre.25 did not detect.
+- The post-activation UID and device-identity checks now share one authenticated
+  SSH session, removing a launchd-settling race between two redundant
+  connections. A later SSH or package failure also retains its real diagnosis
+  instead of incorrectly opening the unrelated Paired Macs enrollment flow.
 
 ## Root cause
 

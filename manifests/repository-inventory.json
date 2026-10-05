@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "a5f56c4c2fda647f16ddc5f49c9647e2655a72699ed30eb961dcfb61b60f222c",
-      "size": 11385
+      "sha256": "9bdd19a3c627dde390b86499b5ddf820106203cbcc6df673bdd920af674117a0",
+      "size": 11752
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10671,8 +10671,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py",
-      "sha256": "f71b4e6bd0d6f9cbf7e821a4cc0a8f0f60900825aad52c118e395df7de810029",
-      "size": 86174
+      "sha256": "17c0032608b2448592758aa0f1d141e4ca19619438bc7ef1f8bff9da7bdfd854",
+      "size": 86750
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11661,8 +11661,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/srdssh/bootstrap.py",
-      "sha256": "bc4205fe124707152bdb02eeef819746cdb25c80918ce283771d24ad58df4111",
-      "size": 41117
+      "sha256": "7a44a0e9eb82fdc9abc03f040efa0fc01f4406ea7318744ccdd077a7b42a92e5",
+      "size": 41694
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -13593,8 +13593,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "497e0d3124e15491de115f57642551410bad84303965731afa7163c0db8bf71e",
-      "size": 27804
+      "sha256": "8f32f95ffebc1aa43b9574be93dd1a9a56482d0a219472f0b3cf59c5892e44db",
+      "size": 28168
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13611,8 +13611,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "494569ee770826192a59a2f4d1e888823f7656940cfee3f474bcf8bfa61fa120",
-      "size": 22601
+      "sha256": "5c4c8e4b2b85b2774cddea0a1eb092a8265b6683c4b143830cb76ef90e479950",
+      "size": 22771
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13749,8 +13749,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/release-notes-v1.0.0-pre.26.md",
-      "sha256": "0cac71b738a3d8bf6be56d02fe7d6766b1e435dc3f2367777f22d4ab30249097",
-      "size": 1478
+      "sha256": "eae4dbc7680c445a27fd7f5a697781c4c1fb090607007b0476132db3d0164481",
+      "size": 1783
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14733,8 +14733,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_setup_state.py",
-      "sha256": "c8c4b542d11997ba7298ae2ce5df1cd1b3ecaf6eec0ab79349daa28f3395ac81",
-      "size": 8531
+      "sha256": "7cd65171a5de5a13d1d6d65b402faa7b1cab9a5fcc9cfbcb9c52cab150abcfac",
+      "size": 9105
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14745,8 +14745,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_srdssh_release_adapter.py",
-      "sha256": "ae8fbd3244c5d3827e8b069f692af353061146376cf28cf2b6beadee772683fb",
-      "size": 6924
+      "sha256": "84234b6da528914d3abf912bb7a5786c39c3cb947dda6df59be359edc2cda22e",
+      "size": 7434
     },
     {
       "category": "required-source-or-maintenance-test",

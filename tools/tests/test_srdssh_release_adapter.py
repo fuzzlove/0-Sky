@@ -36,6 +36,16 @@ def load_image_type_function():
 
 
 class SRDSSHReleaseAdapterTests(unittest.TestCase):
+    def test_root_readiness_uses_one_authenticated_identity_session(self):
+        completed = subprocess.CompletedProcess(
+            ["ssh"], 0, stdout="0\nDarwin device 27.0 Toybox\n", stderr=""
+        )
+        with mock.patch.object(bootstrap, "ssh_call", return_value=completed) as call:
+            proof = bootstrap.wait_for_root(["ssh"], timeout=1)
+        self.assertIn("Darwin device", proof)
+        self.assertEqual(call.call_count, 1)
+        self.assertIn("uname -a", call.call_args.args[1])
+
     def test_personalized_payload_requires_dropbear_command_shell(self):
         text = (ROOT / "bridge/KitScripts/srdssh/rekey_image.py").read_text(
             encoding="utf-8"

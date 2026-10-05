@@ -27,7 +27,7 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 322 run, 4 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, and symlink-chain escape rejection",
+        "tools_unit_tests": "PASS: 324 run, 4 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, symlink-chain escape rejection, single-session Dropbear activation proof, and strict RemoteXPC pairing-fallback classification",
         "host_tools_unit_tests": "PASS: 136 run under pinned Python 3.12, 1 skipped because the external source kit is intentionally absent; includes managed Zstandard extraction, userspace-first exact-UDID Cryptex transfer, native reset commit verification, and byte-identical runtime installer copies",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 22 run, including fail-closed privileged-update coverage",
@@ -71,7 +71,7 @@
         "intel_userspace_cryptex_transport_gate": "PASS: both runtime installer copies are byte-identical; default exact-UDID UserspaceRsdTunnel uses autopair=False and tests prove NativeRemotedTunnel is not constructed unless explicitly selected",
         "intel_pre25_control_live": "PASS on Intel host and iPhone12,8 iOS 27.0: source-built Control 3.5.37/3.5.37.0 installed through the authenticated worker, registered in one MCM container, passed foreground launch verification, and produced no new retained crash report",
         "intel_pre25_link_live": "PASS on Intel host and iPhone12,8 iOS 27.0: live testing reproduced devicectl timeout for a fresh Link with no MCM target; the bounded appregistrard route then installed Link 1.9.0 build 48 in 448.5 seconds and verified registration, executable, icon, and foreground launch while preserving Control and user data",
-        "intel_pre25_package_dropbear_diagnosis": "PASS: the exact published pre.25 package was installed on MacBookPro16,1; Developer ID, Gatekeeper, and staple validation passed. Live setup authenticated to the newly installed Dropbear key but every remote command exited 1 because the packaged SRDssh payload omitted the required confined usr/bin/sh -> toybox link. Pre.26 makes the link a release-manifest requirement and rejects a malformed payload before personalization or device mutation."
+        "intel_pre25_package_dropbear_diagnosis": "PASS: the exact published pre.25 package was installed on MacBookPro16,1; Developer ID, Gatekeeper, and staple validation passed. Live setup authenticated to the newly installed Dropbear key but every remote command exited 1 because the packaged SRDssh payload omitted the required confined usr/bin/sh -> toybox link. Pre.26 makes the link a release-manifest requirement and rejects a malformed payload before personalization or device mutation. Live validation of that corrected payload received UID 0 immediately, then exposed a one-connection launchd-settling race; pre.26 now collects UID and device identity in the same authenticated session and limits Paired Macs fallback to an explicit RemoteXPC trust diagnosis."
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",
