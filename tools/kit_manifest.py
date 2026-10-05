@@ -38,6 +38,14 @@ REQUIRED = {
         "automation/CrypStoreAutomation/crypstore_worker.py",
         "automation/CrypStoreAutomation/device_bridge_supervisor",
     ],
+    "srdssh": [
+        "srdssh/payload-root/Library/LaunchDaemons/dropbear.plist",
+        "srdssh/payload-root/usr/bin/dropbear",
+        "srdssh/payload-root/usr/bin/dropbearkey",
+        "srdssh/payload-root/usr/bin/srdsh-dropbear-start",
+        "srdssh/payload-root/usr/bin/toybox",
+        "srdssh/payload-root/usr/bin/sh",
+    ],
     "zero_sky_link": ["payloads/0-Sky-Link-1.9.0-universal.ipa"],
     "metadata": ["PORTABILITY.json", "WHEEL_INVENTORY.json", APPROVAL_NAME, HASH_NAME],
 }
@@ -98,6 +106,9 @@ def required_issues(root: Path) -> list[str]:
         item = root / relative
         if not item.is_file() or not item.stat().st_mode & 0o111:
             issues.append(f"EXECUTABLE_MODE_MISSING:{relative}")
+    shell = root / "srdssh/payload-root/usr/bin/sh"
+    if not shell.is_symlink() or os.readlink(shell) != "toybox":
+        issues.append("SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh")
     return issues
 
 

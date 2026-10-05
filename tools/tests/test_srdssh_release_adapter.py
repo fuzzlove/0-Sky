@@ -36,6 +36,13 @@ def load_image_type_function():
 
 
 class SRDSSHReleaseAdapterTests(unittest.TestCase):
+    def test_personalized_payload_requires_dropbear_command_shell(self):
+        text = (ROOT / "bridge/KitScripts/srdssh/rekey_image.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('shell = payload / "usr/bin/sh"', text)
+        self.assertIn('shell.readlink() != Path("toybox")', text)
+
     def test_preflight_reuses_existing_pairing_after_native_timeout(self):
         success = subprocess.CompletedProcess(
             ["python"], 0,

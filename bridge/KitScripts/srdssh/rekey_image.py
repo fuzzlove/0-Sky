@@ -105,6 +105,11 @@ def build(kit: Path, public_key: Path, output: Path) -> dict[str, str]:
     payload = kit / "payload-root"
     if not (payload / "usr/bin/dropbear").is_file():
         raise RuntimeError("bundled Dropbear payload root is incomplete")
+    shell = payload / "usr/bin/sh"
+    if not shell.is_symlink() or shell.readlink() != Path("toybox"):
+        raise RuntimeError(
+            "bundled Dropbear payload is missing the confined usr/bin/sh -> toybox link"
+        )
 
     output = output.expanduser().resolve()
     work = output.with_name(output.name + ".building")

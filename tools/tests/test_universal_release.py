@@ -108,9 +108,12 @@ class UniversalReleaseTests(unittest.TestCase):
             for relative in REQUIRED_APP_SCRIPTS:
                 (scripts / relative).write_text("fixture", encoding="utf-8")
             for relative in sorted(set(sum(REQUIRED.values(), [])) - {"SHA256SUMS"}):
+                if relative == "srdssh/payload-root/usr/bin/sh":
+                    continue
                 item = kit / relative
                 item.parent.mkdir(parents=True, exist_ok=True)
                 item.write_text("fixture", encoding="utf-8")
+            (kit / "srdssh/payload-root/usr/bin/sh").symlink_to("toybox")
             for relative in ("automation/CrypStoreAutomation/device_bridge_supervisor.sh",
                              "runtime-generation/build_and_install.sh"):
                 script = kit / relative

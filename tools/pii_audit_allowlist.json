@@ -208,7 +208,7 @@
     {
       "file": "tools/tests/test_universal_release.py",
       "category": "fixed-home-path",
-      "sha256": "e92a7e0b9922d6920427068109fc6a030f8ffe81c50c1590dc17fe089f04f183",
+      "sha256": "85dfc21d32b6ada9c28d429d1e089793faf995d10f5acf5d393b0b867fae3d9a",
       "reason": "Mach-O runtime-path regression fixture"
     }
   ]

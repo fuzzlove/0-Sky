@@ -301,6 +301,15 @@ identifier.
     submission remained `In Progress`. **Status:** fixed. Distribution builds
     now give the service an explicit 50-minute wait inside the existing bounded
     one-hour subprocess deadline, and a regression test locks that contract.
+28. **The published pre.25 SRDssh payload omitted its command-shell symlink.**
+    Live Intel setup installed and authenticated the personalized Dropbear
+    Cryptex, but every accepted remote command exited status 1 because
+    `usr/bin/sh -> toybox` was absent from the packaged payload. The prior
+    release manifest did not require that runtime-critical link. **Status:**
+    fixed. The kit schema now requires the Dropbear payload and its confined
+    shell link, personalized-image construction validates the exact link before
+    mutation, and release tests reject both missing and incorrectly targeted
+    links.
 
 ### Low severity
 
@@ -346,7 +355,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 320 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, and deterministic offline Debian construction |
+| Tool/release unit tests | PASS — 322 run, 4 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, deterministic offline Debian construction, and mandatory SRDssh shell-link validation |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 136 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 22 run, including fail-closed privileged-update coverage |

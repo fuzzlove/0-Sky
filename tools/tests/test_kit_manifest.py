@@ -24,9 +24,12 @@ from tools.wheel_inventory import inspect as inspect_wheels, write as write_whee
 
 def fixture(root: Path) -> None:
     for relative in sorted(set(sum(REQUIRED.values(), [])) - {"SHA256SUMS"}):
+        if relative == "srdssh/payload-root/usr/bin/sh":
+            continue
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("fixture", encoding="utf-8")
+    (root / "srdssh/payload-root/usr/bin/sh").symlink_to("toybox")
     for relative in ("automation/CrypStoreAutomation/device_bridge_supervisor.sh",
                      "runtime-generation/build_and_install.sh"):
         script = root / relative
@@ -188,6 +191,20 @@ class KitManifestTests(unittest.TestCase):
             self.assertIn("KIT_FILE_INVENTORY_MISMATCH", verify(root))
             (root / "host-mac/install.py").unlink()
             self.assertTrue(any("host-mac/install.py" in issue for issue in verify(root)))
+
+    def test_srdssh_shell_link_is_mandatory_and_confined(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            shell = root / "srdssh/payload-root/usr/bin/sh"
+            generate(root)
+            self.assertEqual(verify(root), [])
+
+            shell.unlink()
+            self.assertIn(
+                "SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh",
+                verify(root),
+            )
 
     def test_external_symlink_and_unexpected_file(self) -> None:
         with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as elsewhere:

@@ -27,7 +27,7 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 320 run, 4 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, and symlink-chain escape rejection",
+        "tools_unit_tests": "PASS: 322 run, 4 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction, real Zstandard package extraction, signed-bundle bytecode-write prevention, expanded-size bounds, and symlink-chain escape rejection",
         "host_tools_unit_tests": "PASS: 136 run under pinned Python 3.12, 1 skipped because the external source kit is intentionally absent; includes managed Zstandard extraction, userspace-first exact-UDID Cryptex transfer, native reset commit verification, and byte-identical runtime installer copies",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 22 run, including fail-closed privileged-update coverage",
@@ -70,15 +70,16 @@
         "offline_zstandard_release_gate": "PASS: locked zstandard==0.25.0 is imported from the offline wheelhouse; release validation now invokes the signed helper with that managed interpreter against a real data.tar.zst Procursus package and requires a nonempty rootless payload",
         "intel_userspace_cryptex_transport_gate": "PASS: both runtime installer copies are byte-identical; default exact-UDID UserspaceRsdTunnel uses autopair=False and tests prove NativeRemotedTunnel is not constructed unless explicitly selected",
         "intel_pre25_control_live": "PASS on Intel host and iPhone12,8 iOS 27.0: source-built Control 3.5.37/3.5.37.0 installed through the authenticated worker, registered in one MCM container, passed foreground launch verification, and produced no new retained crash report",
-        "intel_pre25_link_live": "PASS on Intel host and iPhone12,8 iOS 27.0: live testing reproduced devicectl timeout for a fresh Link with no MCM target; the bounded appregistrard route then installed Link 1.9.0 build 48 in 448.5 seconds and verified registration, executable, icon, and foreground launch while preserving Control and user data"
+        "intel_pre25_link_live": "PASS on Intel host and iPhone12,8 iOS 27.0: live testing reproduced devicectl timeout for a fresh Link with no MCM target; the bounded appregistrard route then installed Link 1.9.0 build 48 in 448.5 seconds and verified registration, executable, icon, and foreground launch while preserving Control and user data",
+        "intel_pre25_package_dropbear_diagnosis": "PASS: the exact published pre.25 package was installed on MacBookPro16,1; Developer ID, Gatekeeper, and staple validation passed. Live setup authenticated to the newly installed Dropbear key but every remote command exited 1 because the packaged SRDssh payload omitted the required confined usr/bin/sh -> toybox link. Pre.26 makes the link a release-manifest requirement and rejects a malformed payload before personalization or device mutation."
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",
-        "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
-        "intel_runtime_uat": "PARTIAL: MacBookPro16,1 x86_64 macOS 26.5.2 has passed pairing, exact-device userspace RemoteXPC, SRDssh, reconnect, UID-0 SSH, Procursus, deterministic package construction, Control 3.5.37 and Link 1.9.0 live installation, MCM registration, icons, and foreground launch. Signed pre.25 package upgrade and final Filza health remain pending.",
+        "upgrade_repair_uninstall_uat": "PARTIAL: exact pre.25 GitHub package upgrade, signature, Gatekeeper, staple, launch, and staged-asset refresh passed on Intel; live setup exposed the now-fixed SRDssh command-shell packaging defect before final convergence",
+        "intel_runtime_uat": "PARTIAL: MacBookPro16,1 x86_64 macOS 26.5.2 has passed pairing, exact-device userspace RemoteXPC, SRDssh, reconnect, UID-0 SSH, Procursus, deterministic package construction, Control 3.5.37 and Link 1.9.0 live installation, MCM registration, icons, and foreground launch. Signed pre.25 package upgrade passed; its omitted SRDssh command-shell link blocked Dropbear commands, and pre.26 final Filza health remains pending.",
         "live_srd_installation": "PARTIAL: iPhone12,8 iOS 27.0 passed live Control 3.5.37 and Link 1.9.0 installation through the Intel companion; final Filza convergence remains pending. A separate retained iOS 26.0 session also passed Link/Control installation.",
         "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
-        "publication": "PARTIAL: experimental releases through pre.24 are published; pre.25 publication is pending signed build verification"
+        "publication": "PARTIAL: experimental releases through pre.25 are published; pre.26 publication is pending corrected signed build and live verification"
     },
     "release_result": "AUTOMATED_RELEASE_GATES_PASS; HARDWARE_UAT_PENDING",
     "release_blockers": [
