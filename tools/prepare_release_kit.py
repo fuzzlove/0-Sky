@@ -160,6 +160,65 @@ def verify_runtime_builder_inputs(kit: Path) -> None:
     )
 
 
+def verify_dpkg_build_capability(kit: Path) -> None:
+    """Prove the offline helper can build, inspect, and extract a device DEB."""
+    helper = kit / "host-mac/runtime/bin/dpkg-deb"
+    if helper.is_symlink() or not helper.is_file():
+        raise RuntimeError("bundled dpkg-deb build helper is missing")
+    def checked(argv: list[str], *, timeout: int,
+                environment: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+        try:
+            return subprocess.run(
+                argv, check=True, capture_output=True, text=True,
+                timeout=timeout, env=environment,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(
+                "bundled dpkg-deb build capability is unavailable"
+            ) from error
+    with tempfile.TemporaryDirectory(prefix=".0sky-dpkg-build-", dir=kit.parent) as folder:
+        work = Path(folder)
+        root = work / "root"
+        control = root / "DEBIAN/control"
+        payload = root / "var/jb/usr/share/0sky-release-probe.txt"
+        control.parent.mkdir(parents=True)
+        payload.parent.mkdir(parents=True)
+        control.write_text(
+            "Package: codes.openai.research.release-probe\n"
+            "Version: 1.0\nArchitecture: iphoneos-arm64\n"
+            "Description: Offline build-capability probe\n",
+            encoding="utf-8",
+        )
+        payload.write_text("0-Sky offline device package build probe\n", encoding="utf-8")
+        first, second = work / "first.deb", work / "second.deb"
+        environment = dict(os.environ)
+        environment["SOURCE_DATE_EPOCH"] = "1789257600"
+        for destination in (first, second):
+            checked(
+                [str(helper), "--root-owner-group", "-b", str(root), str(destination)],
+                timeout=60, environment=environment,
+            )
+        if digest(first) != digest(second):
+            raise RuntimeError("bundled dpkg-deb build output is not reproducible")
+        for field, expected in (
+            ("Package", "codes.openai.research.release-probe"),
+            ("Version", "1.0"),
+            ("Architecture", "iphoneos-arm64"),
+        ):
+            result = checked(
+                [str(helper), "--field", str(first), field], timeout=30,
+            )
+            if result.stdout.strip() != expected:
+                raise RuntimeError("bundled dpkg-deb build metadata proof failed")
+        extracted = work / "extracted"
+        checked(
+            [str(helper), "--extract", str(first), str(extracted)], timeout=30,
+        )
+        if (extracted / payload.relative_to(root)).read_bytes() != payload.read_bytes():
+            raise RuntimeError("bundled dpkg-deb build extraction proof failed")
+    print("DPKG_DEB_OFFLINE_BUILD=PASS reproducible=YES", flush=True)
+
+
 def stage_link_control_only(verified_kit: Path, destination: Path) -> None:
     """Embed the canonical Control payload without copying host/bootstrap assets into Link."""
     relative = "packages/Commissary-Universal.ipa"
@@ -297,10 +356,10 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
         count = stage(source, candidate, release=True)
         apply_portability_overrides(candidate)
         verify_runtime_builder_inputs(candidate)
-        if not (candidate / "host-mac/HOST_RUNTIME_MANIFEST.json").is_file():
-            print("HOST_RUNTIME_BUILD=START pinned dual-architecture runtime", flush=True)
-            build_host_runtime(candidate, ROOT / ".build/host-runtime-cache")
+        print("HOST_RUNTIME_BUILD=START pinned dual-architecture runtime", flush=True)
+        build_host_runtime(candidate, ROOT / ".build/host-runtime-cache")
         verify_host_runtime(candidate)
+        verify_dpkg_build_capability(candidate)
         verify_runtime_manager_package(candidate)
         staged_control = stage_control_payload(candidate, build=False)
         if staged_control["sha256"] != digest(embedded / "packages/Commissary-Universal.ipa"):
@@ -391,6 +450,7 @@ def main() -> int:
             ("runtime-manager package ", "DEVICE_RUNTIME_BOOTSTRAP_METADATA_MISMATCH"),
             ("required first-runtime Xcode inputs are missing:",
              "FIRST_RUNTIME_XCODE_INPUTS_MISSING"),
+            ("bundled dpkg-deb build", "OFFLINE_DPKG_BUILD_UNAVAILABLE"),
         )
         code = next((value for text, value in known if text in message),
                     type(error).__name__.upper())
@@ -420,6 +480,16 @@ def main() -> int:
                 "It must include test_host.c, test_tweak.c, and test_tweak.plist "
                 "under automation/tools/srd-runtime-manager. These historical "
                 "test-named files are production enrollment compiler inputs.",
+                file=sys.stderr,
+            )
+        elif code == "OFFLINE_DPKG_BUILD_UNAVAILABLE":
+            print(f"DETAIL={message}", file=sys.stderr)
+            print("REQUIRED_ACTION:", file=sys.stderr)
+            print(
+                "  Rebuild the pinned host runtime from this source revision. "
+                "The bundled dpkg-deb helper must reproducibly support "
+                "`--root-owner-group -b ROOT OUTPUT` in addition to field and "
+                "extract operations; users must not install Homebrew dpkg.",
                 file=sys.stderr,
             )
         return 2

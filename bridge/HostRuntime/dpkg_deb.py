@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Bounded dpkg-deb compatibility for extracting or reading verified packages."""
+"""Bounded dpkg-deb compatibility for verified package read, extract, and build."""
 from __future__ import annotations
-import os, pathlib, subprocess, sys, tempfile
+import gzip, io, os, pathlib, stat, subprocess, sys, tarfile, tempfile
 
 MAX_PACKAGE_SIZE = 1024 * 1024 * 1024
+MAX_BUILD_FILE_SIZE = 256 * 1024 * 1024
 
 
 def members(path: pathlib.Path) -> dict[str, bytes]:
@@ -60,12 +61,93 @@ def control_fields(blob: bytes) -> dict[str,str]:
     return answer
 
 
+def archive_member(name: str, payload: bytes, epoch: int) -> bytes:
+    """Create one deterministic System V ar member."""
+    encoded=(name+"/").encode("ascii")
+    if len(encoded)>16: raise ValueError("ar member name is too long")
+    header=(encoded.ljust(16,b" ") + str(epoch).encode("ascii").ljust(12,b" ")
+            + b"0".ljust(6,b" ") + b"0".ljust(6,b" ")
+            + b"100644".ljust(8,b" ") + str(len(payload)).encode("ascii").ljust(10,b" ")
+            + b"`\n")
+    if len(header)!=60: raise ValueError("invalid ar header")
+    return header+payload+(b"\n" if len(payload)%2 else b"")
+
+
+def normalized_tar(root: pathlib.Path, *, exclude_debian: bool, epoch: int) -> bytes:
+    """Archive a package subtree without host ownership, timestamps, or traversal."""
+    if root.is_symlink() or not root.is_dir(): raise ValueError("package root is not a directory")
+    output=io.BytesIO()
+    with gzip.GzipFile(filename="",mode="wb",fileobj=output,mtime=epoch) as compressed:
+        with tarfile.open(fileobj=compressed,mode="w",format=tarfile.GNU_FORMAT) as bundle:
+            for path in sorted(root.rglob("*"),key=lambda item:item.relative_to(root).as_posix()):
+                relative=path.relative_to(root)
+                if exclude_debian and relative.parts[0]=="DEBIAN": continue
+                if not exclude_debian and relative.parts[0]=="DEBIAN":
+                    relative=path.relative_to(root/"DEBIAN")
+                    if not relative.parts: continue
+                elif not exclude_debian:
+                    continue
+                observed=path.lstat(); info=tarfile.TarInfo("./"+relative.as_posix())
+                info.uid=info.gid=0; info.uname=info.gname="root"; info.mtime=epoch
+                info.mode=stat.S_IMODE(observed.st_mode)&0o777
+                if stat.S_ISDIR(observed.st_mode):
+                    info.type=tarfile.DIRTYPE; info.size=0; bundle.addfile(info)
+                elif stat.S_ISREG(observed.st_mode):
+                    if observed.st_size>MAX_BUILD_FILE_SIZE:
+                        raise ValueError("package input exceeds the 256 MiB per-file safety limit")
+                    info.type=tarfile.REGTYPE; info.size=observed.st_size
+                    with path.open("rb") as stream: bundle.addfile(info,stream)
+                elif stat.S_ISLNK(observed.st_mode):
+                    target=os.readlink(path); pure=pathlib.PurePosixPath(target)
+                    if pure.is_absolute() or ".." in pure.parts:
+                        raise ValueError("package input contains an unsafe symbolic link")
+                    resolved=(path.parent/pathlib.Path(target)).resolve(strict=False)
+                    if resolved != root and root not in resolved.parents:
+                        raise ValueError("package input symbolic link escapes its root")
+                    info.type=tarfile.SYMTYPE; info.linkname=target; info.size=0; bundle.addfile(info)
+                else:
+                    raise ValueError("package input contains an unsupported file type")
+    return output.getvalue()
+
+
+def build_package(root: pathlib.Path, destination: pathlib.Path) -> None:
+    """Build the exact Debian subset needed by 0-Sky's offline runtime."""
+    if root.is_symlink(): raise ValueError("package root is a symbolic link")
+    root=root.resolve(strict=True)
+    control=root/"DEBIAN/control"
+    if control.is_symlink() or not control.is_file():
+        raise ValueError("package control file is missing")
+    fields=control_fields(normalized_tar(root,exclude_debian=False,epoch=0))
+    for required in ("Package","Version","Architecture","Description"):
+        if not fields.get(required): raise ValueError(f"package control field is missing: {required}")
+    try: epoch=int(os.environ.get("SOURCE_DATE_EPOCH","0"))
+    except ValueError as error: raise ValueError("SOURCE_DATE_EPOCH is invalid") from error
+    if epoch<0 or epoch>9_999_999_999: raise ValueError("SOURCE_DATE_EPOCH is out of range")
+    control_archive=normalized_tar(root,exclude_debian=False,epoch=epoch)
+    data_archive=normalized_tar(root,exclude_debian=True,epoch=epoch)
+    package=(b"!<arch>\n"+archive_member("debian-binary",b"2.0\n",epoch)
+             +archive_member("control.tar.gz",control_archive,epoch)
+             +archive_member("data.tar.gz",data_archive,epoch))
+    if len(package)>MAX_PACKAGE_SIZE: raise ValueError("built Debian package exceeds 1 GiB")
+    destination.parent.mkdir(parents=True,exist_ok=True)
+    descriptor,temporary=tempfile.mkstemp(prefix="."+destination.name+".",dir=destination.parent)
+    try:
+        with os.fdopen(descriptor,"wb") as stream:
+            stream.write(package); stream.flush(); os.fsync(stream.fileno())
+        os.chmod(temporary,0o644); os.replace(temporary,destination)
+    finally:
+        if os.path.exists(temporary): os.unlink(temporary)
+
+
 def main(argv: list[str]) -> int:
     if argv == ["--version"]:
-        print("0-Sky dpkg-deb compatibility 1.0")
+        print("0-Sky dpkg-deb compatibility 1.1")
         return 0
+    if len(argv)==4 and argv[:2]==["--root-owner-group","-b"]:
+        build_package(pathlib.Path(argv[2]),pathlib.Path(argv[3])); return 0
     if len(argv) not in {2,3} or argv[0] not in {"-x","--extract","-f","--field"}:
-        print("usage: dpkg-deb {-x|--extract|-f|--field} PACKAGE [DESTINATION|FIELD]",
+        print("usage: dpkg-deb [--root-owner-group -b ROOT OUTPUT] | "
+              "{-x|--extract|-f|--field} PACKAGE [DESTINATION|FIELD]",
               file=sys.stderr); return 64
     operation, package = argv[0], pathlib.Path(argv[1])
     argument = argv[2] if len(argv) == 3 else None

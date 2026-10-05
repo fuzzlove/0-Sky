@@ -27,7 +27,7 @@
         }
     ],
     "executed_validation": {
-        "tools_unit_tests": "PASS: 308 run, 3 skipped for unavailable private paid fixtures; includes runtime-manager package semantics and production first-runtime compiler-input retention",
+        "tools_unit_tests": "PASS: 314 run, 3 skipped for unavailable private paid fixtures; includes production runtime input retention, deterministic offline Debian construction/build-capability gating, signed-bundle bytecode-write prevention, and symlink-chain escape rejection",
         "host_tools_unit_tests": "PASS: 126 run under pinned Python 3.12, 1 skipped because the external source kit is intentionally absent from the cleanup checkout",
         "afc2_compatibility_tests": "PASS: 21 run, 6 skipped because device-derived exact-build inputs are absent",
         "control_source_compatibility_tests": "PASS: 21 run, including fail-closed privileged-update coverage",
@@ -64,16 +64,17 @@
         "intel_setup_failure_diagnosis": "PASS (live host repair plus read-only device inspection): fresh SRD was USB-visible; old setup ordering invoked host pairing before SRDssh; incomplete profiles explained pairing exit 2 and duplicate-UUID state; corrected controller verified 3771 kit entries, all 19 SRDssh assets, native exact-device RemoteXPC, a 48-byte domain-3 nonce, and a live Apple TSS ticket without device mutation; stale Homebrew-backed venv was preserved and rebuilt from signed bundled Python; the remaining host-only failure was traced to a pre.14 profile manifest differing from the current kit and is covered by atomic checkpoint/refresh/rollback tests",
         "intel_existing_pairing_remotexpc": "PASS (live read-only): on MacBookPro16,1 x86_64 macOS 26.5.2, forced userspace USB reused the existing exact-device pairing for iPhone12,8 iOS 27.0 and cryptexd returned a 48-byte domain-3 nonce; no device mutation was performed",
         "intel_native_remotexpc_stall_diagnosis": "PASS (live read-only process inspection): pre.18 proved userspace USB, then actual install retried native and stalled before Cryptex mutation in hardened Intel Python ctypes/libffi callback allocation; process tree and stack sample retained privately",
-        "intel_first_runtime_diagnosis": "PASS (live Intel): pre.19 exposed the absent bootstrap-version mismatch; pre.20 supplied and unpacked the verified 2.4.10 package set, then exposed release pruning of production inputs named test_host.c, test_tweak.c, and test_tweak.plist. Pre.21 retains exactly those required inputs and fails release preparation before signing if any is absent.",
-        "first_runtime_xcode_build_probe": "PASS on Apple Silicon build host with Xcode 26.5 SDK: compiled arm64 and arm64e host/dylib sources, produced Universal binaries, ad-hoc signed them, and built runtime-manager 2.4.20 plus runtime-test-tweak 1.0.0 Debian packages from the same manifest-verified source inputs"
+        "intel_first_runtime_diagnosis": "PASS (live Intel): pre.19 exposed the bootstrap-version mismatch; pre.20 exposed removal of production compiler inputs; pre.21 compiled and signed all arm64/arm64e inputs, then proved the bundled Debian helper lacked package-build support. Pre.22 adds a reproducible offline builder, forces current host-runtime reconstruction, and gates release plus runtime on build capability.",
+        "first_runtime_xcode_build_probe": "PASS on Apple Silicon build host with Xcode 26.5 SDK: compiled arm64 and arm64e host/dylib sources, produced Universal binaries, ad-hoc signed them, and built runtime-manager 2.4.20 plus runtime-test-tweak 1.0.0 Debian packages from the same manifest-verified source inputs",
+        "offline_device_package_builder": "PASS: exact pre.21 runtime builder completed using only source-controlled dpkg-deb compatibility 1.1; two device DEBs passed metadata/content inspection by both the bundled helper and the independent system dpkg-deb"
     },
     "not_executed_or_blocked": {
         "fresh_account_install": "NOT_EXECUTED",
         "upgrade_repair_uninstall_uat": "NOT_EXECUTED on a live installed package",
-        "intel_runtime_uat": "PARTIAL: on MacBookPro16,1 x86_64 macOS 26.5.2, pre.19 passed existing pairing, exact-device userspace RemoteXPC, SRDssh Cryptex, reboot/reconnect, UID-0 SSH, and Procursus. Pre.20 found/uploaded/unpacked the corrected first-runtime package set, then failed because release pruning omitted production compiler inputs with historical test_ names. Pre.21 requires live Resume UAT.",
+        "intel_runtime_uat": "PARTIAL: MacBookPro16,1 x86_64 macOS 26.5.2 has passed existing pairing, exact-device userspace RemoteXPC, SRDssh Cryptex, reboot/reconnect, UID-0 SSH, Procursus, the corrected package upload, and arm64/arm64e Xcode compilation/signing. Pre.21 stopped at its extract-only Debian helper; pre.22 requires live Resume UAT.",
         "live_srd_installation": "NOT_EXECUTED in this packaging turn; an iOS 26.0 live install was executed in a separate retained session",
         "supported_device_matrix": "PARTIAL: retained exact-build evidence covers iPhone15,4 iOS 26.0 build 23A341 and iPhone13,2 iOS 27.0 build 24A5390f; other combinations remain unverified",
-        "publication": "PARTIAL: prior experimental releases through pre.20 were published manually; pre.21 publication is pending build verification"
+        "publication": "PARTIAL: prior experimental releases through pre.21 were published manually; pre.22 publication is pending build verification"
     },
     "release_result": "AUTOMATED_RELEASE_GATES_PASS; HARDWARE_UAT_PENDING",
     "release_blockers": [

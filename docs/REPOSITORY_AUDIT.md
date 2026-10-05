@@ -227,6 +227,21 @@ identifier.
     that Xcode itself is not missing. A direct clean Xcode/iPhoneOS SDK build
     of both arm64 and arm64e inputs, Universal lipo products, and both Debian
     outputs passed before packaging.
+21. **The bundled Debian helper could read and extract packages but could not
+    build the first trusted runtime packages.** Live pre.21 Intel Resume
+    successfully compiled and ad-hoc signed both arm64/arm64e runtime binaries,
+    then its correct bundled `dpkg-deb` path rejected
+    `--root-owner-group -b` with exit 64. **Status:** fixed. The offline helper
+    now creates deterministic Debian 2.0 ar archives with root-owned,
+    timestamp-normalized control and data payloads, atomic output, bounded
+    inputs, and path-safe symlinks. Release preparation always rebuilds the
+    pinned dual-architecture host runtime from current source and proves two
+    builds are byte-identical, metadata is readable, and payload extraction
+    matches before signing. Runtime rejects an older extract-only helper before
+    device mutation and explicitly states that neither Xcode nor Homebrew is
+    missing. The exact pre.21 runtime builder completed locally with only the
+    corrected bundled helper, and the system Debian tool independently accepted
+    both generated packages and their maintainer scripts.
 
 ### Low severity
 
@@ -272,7 +287,7 @@ identifier.
 
 | Validation | Result |
 | --- | --- |
-| Tool/release unit tests | PASS — 308 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, and production compiler-input retention |
+| Tool/release unit tests | PASS — 314 run, 3 skipped for unavailable private paid fixtures, including staged-kit migration/rollback/idempotency, paired-USB RemoteXPC fallback, selected-route propagation, live child-output streaming, runtime-manager semantic package validation, production compiler-input retention, and deterministic offline Debian construction |
 | Host-tool unit tests with pinned Python 3.12 | PASS — 126 run, 1 skipped because the external source kit is intentionally absent from the cleanup checkout, including iOS 26/27 Cryptex image-slot selection and bounded transport fallback |
 | AFC2 compatibility tests | PASS — 21 run, 6 skipped for absent device-derived exact-build inputs |
 | Control compatibility tests | PASS — 21 run, including fail-closed privileged-update coverage |

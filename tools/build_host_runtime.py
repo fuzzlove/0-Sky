@@ -111,14 +111,16 @@ def build(kit: pathlib.Path, cache: pathlib.Path, *, offline: bool=False) -> pat
     first_party_license=licenses/"0-SKY-EULA.md"
     shutil.copy2(ROOT/"bridge/0SkyBridge/Resources/Legal/EULA.md",first_party_license)
     wrapper=runtime/"bin/python3"
-    write_executable(wrapper,b'''#!/bin/sh\nset -eu\nhere=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\ncase "$(uname -m)" in arm64|x86_64) arch=$(uname -m);; *) echo "Unsupported Mac architecture" >&2; exit 64;; esac\nexec "$here/python/$arch/python/bin/python3.12" "$@"\n''')
+    write_executable(wrapper,b'''#!/bin/sh\nset -eu\nhere=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)\ncase "$(uname -m)" in arm64|x86_64) arch=$(uname -m);; *) echo "Unsupported Mac architecture" >&2; exit 64;; esac\nexport PYTHONDONTWRITEBYTECODE=1\nexec "$here/python/$arch/python/bin/python3.12" "$@"\n''')
     components=[component("python3",wrapper,kit,license_path,source["version"],payloads=payloads,
                           notices=[builder_license])]
-    for name,source_path in (("iproxy",ROOT/"bridge/HostRuntime/usbmux_tool.py"),
-                             ("idevice_id",ROOT/"bridge/HostRuntime/usbmux_tool.py"),
-                             ("dpkg-deb",ROOT/"bridge/HostRuntime/dpkg_deb.py")):
+    for name,source_path,version in (
+        ("iproxy",ROOT/"bridge/HostRuntime/usbmux_tool.py","0-Sky compatibility 1.0"),
+        ("idevice_id",ROOT/"bridge/HostRuntime/usbmux_tool.py","0-Sky compatibility 1.0"),
+        ("dpkg-deb",ROOT/"bridge/HostRuntime/dpkg_deb.py","0-Sky compatibility 1.1"),
+    ):
         target=runtime/"bin"/name; shutil.copy2(source_path,target); target.chmod(0o755)
-        components.append(component(name,target,kit,first_party_license,"0-Sky compatibility 1.0"))
+        components.append(component(name,target,kit,first_party_license,version))
     manifest={"schema":2,"platform":"macOS","components":components,
               "source_lock":"manifests/host-runtime-sources.json"}
     manifest_path=host/"HOST_RUNTIME_MANIFEST.json"

@@ -4,16 +4,22 @@ from __future__ import annotations
 from pathlib import Path
 import importlib.util
 import io
+import os
 import socket
 import tarfile
 import tempfile
 import threading
 import unittest
+from unittest.mock import patch
 
 from tools import build_host_runtime
 
 
 class BuildHostRuntimeTests(unittest.TestCase):
+    def test_bundled_python_wrapper_never_writes_signed_bundle_bytecode(self) -> None:
+        source = Path(build_host_runtime.__file__).read_text(encoding="utf-8")
+        self.assertIn("export PYTHONDONTWRITEBYTECODE=1", source)
+
     def test_offline_missing_archive_names_url_path_and_hash(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             destination = Path(folder) / "python.tar.gz"
@@ -64,6 +70,65 @@ class BuildHostRuntimeTests(unittest.TestCase):
                 stream.truncate(module.MAX_PACKAGE_SIZE + 1)
             with self.assertRaisesRegex(ValueError, "1 GiB"):
                 module.members(package)
+
+    def test_dpkg_builder_is_reproducible_root_owned_and_extractable(self) -> None:
+        module_path = Path(__file__).resolve().parents[2] / "bridge/HostRuntime/dpkg_deb.py"
+        specification = importlib.util.spec_from_file_location("zero_sky_dpkg_build", module_path)
+        assert specification and specification.loader
+        module = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            package_root = root / "root"
+            control = package_root / "DEBIAN/control"
+            payload = package_root / "var/jb/usr/bin/fixture"
+            control.parent.mkdir(parents=True)
+            payload.parent.mkdir(parents=True)
+            control.write_text(
+                "Package: codes.example.fixture\nVersion: 1.0\n"
+                "Architecture: iphoneos-arm64\nDescription: fixture\n"
+            )
+            payload.write_text("#!/bin/sh\nexit 0\n")
+            payload.chmod(0o755)
+            first, second = root / "first.deb", root / "second.deb"
+            with patch.dict(os.environ, {"SOURCE_DATE_EPOCH": "1234567890"}):
+                module.build_package(package_root, first)
+                module.build_package(package_root, second)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+            self.assertEqual(
+                module.control_fields(module.members(first)["control.tar.gz"])["Package"],
+                "codes.example.fixture",
+            )
+            destination = root / "extract"
+            module.extract_archive(module.members(first)["data.tar.gz"], destination)
+            extracted = destination / "var/jb/usr/bin/fixture"
+            self.assertEqual(extracted.read_text(), payload.read_text())
+            self.assertEqual(extracted.stat().st_mode & 0o777, 0o755)
+            with tarfile.open(fileobj=io.BytesIO(module.members(first)["data.tar.gz"]), mode="r:*") as archive:
+                member = archive.getmember("./var/jb/usr/bin/fixture")
+                self.assertEqual((member.uid, member.gid), (0, 0))
+
+    def test_dpkg_builder_rejects_escaping_symlink_chain(self) -> None:
+        module_path = Path(__file__).resolve().parents[2] / "bridge/HostRuntime/dpkg_deb.py"
+        specification = importlib.util.spec_from_file_location("zero_sky_dpkg_links", module_path)
+        assert specification and specification.loader
+        module = importlib.util.module_from_spec(specification)
+        specification.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            package_root = root / "root"
+            control = package_root / "DEBIAN/control"
+            payload = package_root / "var/jb/usr/share"
+            control.parent.mkdir(parents=True)
+            payload.mkdir(parents=True)
+            control.write_text(
+                "Package: codes.example.fixture\nVersion: 1.0\n"
+                "Architecture: iphoneos-arm64\nDescription: fixture\n"
+            )
+            (payload / "outside").symlink_to(Path(folder).parent)
+            (payload / "chain").symlink_to("outside")
+            with self.assertRaisesRegex(ValueError, "symbolic link"):
+                module.build_package(package_root, root / "unsafe.deb")
 
     def test_usbmux_relay_handles_backpressure_without_sendall(self) -> None:
         module_path = Path(__file__).resolve().parents[2] / "bridge/HostRuntime/usbmux_tool.py"

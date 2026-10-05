@@ -22,6 +22,27 @@ SPEC.loader.exec_module(setup)
 
 
 class SetupStateTests(unittest.TestCase):
+    def test_offline_dpkg_builder_requires_build_capable_signed_helper(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            helper = kit / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text(
+                "#!/bin/sh\necho '0-Sky dpkg-deb compatibility 1.0'\n",
+                encoding="utf-8",
+            )
+            helper.chmod(0o755)
+            with mock.patch.object(setup, "KIT", kit):
+                with self.assertRaisesRegex(setup.PoCError, "extract-only"):
+                    setup.require_offline_device_package_builder()
+            helper.write_text(
+                "#!/bin/sh\necho '0-Sky dpkg-deb compatibility 1.1'\n",
+                encoding="utf-8",
+            )
+            helper.chmod(0o755)
+            with mock.patch.object(setup, "KIT", kit):
+                self.assertEqual(setup.require_offline_device_package_builder(), helper)
+
     def test_child_progress_is_streamed_and_still_captured(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             log_file = Path(folder) / "child.log"

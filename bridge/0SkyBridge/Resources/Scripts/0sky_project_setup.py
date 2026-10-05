@@ -904,6 +904,35 @@ def stage_companion_assets(python: Path, target: dict[str, Any],
     ], timeout=600, log_file=run_dir / "stage-companion.log")
 
 
+def require_offline_device_package_builder() -> Path:
+    """Fail before device mutation when the signed kit cannot build runtime DEBs."""
+    helper = KIT / "host-mac/runtime/bin/dpkg-deb"
+    if helper.is_symlink() or not helper.is_file():
+        raise PoCError(
+            "the installed 0-Sky kit is incomplete: its offline dpkg-deb helper "
+            "is missing. Install the complete current 0-Sky Bridge package and "
+            "choose Resume; do not install Homebrew as a workaround."
+        )
+    try:
+        result = subprocess.run(
+            [str(helper), "--version"], capture_output=True, text=True,
+            timeout=15, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise PoCError(
+            "the installed 0-Sky kit cannot run its offline device-package "
+            "builder. Reinstall the complete current package and choose Resume."
+        ) from error
+    if result.returncode or result.stdout.strip() != "0-Sky dpkg-deb compatibility 1.1":
+        raise PoCError(
+            "the installed 0-Sky kit has an extract-only dpkg-deb helper and "
+            "cannot build the first trusted runtime. Install the complete current "
+            "0-Sky Bridge package and choose Resume; Xcode and Homebrew are not "
+            "the missing dependencies."
+        )
+    return helper
+
+
 def ensure_first_runtime(python: Path, target: dict[str, Any],
                          identity: Path, run_dir: Path) -> None:
     """Establish the first Python-trusted runtime on fresh Procursus."""
@@ -913,6 +942,7 @@ def ensure_first_runtime(python: Path, target: dict[str, Any],
         check=False, capture=True, timeout=20,
     ).returncode == 0:
         return
+    require_offline_device_package_builder()
     instance = SUPPORT / "instances" / target["instance"]
     builder = instance / "automation/tools/srd-runtime-manager/build_poc.py"
     builder_root = builder.parent

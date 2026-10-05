@@ -53,6 +53,28 @@ class PrepareReleaseKitTests(unittest.TestCase):
                 path.write_text("fixture\n", encoding="utf-8")
             release.verify_runtime_builder_inputs(kit)
 
+    def test_bundled_dpkg_build_capability_is_executed(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            helper = kit / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text(
+                (release.ROOT / "bridge/HostRuntime/dpkg_deb.py").read_text(),
+                encoding="utf-8",
+            )
+            helper.chmod(0o755)
+            release.verify_dpkg_build_capability(kit)
+
+    def test_extract_only_dpkg_helper_blocks_release(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            helper = kit / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text("#!/bin/sh\necho extract-only >&2\nexit 64\n")
+            helper.chmod(0o755)
+            with self.assertRaisesRegex(RuntimeError, "build capability is unavailable"):
+                release.verify_dpkg_build_capability(kit)
+
     def test_overrides_are_manifest_bound_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
