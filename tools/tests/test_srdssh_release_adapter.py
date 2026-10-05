@@ -36,6 +36,16 @@ def load_image_type_function():
 
 
 class SRDSSHReleaseAdapterTests(unittest.TestCase):
+    def test_large_userspace_install_has_one_exact_transport_retry(self):
+        runtime = ROOT / "bridge/KitScripts/runtime-generation/install_cryptex_native.py"
+        control = ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py"
+        self.assertEqual(runtime.read_bytes(), control.read_bytes())
+        text = runtime.read_text(encoding="utf-8")
+        self.assertEqual(text.count("except ProtocolError as error:"), 1)
+        self.assertIn('"Timed out waiting for flow-control credit"', text)
+        self.assertIn("retrying once on a fresh exact-device paired USB connection", text)
+        self.assertEqual(text.count("UserspaceRsdTunnel(serial=udid, autopair=False)"), 2)
+
     def test_root_readiness_uses_one_authenticated_identity_session(self):
         completed = subprocess.CompletedProcess(
             ["ssh"], 0, stdout="0\nDarwin device 27.0 Toybox\n", stderr=""

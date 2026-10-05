@@ -1122,7 +1122,7 @@ test "$("$T" wc -c < /var/jb/etc/trollstorelite-srd-bridge.token)" -eq 65'''
         "--key", identity, "--udid", target["udid"],
         "--known-hosts", known_hosts, "--host-alias", alias,
         "--frida-root", KIT / "frida/17.18.0-ios",
-    ], timeout=1800, log_file=run_dir / "first-runtime-sync.log")
+    ], timeout=2100, log_file=run_dir / "first-runtime-sync.log")
     remote(target, identity, "/var/jb/usr/bin/dpkg --configure --pending",
            timeout=600, log_file=run_dir / "first-runtime.log")
     proof = remote(

@@ -24,6 +24,10 @@ pre.25 GitHub-package upgrade test on the Intel Mac.
 - First-runtime Xcode packaging now receives a restricted PATH containing the
   signed, build-capable `dpkg-deb` helper and Apple system tools. It neither
   depends on nor accidentally selects a Homebrew executable.
+- A large userspace USB Cryptex transfer that stops receiving HTTP/2
+  flow-control credit before commit gets one bounded retry on a fresh
+  exact-device connection. Other protocol errors are not retried, and the
+  transport never silently pairs or falls back to an unverified endpoint.
 
 ## Root cause
 

@@ -99,8 +99,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "e5802dc2ed623bddf4a92a6f61fc23cdbccf91e65bfa806fea7644a82fd1b139",
-      "size": 11947
+      "sha256": "008ea1b1920785fedf4adf9e6cd44df11bb5726d8c5cec6a21bd24ffda9bc1a8",
+      "size": 11981
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -10671,7 +10671,7 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py",
-      "sha256": "c8204081e8cfac1786734ac58049cbec29ddf9750e823bd569da90944e48a39e",
+      "sha256": "b6953fa14a655e8bdffe927556cde5c8271aaa012f6fa917bc8b0e58024b44ff",
       "size": 91076
     },
     {
@@ -11517,8 +11517,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
-      "sha256": "074d5ffba1b8b21cbc17f8acd33e85f280a442a6bfe0c430f15313ae9362b29e",
-      "size": 15666
+      "sha256": "bc3c84981c841e776d1e621a289cf9b9bfa358be5abd3a066770252ca0b9e99e",
+      "size": 16989
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -11655,8 +11655,8 @@
     {
       "category": "required-installation-or-runtime-asset",
       "path": "bridge/KitScripts/runtime-generation/install_cryptex_native.py",
-      "sha256": "074d5ffba1b8b21cbc17f8acd33e85f280a442a6bfe0c430f15313ae9362b29e",
-      "size": 15666
+      "sha256": "bc3c84981c841e776d1e621a289cf9b9bfa358be5abd3a066770252ca0b9e99e",
+      "size": 16989
     },
     {
       "category": "required-installation-or-runtime-asset",
@@ -13593,8 +13593,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_AUDIT.md",
-      "sha256": "9367a5aa88f7f68a59da51deceaf4000facb712e77d36c093eb2afaea7c3130d",
-      "size": 28965
+      "sha256": "43de91b878f086bcc43b6865a4037ddefb81f0c011d1851878ea2d4ca381dfb2",
+      "size": 29358
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13611,8 +13611,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/TROUBLESHOOTING.md",
-      "sha256": "774e346d60157d1d7b6bce422e3b3b2f3bd2b8edfa809c560b502d9a4aff089f",
-      "size": 23500
+      "sha256": "b1d43c4e4031669940f4a9f8b342b3f65f9a99c60a12a49e4a81d1aed477f4dc",
+      "size": 24103
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -13749,8 +13749,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "docs/release-notes-v1.0.0-pre.26.md",
-      "sha256": "74c90235a5ad11af7fb0a62c9aa9983b2449b039b8ec1965745d34114268ee7d",
-      "size": 2291
+      "sha256": "92e1b3c4b222346a3b606ebfb508d12abc0cc00b7372267f6f2e83c43972409e",
+      "size": 2578
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14745,8 +14745,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_srdssh_release_adapter.py",
-      "sha256": "84234b6da528914d3abf912bb7a5786c39c3cb947dda6df59be359edc2cda22e",
-      "size": 7434
+      "sha256": "df6a01a70968ca4363a5c942cf9d730c28df7b552293e0f6aed76b9dd59757f3",
+      "size": 8167
     },
     {
       "category": "required-source-or-maintenance-test",

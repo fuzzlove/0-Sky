@@ -109,7 +109,7 @@ async def install_with_rsd(rsd, identity, data, identifier, udid):
 
 async def install(manifest,identifier,udid):
     enable_flow_control_accounting()
-    from pymobiledevice3.exceptions import StreamClosedError
+    from pymobiledevice3.exceptions import ProtocolError, StreamClosedError
     from pymobiledevice3.remote.native_tunnel import NativeRemotedTunnel
     from pymobiledevice3.remote.userspace_tunnel import UserspaceRsdTunnel
     from pymobiledevice3.services.cryptexd import CryptexdService
@@ -127,8 +127,27 @@ async def install(manifest,identifier,udid):
         raise RuntimeError("ZERO_SKY_CRYPTEX_TRANSPORT must be userspace or native")
     if transport == "userspace":
         print("Cryptex transport: existing paired userspace USB", flush=True)
-        async with UserspaceRsdTunnel(serial=udid, autopair=False) as rsd:
-            await install_with_rsd(rsd,identity,data,identifier,udid)
+        try:
+            async with UserspaceRsdTunnel(serial=udid, autopair=False) as rsd:
+                await install_with_rsd(rsd,identity,data,identifier,udid)
+        except ProtocolError as error:
+            if "Timed out waiting for flow-control credit" not in str(error):
+                raise
+            # A newly opened paired USB RemoteXPC connection has repeatedly
+            # resumed large Intel transfers that stopped receiving window
+            # credit on their first connection. Retry this one diagnosed,
+            # pre-commit transport failure once; do not loop or change trust.
+            print("Userspace flow-control credit stalled; retrying once on a fresh exact-device paired USB connection",flush=True)
+            await asyncio.sleep(3)
+            async with UserspaceRsdTunnel(serial=udid, autopair=False) as rsd:
+                if str(rsd.udid)!=udid:raise RuntimeError('Exact-device identity mismatch')
+                existing=await asyncio.wait_for(CryptexdService(rsd).copy_installed(),timeout=30)
+                matches=[item for item in existing if item.identifier==identifier]
+                if len(matches)>1:raise RuntimeError('Multiple generations claim this identifier')
+                if matches:
+                    print('INSTALL COMMITTED before userspace credit timeout',identifier,flush=True)
+                else:
+                    await install_with_rsd(rsd,identity,data,identifier,udid)
         print('INSTALL SUCCESS',identifier,flush=True)
         return
     print("Cryptex transport: explicit macOS native remoted", flush=True)
