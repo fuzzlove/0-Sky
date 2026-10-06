@@ -13,6 +13,7 @@ jobs:
         with:
           python-version: '3.12'
       - run: python3 tools/pii_audit.py .
+      - run: python3 tools/verify_release_policy.py
       - run: python3 tools/repository_inventory.py --output /tmp/repository-inventory.json
       - run: diff -u manifests/repository-inventory.json /tmp/repository-inventory.json
   release-tool-tests:

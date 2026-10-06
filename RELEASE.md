@@ -1,5 +1,11 @@
 # Release procedure
 
+Release state, deprecation, artifact retention, rollback, checksum, SBOM,
+signing, and notarization requirements are normative in
+[`docs/RELEASE_POLICY.md`](docs/RELEASE_POLICY.md). The current supported
+release is recorded in [`manifests/release-status.json`](manifests/release-status.json)
+and must pass `python3 tools/verify_release_policy.py`.
+
 For the signed Universal 2 package pipeline, start with
 [`docs/RELEASE.md`](docs/RELEASE.md) and [`scripts/build_release.sh`](scripts/build_release.sh).
 The steps below describe lower-level inputs and verification.

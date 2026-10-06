@@ -1,0 +1,615 @@
+{
+  "authoritative_release": "v1.0.0-pre.26",
+  "captured_at": "2026-10-05T23:58:00Z",
+  "releases": [
+    {
+      "assets": [],
+      "commit": "d6c3a14602dc7554874afd2fea47d78082f4e1f9",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre-release 2 (source preview)",
+      "prerelease": true,
+      "published_at": "2026-09-25T19:15:15Z",
+      "tag": "v1.0.0-pre.2",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 12748657,
+          "name": "0-sky-c0f121572cbf-source.tar.gz",
+          "sha256": "e975100cc58f5fd2d5ccbb947f39036d993d4f54315efe0ffde92889601149b0"
+        },
+        {
+          "bytes": 99,
+          "name": "0-sky-c0f121572cbf-source.tar.gz.sha256",
+          "sha256": "69d0506d9a372a9984f9f239ec22d85fc11ea9a6db036626462f8fa38dc4c164"
+        }
+      ],
+      "commit": "c0f121572cbf6e7a0340f71bb401cb9a8c221660",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre-release 3 (reproducibility checkpoint r2)",
+      "prerelease": true,
+      "published_at": "2026-10-02T13:44:28Z",
+      "tag": "v1.0.0-pre.3-r2",
+      "verification": {
+        "artifact_checksum": "PASS",
+        "current_source_privacy_gate": "FAIL"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "b7eb23032aafaddb60ef3c5c3d08914d6182b2a8",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre-release 4 (clean checkout and CI repair)",
+      "prerelease": true,
+      "published_at": "2026-10-02T14:25:46Z",
+      "tag": "v1.0.0-pre.4",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "beed3b344c2f6be8af64f73d1c070364f865f221",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre-release 5 (Crane iOS 27 container shortcuts)",
+      "prerelease": true,
+      "published_at": "2026-10-02T21:19:40Z",
+      "tag": "v1.0.0-pre.5",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "9d52b4f611315979482f8d8963cff317f399a26f",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre-release 6 (verified Crane container menu)",
+      "prerelease": true,
+      "published_at": "2026-10-03T03:40:52Z",
+      "tag": "v1.0.0-pre.6",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "4216978ce7643c3bb770a67889f0413f72a7dd7a",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre-release 7 (tweak quarantine recovery)",
+      "prerelease": true,
+      "published_at": "2026-10-03T04:35:42Z",
+      "tag": "v1.0.0-pre.7",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "d16f289a4a12340f62fcc6a8dc0aa4af01512581",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre-release 8 (Control settings permission repair)",
+      "prerelease": true,
+      "published_at": "2026-10-03T04:48:35Z",
+      "tag": "v1.0.0-pre.8",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "3f9421a68cd101ad421008a1b721f2ee1aa8239a",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre-release 9 (Axon settings menu repair)",
+      "prerelease": true,
+      "published_at": "2026-10-03T05:21:25Z",
+      "tag": "v1.0.0-pre.9",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "bdbe3dc6ac3d06c667ff7d6a15b7ec36b224f09a",
+      "draft": false,
+      "original_title": "[WITHDRAWN] 0-Sky 1.0.0 pre-release 10",
+      "prerelease": true,
+      "published_at": "2026-10-04T17:39:57Z",
+      "tag": "v1.0.0-pre.10",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "5349e3a682e5d5d558fd5b9a7c7a46c873da9032",
+      "draft": false,
+      "original_title": "[WITHDRAWN] 0-Sky 1.0.0 pre-release 11",
+      "prerelease": true,
+      "published_at": "2026-10-04T19:08:44Z",
+      "tag": "v1.0.0-pre.11",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "2a1ca4a7d165bb111d1801dcd298b243d38420ed",
+      "draft": false,
+      "original_title": "[WITHDRAWN] 0-Sky 1.0.0 pre-release 12",
+      "prerelease": true,
+      "published_at": "2026-10-04T20:11:42Z",
+      "tag": "v1.0.0-pre.12",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "4c99d1d4bcee059375c19ba0019da852ccb67a15",
+      "draft": false,
+      "original_title": "[WITHDRAWN] 0-Sky 1.0.0 pre-release 13",
+      "prerelease": true,
+      "published_at": "2026-10-04T20:45:25Z",
+      "tag": "v1.0.0-pre.13",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "1aa3438052bf8dcb926a739a5f558638a9307070",
+      "draft": false,
+      "original_title": "WITHDRAWN \u2014 0-Sky 1.0.0 pre.14",
+      "prerelease": true,
+      "published_at": "2026-10-04T21:13:16Z",
+      "tag": "v1.0.0-pre.14",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "9b6854421a6068bdcecea857006a6f5bef86dfd5",
+      "draft": false,
+      "original_title": "WITHDRAWN \u2014 0-Sky 1.0.0 pre.15",
+      "prerelease": true,
+      "published_at": "2026-10-04T21:43:46Z",
+      "tag": "v1.0.0-pre.15",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [],
+      "commit": "698b1d0ad3d5654ad19e104f9f98914f457ba80b",
+      "draft": false,
+      "original_title": "WITHDRAWN \u2014 0-Sky 1.0.0 pre.16",
+      "prerelease": true,
+      "published_at": "2026-10-04T22:07:19Z",
+      "tag": "v1.0.0-pre.16",
+      "verification": {
+        "public_binary_assets": "NONE"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290043305,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "1bd3c26f69057089db56554c927cc648325c7b0853aa72bb8cad16936bb9da62"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "d293bac7ee7fba07d237155f0bdd14803a1e214ba36ece59e6df7f0c3037efab"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "2aa2d3377689dfe41525f60025e292f4027421f883712cf46ca28808b33a84a3"
+        }
+      ],
+      "commit": "896787b5e2c95d672f39f456ab780d9aea6ca5e6",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.17 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-04T22:33:20Z",
+      "tag": "v1.0.0-pre.17",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290041382,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "6077a85a2bc3a82df659706173e7d17b1c2ea68453b52db744a81fbd8322f439"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "464a7c40b92101411949049d4f99072aa279ce760944eb1cab2aee4a3b1f34c7"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "441f28eff0b46dc679741fc18fa3177cc20293c3fa8c597576afc8df86e28eee"
+        }
+      ],
+      "commit": "fee4446f17ebcdec9a973e29f413efce96142d70",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.18 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-04T23:04:07Z",
+      "tag": "v1.0.0-pre.18",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290044691,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "de7bc8ca27bcd0a4181de5e3ac6063f4f1ce071c72e2297aecff0701a65e0999"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "62ff5762af5da35138944f17c517eeb936dc5fcdfbd7c4ec20c4fd3939c68f46"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "c6ec35008da133930de5908a9b59ee120200bed10f23aa6f926c5ed0d6f75bd9"
+        }
+      ],
+      "commit": "da192473fda37897ede41f1671813fb2ea268e76",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.19 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-04T23:43:36Z",
+      "tag": "v1.0.0-pre.19",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290043990,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "5aa512c8956d2a29d6933e20a06d61ebce7643029e0e11b998d7ab071ae4af11"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "4aa51afa819a75e7e7f2fa328e973b1c518f18374c083ec177f5d8a4eaa78677"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "8a0d109c5b54d322311d8f39b430e0e5da363911e5dcf4e1157680906f5887b6"
+        }
+      ],
+      "commit": "5a99edaa89445bdbb7b15d8178ae1678dba04c66",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.20 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-05T00:17:49Z",
+      "tag": "v1.0.0-pre.20",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290033011,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "10e3780eb0dc394ed871794af5f34bd665d54caa37d580dd117fb630a5b1371a"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "c985e0d4d71f56f6eab88c7bf8fdcc34643150425e49bc15f8eb21a8b9e92e6b"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "a764bb192f81591a70c3d989e059fedcd32339a4cf7dffa4d05fd0f481ee0cca"
+        }
+      ],
+      "commit": "01400ec78de4dbc28eeb4936d4d929cba4e7b548",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.21 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-05T01:12:03Z",
+      "tag": "v1.0.0-pre.21",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py",
+          "MISSING_OR_EMPTY:srdssh:srdssh/payload-root/usr/bin/sh",
+          "SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290044515,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "1e0c059dd997517de4baf0326b5e626d6dd8846c56e8527e6ac888912536e3b9"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "0cbfdf95b467581b4eedbf3c9b6be2060ec34f629d245c5bc9e8abd2471deb2e"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "75a4201e5eac26076cb9313e4794b135d8b3a083266c8ccb6a519b412819a348"
+        }
+      ],
+      "commit": "7e085e77cec51985874ce813291cb7243274ba94",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.22 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-05T02:17:57Z",
+      "tag": "v1.0.0-pre.22",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py",
+          "MISSING_OR_EMPTY:srdssh:srdssh/payload-root/usr/bin/sh",
+          "SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290036112,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "190fb6675f1ebf27005b5f4889aef8a81cc222002d568857b5f27cb38d2a4439"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "ce455cfd67b0910a5d874dcb7ee1536e24d988460d03a34dc60354f1445775ea"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "5bcc47fa944b86baa9143c3e0988091841747dcc927bb0264498c1b7f9d8d199"
+        }
+      ],
+      "commit": "8ffa9ef38886535007493558234f031bf735e491",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.23 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-05T02:50:27Z",
+      "tag": "v1.0.0-pre.23",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py",
+          "MISSING_OR_EMPTY:srdssh:srdssh/payload-root/usr/bin/sh",
+          "SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290035674,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "e0f51e2a25d33a8e5827bbe10301de4c5ad26f1db4e67311b56b6525305b04b3"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "77e7930e86f54bfc970fd1fd45c0c68a20521eef012288b1586e3e8571d4ad1c"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "f0f6caad40b895c8128a4ae282c4a48e1f636822253b676cafa3c580c6766f67"
+        }
+      ],
+      "commit": "04b0bc2b46b2b989c5c1cb77ee3580e5efbde836",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.24 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-05T03:13:57Z",
+      "tag": "v1.0.0-pre.24",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py",
+          "MISSING_OR_EMPTY:srdssh:srdssh/payload-root/usr/bin/sh",
+          "SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290042638,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "c75b02db2c63909eed196f98b1833939e32eac1209f22cfd1d66572444b146be"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "80dd768c84f75702700851410b71d6c447ff79fb0d192eea8c8e2a9c90aa1406"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "c72a533267cd414eee060deb5491c8dbf4f1461e8ad308f16ed21b09a3f1e155"
+        }
+      ],
+      "commit": "9bd4a31292a8fed3c6a3a2b061903d964a0d7d45",
+      "draft": false,
+      "original_title": "0-Sky 1.0.0 pre.25 (experimental)",
+      "prerelease": true,
+      "published_at": "2026-10-05T14:09:05Z",
+      "tag": "v1.0.0-pre.25",
+      "verification": {
+        "failures": [
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_image_sha256",
+          "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_info_sha256",
+          "KIT_MANIFEST_SCHEMA_INVALID",
+          "MISSING_OR_EMPTY:filza:filza/generate_trust_cache.py",
+          "MISSING_OR_EMPTY:srdssh:srdssh/payload-root/usr/bin/sh",
+          "SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh"
+        ],
+        "independent_release_verification": "FAIL",
+        "release_manifest": "PASS"
+      }
+    },
+    {
+      "assets": [
+        {
+          "bytes": 290051970,
+          "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+          "sha256": "7eab748c43fcc1789944ba6590ab083004e711d829d8acf44d11ec2dcc4cd68f"
+        },
+        {
+          "bytes": 1347,
+          "name": "RELEASE_AUDIT.txt",
+          "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+        },
+        {
+          "bytes": 520,
+          "name": "RELEASE_MANIFEST.json",
+          "sha256": "0c53f4ac9a5d8bd7bd4a31b2c3c7e8a9acc839e510787ab4fa2cced0b3de6253"
+        },
+        {
+          "bytes": 284,
+          "name": "SHA256SUMS",
+          "sha256": "4f3c01a370ce5eaf04412d58df9a646a0300a7552af3a304d7e34e065c0f045e"
+        }
+      ],
+      "commit": "a60643b98e469fc3863af6d7a310c42182c0bf50",
+      "draft": false,
+      "original_title": "0-Sky Bridge v1.0.0-pre.26",
+      "prerelease": true,
+      "published_at": "2026-10-05T23:49:23Z",
+      "tag": "v1.0.0-pre.26",
+      "verification": {
+        "independent_release_verification": "PASS",
+        "release_manifest": "PASS",
+        "runtime_uat": "PASS_10_OF_10"
+      }
+    }
+  ],
+  "repository": "fuzzlove/0-Sky",
+  "schema": 1,
+  "tag_snapshot_sha256": "af6577a79ee79465c52922d9aa355efe24ac116bd9f8fcef9b9d45f208bf9373"
+}

@@ -2,6 +2,23 @@
 
 Note: This is a work in progress and the building blocks for where the project is currently.
 
+## Current Supported Release
+
+**CURRENT / VERIFIED / SUPPORTED:**
+[`v1.0.0-pre.26`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.26)
+
+Use only the package and three verification files attached to that release.
+It is the sole release that passed the current independent release verifier and
+the complete Intel-host/iOS 27 SRD package UAT. Verify the downloaded four-file
+set before opening the installer.
+
+Every earlier release is **DEPRECATED / UNSUPPORTED / DO NOT USE**. Historical
+tags and release notes remain available for provenance, but known-broken binary
+installers have been removed from public distribution. Do not install packages
+marked deprecated, unsupported, withdrawn, test, development, or experimental.
+See [`docs/RELEASE_POLICY.md`](docs/RELEASE_POLICY.md) and the
+[`release cleanup report`](docs/RELEASE_CLEANUP_REPORT.md).
+
 0-Sky is an authorized Apple Security Research Device control plane. This
 repository publishes the source for the three first-party applications:
 
@@ -92,11 +109,13 @@ any reusable signing credential.
 
 ## Releases
 
-Use the [GitHub Releases](https://github.com/fuzzlove/0-Sky/releases) page only
-for version discovery; a downloadable artifact is acceptable only when its
-`RELEASE_MANIFEST.json`, `SHA256SUMS`, and `RELEASE_AUDIT.txt` verify. Source
-tags do not imply that a binary installer passed distribution signing,
-notarization, clean-machine, or hardware tests.
+The supported download is
+[`v1.0.0-pre.26`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.26).
+A downloadable artifact is acceptable only when its `RELEASE_MANIFEST.json`,
+`SHA256SUMS`, and `RELEASE_AUDIT.txt` verify. Source tags do not imply that a
+binary installer passed distribution signing, notarization, clean-machine, or
+hardware tests. Older releases are retained only as deprecated historical
+records and are not installation sources.
 
 A complete development candidate can assemble its host runtime automatically.
 Public distribution still requires reviewed replacement device payloads plus

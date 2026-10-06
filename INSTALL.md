@@ -2,6 +2,13 @@
 
 ## Recommended path: verified macOS package
 
+The only supported installer is
+[`v1.0.0-pre.26`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.26),
+marked **CURRENT / VERIFIED / SUPPORTED**. Do not install an older tag even if
+its historical notes describe a partial fix or its retained metadata once
+reported a successful packaging gate. Those releases did not pass the complete
+current verifier and package UAT.
+
 Use one audited 0-Sky release directory containing exactly:
 
 - `0-Sky-Bridge-<version>-distribution-universal.pkg`

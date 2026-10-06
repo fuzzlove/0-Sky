@@ -1,7 +1,7 @@
 {
   "counts": {
     "required-installation-or-runtime-asset": 140,
-    "required-source-or-maintenance-test": 2118,
+    "required-source-or-maintenance-test": 2136,
     "uncertain-retained-for-investigation": 209
   },
   "excluded_reproducible_or_private_output": [
@@ -20,9 +20,15 @@
   "files": [
     {
       "category": "required-source-or-maintenance-test",
+      "path": ".github/workflows/release-validation.yml",
+      "sha256": "50c8dbeb3d80515a0f5b1d33a0d2052871e079883ac9b3719942f5bc29b7f756",
+      "size": 1475
+    },
+    {
+      "category": "required-source-or-maintenance-test",
       "path": ".github/workflows/source-audit.yml",
-      "sha256": "f876c1be555d1f87d67bae685ce71f9387b431a2fbd0b97fa5eb88b593dc2c78",
-      "size": 2123
+      "sha256": "c425459d0716bacc3f5fb195a44a4a5a21974f9b35e8e49ba605409e788b0999",
+      "size": 2175
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -45,8 +51,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "INSTALL.md",
-      "sha256": "0b3714e2933f9c8b7d555255592f41f889d0c56fb7704d809b234c9137942f67",
-      "size": 5121
+      "sha256": "b2ade5806554c05cfeafce9cb6d5351c92e9572a6603983566cf9200223a0dc1",
+      "size": 5501
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -75,14 +81,14 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "README.md",
-      "sha256": "07413f9c31ecaf48f33aa663f0658c2aa5f7614feac4027e177132ea2148593c",
-      "size": 7013
+      "sha256": "21a6787ee17c129d0e9ce10ae546f331fcb57cd58649d78401dd67767e89ed29",
+      "size": 7976
     },
     {
       "category": "required-source-or-maintenance-test",
       "path": "RELEASE.md",
-      "sha256": "ca9619e9b2252dc4f32df78dab9923605f4bfbb7fb0b179db2f208a2def6bcd7",
-      "size": 4891
+      "sha256": "7c76c500433c2e12359263bbceda047cb3dbe2364bb93c80dadc60dab1635f1d",
+      "size": 5240
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -99,8 +105,8 @@
     {
       "category": "required-source-or-maintenance-test",
       "path": "SOURCE_AUDIT.json",
-      "sha256": "92e7380dd53c518af5f45cc1cd8e0f6b22cce6a1d8af44fe1d11eaf64d4a3192",
-      "size": 13330
+      "sha256": "7651af16cd4a575f0b23a26042d947887fc082911731d3902217587df34dd86d",
+      "size": 13491
     },
     {
       "category": "uncertain-retained-for-investigation",
@@ -13586,6 +13592,18 @@
     },
     {
       "category": "required-source-or-maintenance-test",
+      "path": "docs/RELEASE_CLEANUP_REPORT.md",
+      "sha256": "091356836c513ac75004a0feaeb17636df33a013ea7ddedc8f981cd7537b6dcf",
+      "size": 6361
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "docs/RELEASE_POLICY.md",
+      "sha256": "4cb30c50c6d9452e6a6c992693c52c4455aeab4643676d20ac784f62cf53a01f",
+      "size": 6406
+    },
+    {
+      "category": "required-source-or-maintenance-test",
       "path": "docs/REPOSITORY_ADMISSION.md",
       "sha256": "ead44a7317a8168612cc39ed30c8d4235589b90f0b1f4ba9135e401dc035372e",
       "size": 2994
@@ -13958,9 +13976,75 @@
     },
     {
       "category": "required-source-or-maintenance-test",
+      "path": "manifests/release-status.json",
+      "sha256": "a6dedb78da14e869eef8b7081e10e74e55f82f983b36ff6f0eeb58372975da60",
+      "size": 7996
+    },
+    {
+      "category": "required-source-or-maintenance-test",
       "path": "manifests/source-dependencies.json",
       "sha256": "ee543f58bfb23b44b079605afe3b15a4d5f022aaedc2fb64d6d132df7be93b3b",
       "size": 1011
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/RELEASE_AUDIT.txt",
+      "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0",
+      "size": 1347
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/SHA256SUMS",
+      "sha256": "4f3c01a370ce5eaf04412d58df9a646a0300a7552af3a304d7e34e065c0f045e",
+      "size": 284
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/build-manifest.json",
+      "sha256": "0c53f4ac9a5d8bd7bd4a31b2c3c7e8a9acc839e510787ab4fa2cced0b3de6253",
+      "size": 520
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/github-release.json",
+      "sha256": "4c7d8fbd0abfca52bfcd9a236c3f8a527d0bffcc90893969c4b9b5b8e59e04f8",
+      "size": 836
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/notarization-info.txt",
+      "sha256": "fb23c5d5ac4d872453774625ca88da6a62ee1ad664c2abc84b3e22e60e9d0526",
+      "size": 400
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/public-release-audit.json",
+      "sha256": "4deacb960d813e9b268bd447653b0f58dfb63702c16a2773db5ce9e286059450",
+      "size": 21151
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/sbom/cyclonedx.json",
+      "sha256": "65457f771853aed8df9cdc9b6747d740d5bc3d737e0cfa88b4eea840a1593d8b",
+      "size": 134297
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/signing-info.txt",
+      "sha256": "62cc2a4df846cdf14e8223c6707a4055656889819b056f50184c51366c8275ab",
+      "size": 544
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/test-results/automated-tests.txt",
+      "sha256": "9b14b57b65173df612651c51b2e955a8bdb4cc785a8f291ce372cf1f2ec803e3",
+      "size": 632
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "release-evidence/v1.0.0-pre.26/uat-results/intel-ios27.txt",
+      "sha256": "d539f8fe0d575cb5ec7cc16fa2882025034153e881cc7bbf177708a91c2bd596",
+      "size": 811
     },
     {
       "category": "required-source-or-maintenance-test",
@@ -14606,6 +14690,12 @@
     },
     {
       "category": "required-source-or-maintenance-test",
+      "path": "tools/tests/test_github_release_hygiene.py",
+      "sha256": "2941b7857638630b5639e0072eb67b2b77b3cc6cdbfb216d438a043383937166",
+      "size": 1719
+    },
+    {
+      "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_host_frida_uat.py",
       "sha256": "3a85c54aefddcdc90f31d2ddee224a7bb0e8881567ef065f31a97d8d73b59efa",
       "size": 2965
@@ -14720,6 +14810,12 @@
     },
     {
       "category": "required-source-or-maintenance-test",
+      "path": "tools/tests/test_release_policy.py",
+      "sha256": "c9310eac962618bd6cca9a7bf7abebfc2fe13f206ab02d911867ea003ad7b7ef",
+      "size": 3627
+    },
+    {
+      "category": "required-source-or-maintenance-test",
       "path": "tools/tests/test_release_sanitize.py",
       "sha256": "ee0292d84a5ba4f508484f9c81b373a88d85b4b568220ab3425dce8adb102ee0",
       "size": 13411
@@ -14798,6 +14894,12 @@
     },
     {
       "category": "required-source-or-maintenance-test",
+      "path": "tools/verify_github_release_hygiene.py",
+      "sha256": "bfd10d17ef3e5110f79aecdd70f07eacd84b2b2fc5f2978ec373d16e8696b113",
+      "size": 4582
+    },
+    {
+      "category": "required-source-or-maintenance-test",
       "path": "tools/verify_link_ipa.py",
       "sha256": "95ada730f50b89254ef4452941e67fdc91de6a967906ba9e088cf49adc4b3f9e",
       "size": 3492
@@ -14813,6 +14915,12 @@
       "path": "tools/verify_release.py",
       "sha256": "4a340b7ab9316f6f1f5fdabb79e707fbd71369b13bbe1da05da5379c9d29aaee",
       "size": 31404
+    },
+    {
+      "category": "required-source-or-maintenance-test",
+      "path": "tools/verify_release_policy.py",
+      "sha256": "342c9bda6bcff8d49c69ce1b654c8965e50984fdaa98af7696ffe774c9cbb007",
+      "size": 7526
     },
     {
       "category": "required-source-or-maintenance-test",

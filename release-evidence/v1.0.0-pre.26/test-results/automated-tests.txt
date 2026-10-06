@@ -1,0 +1,12 @@
+0-Sky Bridge v1.0.0-pre.26 automated validation
+
+Tool/release unit tests: PASS — 337 run, 4 unavailable or cleaned-fixture skips
+Host-tool unit tests under pinned Python 3.12: PASS — 138 run, 1 expected external-kit skip
+AFC2 compatibility tests: PASS — 21 run, 6 unavailable device-fixture skips
+Control compatibility tests: PASS — 22 run
+BridgeCore tests: PASS — 33/33
+EULA verification: PASS
+Source PII audit: PASS — 35 reviewed allowlisted findings, 0 unallowlisted findings
+Release manifest verification: PASS
+Independent package verification: PASS — FINAL_RESULT=PASS
+Fresh GitHub download byte comparison: PASS

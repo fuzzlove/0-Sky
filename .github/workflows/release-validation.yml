@@ -1,0 +1,40 @@
+name: Validate published release
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Current supported release tag
+        required: true
+        default: v1.0.0-pre.26
+permissions:
+  contents: read
+jobs:
+  verify-release:
+    runs-on: macos-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: ${{ inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require the declared current tag
+        run: |
+          python3 - <<'PY'
+          import json, os
+          status = json.load(open('manifests/release-status.json'))
+          assert os.environ['RELEASE_TAG'] == status['current']['tag']
+          PY
+      - run: python3 tools/verify_release_policy.py
+      - run: python3 tools/verify_github_release_hygiene.py --repository "${{ github.repository }}"
+      - name: Download exact release assets
+        run: gh release download "$RELEASE_TAG" --repo "${{ github.repository }}" --dir /tmp/0sky-release
+      - run: python3 tools/release_manifest.py verify /tmp/0sky-release
+      - name: Verify signatures, architecture, privacy, notarization, and Gatekeeper
+        run: |
+          scripts/verify_release.sh \
+            --release-directory /tmp/0sky-release \
+            --report /tmp/0sky-release-independent-audit.txt \
+            --notarized
+          grep -qx 'FINAL_RESULT=PASS' /tmp/0sky-release-independent-audit.txt

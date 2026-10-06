@@ -1,0 +1,19 @@
+0-Sky Bridge v1.0.0-pre.26 package UAT
+
+Host: Intel macOS host (hardware class retained in SOURCE_AUDIT.json)
+Device scope: authorized iPhone 12-class SRD on iOS 27
+Package: exact GitHub release candidate, Developer ID signed, notarized, stapled
+Transfer SHA-256 parity: PASS
+Gatekeeper: PASS
+Installer receipt: PASS
+Installed app strict signature: PASS
+Installed embedded-kit SHA256SUMS identity: PASS
+Normal application launch: PASS
+Post-install setup stages: PASS — 10/10
+Control: PASS — 3.5.37 / 3.5.37.0
+Link: PASS — 1.9.0 build 48
+CatVNC: PASS — 0.0.2
+Frida: PASS — 17.18.0
+Filza: PASS — 4.0 with sealed-byte, MCM registration, and foreground-launch proofs
+
+Device-unique identifiers, hostnames, operator identity, pairing material, SSH host keys, and private logs are intentionally excluded.
