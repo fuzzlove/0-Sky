@@ -98,6 +98,12 @@ public actor IOSComponentSetupManager {
         let python = try paths.projectPython()
         let controller = try paths.projectSetupController()
         let kit = try paths.projectSetupKit()
+        let controllerArguments = try Self.completeProjectControllerArguments(device: device)
+        let hostRuntimeBin = kit.appendingPathComponent("host-mac/runtime/bin").path
+        let runtimeEnvironment = [
+            "ZERO_SKY_KIT_ROOT": kit.path,
+            "PATH": "\(hostRuntimeBin):/usr/bin:/bin:/usr/sbin:/sbin",
+        ]
         let correlation = UUID()
         await events.publish(BridgeEvent(
             event: .iosComponentSetupStarted, deviceID: udid,
@@ -114,8 +120,8 @@ public actor IOSComponentSetupManager {
                     ScriptSpecification(
                         identifier: "ios-components.complete-project.\(udid)",
                         executableURL: python,
-                        arguments: [controller.path, "--udid", udid],
-                        environment: ["ZERO_SKY_KIT_ROOT": kit.path],
+                        arguments: [controller.path] + controllerArguments,
+                        environment: runtimeEnvironment,
                         // The bundled Scripts directory is intentionally not a general-purpose
                         // execution root. Run the audited controller from the verified Kit root;
                         // Python still resolves its adjacent configuration module via argv[0].
@@ -148,6 +154,22 @@ public actor IOSComponentSetupManager {
         }
     }
 
+    /// iOS 27 can require the user-visible Paired Macs code flow before its
+    /// first RemoteXPC tunnel exists. Keep that recovery in the guided app
+    /// instead of requiring a separate Terminal command. Older supported OS
+    /// families do not advertise this iOS-27-only pairing mechanism.
+    public static func completeProjectControllerArguments(device: SkyDevice) throws -> [String] {
+        let udid = try BridgeValidation.validateUDID(device.udid)
+        var arguments = ["--udid", udid]
+        let major = device.osVersion?
+            .split(separator: ".", maxSplits: 1)
+            .first.flatMap { Int($0) }
+        if major.map({ $0 >= 27 }) == true {
+            arguments.append("--pair-remotexpc")
+        }
+        return arguments
+    }
+
     public func setup(profile device: DeviceProfile,
                       selection: IOSComponentSetupProfile = .required,
                       confirmed: Bool,
@@ -161,6 +183,7 @@ public actor IOSComponentSetupManager {
         }
         let python = try paths.python(for: device)
         let installer = try paths.hostScript("bootstrap_device.py", profile: device)
+        let kit = try paths.projectSetupKit()
         var arguments = [
             installer.path,
             "--support", paths.supportRoot.path,
@@ -195,6 +218,9 @@ public actor IOSComponentSetupManager {
                         identifier: "ios-components.\(selection.rawValue.lowercased()).\(device.instanceName)",
                         executableURL: python,
                         arguments: setupArguments,
+                        environment: [
+                            "PATH": "\(kit.appendingPathComponent("host-mac/runtime/bin").path):/usr/bin:/bin:/usr/sbin:/sbin"
+                        ],
                         workingDirectory: installer.deletingLastPathComponent(),
                         timeout: .seconds(1_800)
                     ),

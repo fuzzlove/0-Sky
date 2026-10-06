@@ -16,12 +16,14 @@ import sys
 import tempfile
 
 try:
+    from .release_manifest import ManifestError, generate as generate_release_manifest
     from .release_paths import ReleasePaths
-    from .signing_identities import discover, require_identity
+    from .signing_identities import discover, require_identity, resolve_identity
     from .verify_release import REQUIRED_MAC_BINARIES, report_text
 except ImportError:
+    from release_manifest import ManifestError, generate as generate_release_manifest
     from release_paths import ReleasePaths
-    from signing_identities import discover, require_identity
+    from signing_identities import discover, require_identity, resolve_identity
     from verify_release import REQUIRED_MAC_BINARIES, report_text
 
 
@@ -33,6 +35,94 @@ class ReleaseFailure(Exception):
         super().__init__(code)
         self.stage = stage
         self.code = code
+
+
+def preflight_failure_code(payload: bytes) -> str:
+    """Return a stable actionable code without copying local paths to logs."""
+    try:
+        value = json.loads(payload)
+    except (TypeError, ValueError):
+        return "BLOCKED_ENVIRONMENT"
+    if value.get("host_runtime", {}).get("status") == "BLOCKED":
+        return "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID"
+    if value.get("kit", {}).get("status") == "BLOCKED":
+        return "BLOCKED_KIT_HASH_MANIFEST_INVALID"
+    failed_tools = sorted(item.get("tool", "unknown") for item in value.get("toolchain", [])
+                          if item.get("status") == "FAIL")
+    if failed_tools:
+        return "BLOCKED_TOOL_MISSING_OR_INCOMPATIBLE:" + ",".join(failed_tools)
+    if value.get("configuration", {}).get("status") == "BLOCKED":
+        return "BLOCKED_CONFIGURATION_INVALID"
+    return "BLOCKED_ENVIRONMENT"
+
+
+def remediation_for(code: str) -> str:
+    if "NOTARY_PROFILE" in code:
+        return ("Create an app-specific password at appleid.apple.com, then store the profile with "
+                "`xcrun notarytool store-credentials 0-sky-release --apple-id YOUR_APPLE_ID "
+                "--team-id YOUR_TEAM_ID --password YOUR_APP_SPECIFIC_PASSWORD`; rerun with "
+                "--notary-profile 0-sky-release")
+    if "NOT_ACCEPTED" in code or "NOTARIZE" in code:
+        return ("Run `xcrun notarytool history --keychain-profile 0-sky-release` to obtain the "
+                "submission ID, then `xcrun notarytool log SUBMISSION_ID --keychain-profile "
+                "0-sky-release`; correct every reported signing or bundle issue and rebuild")
+    if "EXTERNAL_KIT_MISSING" in code or "KIT_HASH_MANIFEST_INVALID" in code:
+        return ("Obtain the complete authorized offline kit from the release owner, copy it to a "
+                "writable directory outside the repository, confirm it contains SHA256SUMS, then "
+                "rerun with --kit '/absolute/path/to/authorized kit'. Do not copy pairing records, "
+                "device credentials, or an installed app's kit into the source tree")
+    if "SIGNING_IDENTITY" in code:
+        return ("Import valid Developer ID Application and Developer ID Installer certificates "
+                "with their private keys into the login keychain. If exactly one valid identity "
+                "of each type is present, the release command selects them automatically. If "
+                "multiple identities of either type are present, list SHA-1 fingerprints with "
+                "`security find-identity -v -p basic`, then pass the intended values through "
+                "--app-identity and --installer-identity")
+    if code == "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID" or "HOST_RUNTIME_SOURCE_MISSING" in code:
+        return ("Run `python3 tools/build_host_runtime.py /absolute/path/to/a-writable-kit-copy`; "
+                "the command prints the exact pinned archive URL, cache destination, expected "
+                "SHA-256, and verification command when an input is unavailable; the canonical "
+                "build normally performs this repair automatically")
+    privacy_categories = ("FIXED_HOME_PATH", "DERIVED_DATA_PATH", "ABSOLUTE_FILE_URI",
+                          "MOUNTED_VOLUME_PATH", "LOCAL_IP_ADDRESS", "PRIVATE_KEY",
+                          "EMBEDDED_PASSWORD", "PERSONAL_PAYMENT")
+    if any(category in code for category in privacy_categories):
+        return ("Run `python3 tools/kit_pii_report.py KIT artifacts/release-kit-pii.json` and keep "
+                "that mode-0600 report outside Git. For every native or signed finding, correct "
+                "the canonical source/build prefix maps, rebuild, re-sign, and update SHA256SUMS. "
+                "For wheel/DEB examples or test fixtures, replace them with a minimal reproducible "
+                "source build that omits non-runtime tests; never globally allowlist the pattern. "
+                "Remove payment/personal URLs in canonical source and rebuild. Then rerun "
+                "the release command")
+    if "THEOS" in code:
+        return ("Run `git clone --recursive https://github.com/theos/theos.git "
+                "'/absolute/path/to/theos'`, `git -C '/absolute/path/to/theos' checkout "
+                "dd5c14bb9d91311e221d51b5bfb8c9e5948156db`, and `git -C "
+                "'/absolute/path/to/theos' submodule update --init --recursive`; then rerun with "
+                "--theos '/absolute/path/to/theos'. Preserve any existing modified checkout")
+    if "OFFLINE_WHEEL_ARCHITECTURE_COVERAGE_FAILED" in code:
+        return ("The selected kit has no complete offline macOS dependency set for both arm64 "
+                "and x86_64. Select the kit directory that directly contains SHA256SUMS and "
+                "host-mac/wheelhouse, then run `python3 tools/wheel_inventory.py "
+                "'/absolute/path/to/kit'`. Replace each reported missing or single-architecture "
+                "wheel with the locked universal2 pair and rerun the build")
+    if "REQUIRED_PORTABLE_SCRIPT_MISSING" in code:
+        return ("Restore the missing source-controlled portability script from this exact Git "
+                "revision; do not copy it from an installed app or another device. Run `git "
+                "status --short`, restore only the reported relative path, then rerun the build")
+    if "MAC_HELPER_NOT_UNIVERSAL2" in code:
+        return ("The selected kit contains a macOS helper without both arm64 and x86_64 slices. "
+                "Rebuild the helper with the repository's canonical host-runtime command, verify "
+                "it with `lipo -archs PATH_TO_HELPER`, and rerun the release build")
+    if "PYTHON312_MISSING" in code:
+        return ("The source release validation requires Python 3.12. Install the universal2 "
+                "installer from https://www.python.org/downloads/macos/, open a new Terminal, "
+                "verify `python3.12 --version`, and rerun the same build command")
+    if "TOOL_MISSING_OR_INCOMPATIBLE" in code or "TOOL_MISSING:" in code:
+        return ("Run `python3 tools/environment_preflight.py --human --mode release "
+                "--kit /absolute/path/to/kit --skip-device` and perform each printed command")
+    return ("Run `python3 tools/environment_preflight.py --human --mode development "
+            "--kit /absolute/path/to/kit --skip-device`, correct the first non-PASS item, and retry")
 
 
 def execute(stage: str, argv: list[str], *, timeout: int,
@@ -47,7 +137,10 @@ def execute(stage: str, argv: list[str], *, timeout: int,
                                            result.stdout + result.stderr)))
         category_code = ":" + ",".join(x.decode("ascii").upper().replace("-", "_")
                                        for x in categories) if categories else ""
-        raise ReleaseFailure(stage, f"EXIT_{result.returncode}{category_code}")
+        stable = re.search(rb"RELEASE_KIT=FAIL code=([A-Z0-9_:-]+)",
+                           result.stdout + result.stderr)
+        code = stable.group(1).decode("ascii") if stable else f"EXIT_{result.returncode}{category_code}"
+        raise ReleaseFailure(stage, code)
     print(f"[PASS] {stage}", flush=True)
 
 
@@ -55,7 +148,8 @@ def submit_notarization(package: Path, profile: str) -> None:
     try:
         result = subprocess.run(
             ["xcrun", "notarytool", "submit", str(package),
-             "--keychain-profile", profile, "--wait", "--output-format", "json"],
+             "--keychain-profile", profile, "--wait", "--timeout", "50m",
+             "--output-format", "json"],
             cwd=ROOT, capture_output=True, timeout=3600, check=False)
         if result.returncode or json.loads(result.stdout).get("status") != "Accepted":
             raise ReleaseFailure("NOTARIZE", "NOT_ACCEPTED")
@@ -113,8 +207,21 @@ def make_deny_file(destination: Path, staging: Path, output: Path,
 
 def build(kit: Path, output: Path, mode: str, app_identity: str | None,
           installer_identity: str | None, notary_profile: str | None,
-          extra_deny: Path | None) -> int:
+          extra_deny: Path | None, theos: Path | None = None) -> int:
+    if output.is_symlink() or (output.exists() and not output.is_dir()):
+        print("RELEASE_GATE=FAIL stage=OUTPUT error=UNSAFE_OUTPUT_DIRECTORY", file=sys.stderr)
+        return 2
     output.mkdir(parents=True, exist_ok=True)
+    existing = {item.name for item in output.iterdir()}
+    if existing - {"RELEASE_AUDIT.txt"}:
+        print("RELEASE_GATE=FAIL stage=OUTPUT error=OUTPUT_NOT_EMPTY", file=sys.stderr)
+        return 2
+    prior_report = output / "RELEASE_AUDIT.txt"
+    if prior_report.is_symlink():
+        print("RELEASE_GATE=FAIL stage=OUTPUT error=UNSAFE_OUTPUT_REPORT", file=sys.stderr)
+        return 2
+    if prior_report.exists():
+        prior_report.unlink()
     report = output / "RELEASE_AUDIT.txt"
     stage = "PREFLIGHT"
     state: dict[str, str] = {"Product": "0-Sky Bridge", "Version": "UNKNOWN",
@@ -128,12 +235,14 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
         state["Build mode"] = mode
         if mode == "distribution":
             try:
-                app_identity = require_identity(
+                app_identity = resolve_identity(
                     app_identity, "Developer ID Application", identities)
-                installer_identity = require_identity(
+                installer_identity = resolve_identity(
                     installer_identity, "Developer ID Installer", identities)
             except RuntimeError as error:
                 raise ReleaseFailure("SIGNING_PREFLIGHT", str(error)) from error
+            if not notary_profile:
+                raise ReleaseFailure("SIGNING_PREFLIGHT", "BLOCKED_MISSING_NOTARY_PROFILE")
         elif mode == "development" and app_identity:
             try:
                 app_identity = require_identity(app_identity, "Apple Development", identities)
@@ -154,19 +263,28 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             raise ReleaseFailure(stage, "TOOL_MISSING:" + ",".join(missing))
         if not kit.is_dir() or not (kit / "SHA256SUMS").is_file():
             raise ReleaseFailure(stage, "EXTERNAL_KIT_MISSING")
+        theos = (theos or (Path(os.environ["THEOS"]) if os.environ.get("THEOS") else None))
+        if theos is None or not (theos / "makefiles/common.mk").is_file():
+            raise ReleaseFailure("THEOS_PREFLIGHT", "THEOS_UNAVAILABLE")
+        theos = theos.resolve()
         try:
             preflight = subprocess.run(
                 [sys.executable, str(ROOT / "tools/environment_preflight.py"),
-                 "--mode", "development", "--kit", str(kit), "--skip-device"],
+                 "--mode", "development", "--kit", str(kit),
+                 "--theos", str(theos), "--skip-device"],
                 cwd=ROOT, capture_output=True, timeout=90, check=False)
         except subprocess.TimeoutExpired as error:
             raise ReleaseFailure(stage, "ENVIRONMENT_TIMEOUT") from error
         if preflight.returncode:
-            raise ReleaseFailure(stage, "ENVIRONMENT_BLOCKED")
+            code = preflight_failure_code(preflight.stdout)
+            if code == "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID":
+                print("[REPAIR] PREFLIGHT pinned host runtime will be assembled", flush=True)
+            else:
+                raise ReleaseFailure(stage, code)
         discovered = json.loads(preflight.stdout)
         if discovered.get("kit", {}).get("status") != "PASS" or any(
             item.get("status") != "PASS" for item in discovered.get("toolchain", [])
-            if item.get("tool") in {"xcrun", "xcodebuild", "python3.12", "ssh"}
+            if item.get("tool") in {"xcrun", "xcodebuild", "python3", "ssh"}
         ):
             raise ReleaseFailure(stage, "DEPENDENCY_BLOCKED")
         state["Tool discovery"] = state["Architecture discovery"] = "PASS"
@@ -174,7 +292,12 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
         execute("EULA", [sys.executable, str(ROOT / "tools/verify_eula.py")],
                 timeout=30)
         state["EULA"] = "PASS"
-        with tempfile.TemporaryDirectory(prefix=".0sky-release-", dir=output) as temp:
+        build_environment = dict(os.environ)
+        build_environment["THEOS"] = str(theos)
+        execute("THEOS_PREFLIGHT", [sys.executable,
+                str(ROOT / "tools/theos_preflight.py"), "--theos", str(theos)],
+                timeout=60, environment=build_environment)
+        with tempfile.TemporaryDirectory(prefix=".0sky-release-", dir=output.parent) as temp:
             work = Path(temp)
             paths = ReleasePaths.from_work(ROOT, work)
             deny = work / "deny.json"
@@ -182,10 +305,13 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             stage = "PREPARE_KIT"
             prepared = paths.kit_root
             execute(stage, [sys.executable, str(ROOT / "tools/prepare_release_kit.py"),
-                            str(kit), str(prepared), "--deny-file", str(deny)], timeout=900)
+                            str(kit), str(prepared), "--deny-file", str(deny)], timeout=900,
+                    environment=build_environment)
+            execute("HOST_RUNTIME", [sys.executable,
+                    str(ROOT / "tools/host_runtime_manifest.py"), str(prepared)], timeout=60)
             stage = "BUILD_UNIVERSAL_APP"
             derived = paths.build_root
-            environment = dict(os.environ)
+            environment = dict(build_environment)
             environment["ZERO_SKY_RELEASE_DENY_FILE"] = str(deny)
             execute(stage, [str(ROOT / "build.sh"), "--kit", str(prepared),
                             "--derived-data", str(derived)], timeout=1800,
@@ -215,6 +341,16 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
                     if relative in entitlement:
                         command += ["--entitlements", str(entitlement[relative])]
                     execute(stage, command + [str(target)], timeout=120)
+                execute("SIGN_KIT_NATIVE_CODE", [sys.executable,
+                        str(ROOT / "tools/sign_release_kit.py"),
+                        str(app / "Contents/Resources/Kit"),
+                        "--identity", app_identity], timeout=1800)
+                execute("REBUILD_WHEEL_INVENTORY", [sys.executable,
+                        str(ROOT / "tools/wheel_inventory.py"),
+                        str(app / "Contents/Resources/Kit")], timeout=180)
+                execute("VERIFY_SIGNED_HOST_RUNTIME", [sys.executable,
+                        str(ROOT / "tools/host_runtime_manifest.py"),
+                        str(app / "Contents/Resources/Kit")], timeout=180)
                 execute("REHASH_SIGNED_KIT", [sys.executable,
                         str(ROOT / "tools/kit_manifest.py"), "generate",
                         str(app / "Contents/Resources/Kit")], timeout=180)
@@ -261,7 +397,6 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             if notarized:
                 command.append("--notarized")
             execute(stage, command, timeout=900)
-            package.replace(output / package.name)
             content = report.read_text(encoding="utf-8")
             content = content.replace("Clean-build verification: NOT_EXECUTED",
                                       "Clean-build verification: PASS")
@@ -269,16 +404,37 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             content = content.replace("Signing identities: UNKNOWN",
                                       f"Signing identities: {state['Signing identities']}")
             report.write_text(content, encoding="utf-8")
+            stage = "RELEASE_MANIFEST"
+            release_directory = work / "release"
+            release_directory.mkdir(mode=0o755)
+            package.replace(release_directory / package.name)
+            report.replace(release_directory / report.name)
+            generate_release_manifest(
+                release_directory, package.name, product="0-Sky Bridge", version=version,
+                build=state["Build"], mode=mode)
+            stage = "PUBLISH"
+            if output.is_symlink() or any(output.iterdir()):
+                raise ReleaseFailure(stage, "OUTPUT_CHANGED_DURING_BUILD")
+            output.rmdir()
+            os.replace(release_directory, output)
             print(f"{'RELEASE' if mode == 'distribution' else 'NON_PUBLIC_CANDIDATE'}_PACKAGE={package.name}")
             return 0
-    except (ReleaseFailure, OSError, ValueError, json.JSONDecodeError) as error:
+    except (ReleaseFailure, ManifestError, OSError, ValueError, json.JSONDecodeError) as error:
+        if not output.exists():
+            output.mkdir(parents=True, mode=0o755)
+        report = output / "RELEASE_AUDIT.txt"
+        if output.is_symlink() or not output.is_dir() or report.is_symlink():
+            print("RELEASE_GATE=FAIL stage=OUTPUT error=UNSAFE_FAILURE_REPORT",
+                  file=sys.stderr)
+            return 2
         if isinstance(error, ReleaseFailure):
             stage, code = error.stage, error.code
         else:
             code = type(error).__name__.upper()
         if stage == "VERIFY_RELEASE" and report.is_file():
             with report.open("a", encoding="utf-8") as stream:
-                stream.write(f"FIRST_FAILING_STAGE={stage}\nSANITIZED_ERROR={code}\n")
+                stream.write(f"FIRST_FAILING_STAGE={stage}\nSANITIZED_ERROR={code}\n"
+                             f"REQUIRED_ACTION={remediation_for(code)}\n")
         else:
             if "FIXED_HOME_PATH" in code:
                 state["Developer HOME leak"] = state["Developer username leak"] = "FAIL"
@@ -286,10 +442,12 @@ def build(kit: Path, output: Path, mode: str, app_identity: str | None,
             if code.startswith("BLOCKED_"):
                 text = text.replace("FINAL_RESULT=FAIL", "FINAL_RESULT=BLOCKED")
             report.write_text(text +
-                              f"\nFIRST_FAILING_STAGE={stage}\nSANITIZED_ERROR={code}\n",
+                              f"\nFIRST_FAILING_STAGE={stage}\nSANITIZED_ERROR={code}\n"
+                              f"REQUIRED_ACTION={remediation_for(code)}\n",
                               encoding="utf-8")
         status = "BLOCKED" if code.startswith("BLOCKED_") else "FAIL"
         print(f"RELEASE_GATE={status} stage={stage} error={code}", file=sys.stderr)
+        print(f"NEXT_STEP={remediation_for(code)}", file=sys.stderr)
         return 2
 
 
@@ -304,10 +462,13 @@ def main() -> int:
     parser.add_argument("--installer-identity", default=os.environ.get("ZERO_SKY_INSTALLER_IDENTITY"))
     parser.add_argument("--notary-profile", default=os.environ.get("ZERO_SKY_NOTARY_PROFILE"))
     parser.add_argument("--deny-file", type=Path)
+    parser.add_argument("--theos", type=Path,
+                        help="reviewed Theos checkout (or set THEOS)")
     args = parser.parse_args()
     return build(args.kit.resolve(), args.output.resolve(), args.mode, args.app_identity,
                  args.installer_identity, args.notary_profile,
-                 args.deny_file.resolve() if args.deny_file else None)
+                 args.deny_file.resolve() if args.deny_file else None,
+                 args.theos.resolve() if args.theos else None)
 
 
 if __name__ == "__main__":

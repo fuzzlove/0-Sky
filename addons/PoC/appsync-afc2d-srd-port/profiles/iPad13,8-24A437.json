@@ -1,0 +1,181 @@
+{
+  "architecture": "arm64e",
+  "device": {
+    "build": "24A437",
+    "product": "iPad13,8",
+    "version": "27.0"
+  },
+  "device_validation": {
+    "dependent_functionality": "ENABLED",
+    "detail": "Exact iPad13,8 / iPadOS 27.0 (24A437) artifact identities matched. 0-Sky runtime manager 2.4.20 installed the profile-bound AppSync Unified and AFC2D packages; live exact-hash injection was observed for AppSync FrontBoard, AppSync installd, and AFC2D lockdownd targets. The read-only com.apple.afc2 service probe listed the device root and statted SystemVersion.plist. A controlled 0-Sky Link reinstall reached the AppSync installd hook but was rejected later by the unrelated custom appregistrard nonce path, so this validation does not claim a complete unsigned-app installation transaction.",
+    "evidence": [
+      "artifacts/ipadpro-offset-discovery-20261003/runtime-manager-2.4.20-install-report.json",
+      "artifacts/ipadpro-offset-discovery-20261003/appsync-replace-canonical-lcuuid.json",
+      "artifacts/ipadpro-offset-discovery-20261003/afc2-replace-canonical-lcuuid.json",
+      "artifacts/ipadpro-offset-discovery-20261003/combined-installed-verification-manager2420-lcuuid.json",
+      "artifacts/ipadpro-offset-discovery-20261003/afc2-service-readonly-validation.json",
+      "artifacts/ipadpro-offset-discovery-20261003/appsync-link-install-functional.log",
+      "artifacts/ipadpro-offset-discovery-20261003/final-installed-state.json"
+    ],
+    "result": "PASS",
+    "runtime_manager_version": "2.4.20",
+    "validated_at": "2026-10-04T00:47:55Z"
+  },
+  "dyld_shared_caches": [
+    {
+      "discovery_method": "_dyld_get_shared_cache_uuid and _dyld_get_shared_cache_range",
+      "kind": "process_primary_shared_cache",
+      "mapped_size": 6399148032,
+      "uuid": "6129963B-B820-3B78-9645-F68A002C8B53"
+    }
+  ],
+  "offsets": {
+    "cf_runloop_return": {
+      "discovery_method": "resolve _CFRunLoopRun through the indirect symbol table and require one BL from LC_MAIN",
+      "evidence": {
+        "call_instruction": "0x94021337",
+        "call_site_image_offset": "0xf450",
+        "candidate_count": 1,
+        "instruction_mask": "0xfc000000",
+        "resolved_symbol": "_CFRunLoopRun"
+      },
+      "expected_section": "__TEXT,__text",
+      "file_offset": "0xf454",
+      "image": "/usr/libexec/lockdownd",
+      "meaning": "saved return PC immediately after lockdownd main calls _CFRunLoopRun",
+      "runtime_resolution": "current_lockdownd_mach_header + value",
+      "type": "image_relative_virtual_address",
+      "unslid_virtual_address": "0x10000f454",
+      "validation": {
+        "checks": [
+          "unique candidate",
+          "inside __TEXT,__text",
+          "instruction semantics matched",
+          "file and virtual bounds checked"
+        ],
+        "result": "PASS"
+      },
+      "value": "0xf454"
+    },
+    "service_ark_add_entry": {
+      "discovery_method": "xref the unique service_ark_add_entry_block_invoke marker, identify its arm64e function, then require one enclosing function reference",
+      "evidence": {
+        "block_reference_count": 1,
+        "block_start_image_offset": "0x1b380",
+        "candidate_count": 1,
+        "entry_instruction_0": "0xd503237f",
+        "entry_instruction_1": "0xd10243ff",
+        "marker_file_offset": "0x9f68d",
+        "marker_unslid_virtual_address": "0x10009f68d",
+        "marker_xref_count": 2
+      },
+      "expected_section": "__TEXT,__text",
+      "file_offset": "0x1b268",
+      "image": "/usr/libexec/lockdownd",
+      "meaning": "entry point of lockdownd's internal service_ark_add_entry function",
+      "runtime_resolution": "current_lockdownd_mach_header + value",
+      "type": "image_relative_virtual_address",
+      "unslid_virtual_address": "0x10001b268",
+      "validation": {
+        "checks": [
+          "unique candidate",
+          "inside __TEXT,__text",
+          "instruction semantics matched",
+          "file and virtual bounds checked"
+        ],
+        "result": "PASS"
+      },
+      "value": "0x1b268"
+    },
+    "service_ark_in_main_frame": {
+      "base": "lockdownd LC_MAIN frame pointer",
+      "discovery_method": "require the unique main sequence that passes two stack locals to the service-ark loader and stores its result",
+      "evidence": {
+        "ark_slot_from_sp": "0x18",
+        "candidate_count": 1,
+        "first_local_from_sp": "0x10",
+        "frame_pointer_from_sp": "0x80",
+        "instruction_words": [
+          "0x910043e0",
+          "0x910023e1",
+          "0x94000782",
+          "0xf9000be0"
+        ],
+        "main_image_offset": "0xf2a4",
+        "sequence_image_offset": "0xf3f4"
+      },
+      "expected_section": null,
+      "file_offset": null,
+      "meaning": "stack slot containing the live service-ark pointer",
+      "operation": "subtract",
+      "runtime_resolution": "main_frame_pointer - value",
+      "type": "frame_relative_displacement",
+      "unslid_virtual_address": null,
+      "validation": {
+        "checks": [
+          "unique candidate",
+          "positive aligned displacement",
+          "LC_MAIN bounds checked",
+          "four-instruction semantic sequence matched"
+        ],
+        "result": "PASS"
+      },
+      "value": "0x68"
+    }
+  },
+  "packages": [
+    {
+      "filename": "ai.akemi.appsyncunified_116.0+0sky26.1_iphoneos-arm64.deb",
+      "files": {
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-FrontBoard.dylib": "3f88f2717e806830de231dd0e780dfad89db9b5639d548a48a64f4d5fa4a596b",
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-FrontBoard.plist": "eff0e07afd4afa6713eea91fde32a92d420c39361f2ee021548dc3e01cb552ea",
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-installd.dylib": "be29ace40308c4d026558187063e6f689908ce01d7f235b96283ebe3f2b1bd32",
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-installd.plist": "98d31c678ba9eec7e15cfdc849c2bd26da866d19d5b2e880be5e7cd9c95e3385"
+      },
+      "installable": true,
+      "package": "ai.akemi.appsyncunified",
+      "package_sha256": "9bad9561fe86ccbae6de85f59c1017e9f4fe3e8ac0e8d40e51baebddc3c0b250",
+      "version": "116.0+0sky26.1"
+    },
+    {
+      "filename": "com.cannathea.afc2d-arm64_1.2.0+0sky27.5_iphoneos-arm64.deb",
+      "files": {
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/afc2dService.dylib": "87ddbf9a32081648908165fb08cbc263a2d1c9a0ea9c2cf89383dedc80aaf400",
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/afc2dService.plist": "81221171550150d8cdb6bb341284741d2f02118bcee7dbaaccec0e71ef3e29a2",
+        "/var/jb/usr/lib/afc2d-xpc-shim.dylib": "152b2f68129eb04bb89572d1100e40478b77e8f539c34631dfaddee510bdfeff",
+        "/var/jb/usr/libexec/afc2d": "e806bbda074f651a9a65e5e47dc89a4c1eba0af4ed93de5bb8d7443d744cd2b9"
+      },
+      "installable": true,
+      "package": "com.cannathea.afc2d-arm64",
+      "package_sha256": "a0c0f3daf737130fc716547df4fe9263a7c9f3c023df8c2a8379f3cb08161594",
+      "version": "1.2.0+0sky27.5"
+    }
+  ],
+  "review_evidence": {
+    "device_specific_shared_cache": "validated independently; not copied from the reference device",
+    "identical_fields": [
+      "architecture",
+      "system_binaries",
+      "offsets"
+    ],
+    "method": "fresh exact-device semantic discovery plus byte-for-byte comparison with a previously reviewed binary identity",
+    "reference_profile": "iPhone12,8-24A437.json",
+    "result": "PASS"
+  },
+  "schema": 2,
+  "status": "reviewed",
+  "system_binaries": {
+    "/usr/libexec/afcd": {
+      "architecture": "arm64e",
+      "sha256": "e5d146e938a6ede6edace50d94cf8295c99e5be4e3161f3f598a818e2351ccbf",
+      "size": 75888,
+      "uuid": "37336D14-8299-37E8-AA88-708393DE25F1"
+    },
+    "/usr/libexec/lockdownd": {
+      "architecture": "arm64e",
+      "sha256": "b42e3a6d87b67d0949fb28b3f07b65e00b4074fd67d5d3f588d01ad3365c2306",
+      "size": 968928,
+      "uuid": "AA12239B-8623-3C0F-86BD-744DBF187CEC"
+    }
+  }
+}

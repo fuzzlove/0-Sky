@@ -1,5 +1,6 @@
-# Combined project Python dependencies (offline)
-# Auto-generated from host-mac requirements
+# Canonical source/reproducibility dependency lock.
+# Binary releases install the separately manifest-verified offline wheelhouse;
+# this file does not authorize an unverified network install for distribution.
 ASGIMiddlewareStaticFile==0.7.0
 ASGIWebDAV==2.0.1
 Pygments==2.21.0

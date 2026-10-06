@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 from pathlib import Path
@@ -14,21 +15,30 @@ import tempfile
 try:
     from .kit_manifest import (APPROVAL_NAME, APPROVAL_STATES,
                                generate as generate_kit_manifest, verify as verify_kit_manifest)
-    from .stage_verified_kit import digest, stage
+    from .stage_verified_kit import REQUIRED_RUNTIME_BUILD_INPUTS, digest, stage
     from .stage_control_payload import stage as stage_control_payload
     from .verify_release import architecture_of, platform_of, wheel_coverage
+    from .host_runtime_manifest import verify as verify_host_runtime
+    from .build_host_runtime import RuntimeBuildError, build as build_host_runtime
+    from .prune_release_artifacts import prune as prune_release_artifacts
 except ImportError:
     from kit_manifest import (APPROVAL_NAME, APPROVAL_STATES,
                               generate as generate_kit_manifest, verify as verify_kit_manifest)
-    from stage_verified_kit import digest, stage
+    from stage_verified_kit import REQUIRED_RUNTIME_BUILD_INPUTS, digest, stage
     from stage_control_payload import stage as stage_control_payload
     from verify_release import architecture_of, platform_of, wheel_coverage
+    from host_runtime_manifest import verify as verify_host_runtime
+    from build_host_runtime import RuntimeBuildError, build as build_host_runtime
+    from prune_release_artifacts import prune as prune_release_artifacts
 
 
 ROOT = Path(__file__).resolve().parents[1]
 LINK_NAME = "0-Sky-Link-1.9.0-universal.ipa"
+SETUP_CONTROLLER = ROOT / "bridge/0SkyBridge/Resources/Scripts/0sky_project_setup.py"
 OVERRIDES = {
     "automation/CrypStoreAutomation/native-install/install_cryptex_native.py": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
+    "filza/install_cryptex_native.py": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/install_cryptex_native.py",
+    "filza/generate_trust_cache.py": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/generate_trust_cache.py",
     "runtime-generation/install_cryptex_native.py": ROOT / "bridge/KitScripts/runtime-generation/install_cryptex_native.py",
     "host-mac/install.py": ROOT / "bridge/HostTools/install.py",
     "host-mac/uninstall.py": ROOT / "bridge/HostTools/uninstall.py",
@@ -43,10 +53,13 @@ OVERRIDES = {
     "automation/CrypStoreAutomation/native-install/build_and_install.sh": ROOT / "bridge/KitScripts/automation/CrypStoreAutomation/native-install/build_and_install.sh",
     "runtime-generation/build_and_install.sh": ROOT / "bridge/KitScripts/runtime-generation/build_and_install.sh",
     "srdssh/rekey_image.py": ROOT / "bridge/KitScripts/srdssh/rekey_image.py",
+    "srdssh/bootstrap.py": ROOT / "bridge/KitScripts/srdssh/bootstrap.py",
+    "srdssh/install_cryptex_native.py": ROOT / "bridge/KitScripts/srdssh/install_cryptex_native.py",
     "automation/tools/srd-runtime-manager/sync_runtime_cryptex.py": ROOT / "bridge/KitScripts/automation/tools/srd-runtime-manager/sync_runtime_cryptex.py",
 }
 
 RUNTIME_MANAGER_SOURCE = ROOT / "bridge/KitScripts/automation/tools/srd-runtime-manager"
+RUNTIME_MANAGER_ADDITIONS: dict[str, Path] = {}
 for relative in (
     "runtime_manager_launcher.c",
     "codes.openai.research.srd-runtime-manager.plist",
@@ -69,9 +82,143 @@ for relative in (
     "sandboxed-injector/thread_utils.h",
     "sandboxed-injector/thread_utils.m",
 ):
-    OVERRIDES["automation/tools/srd-runtime-manager/" + relative] = (
+    RUNTIME_MANAGER_ADDITIONS["automation/tools/srd-runtime-manager/" + relative] = (
         RUNTIME_MANAGER_SOURCE / relative
     )
+
+
+def runtime_manager_version() -> str:
+    """Read the controller's exact bootstrap version without importing it."""
+    tree = ast.parse(SETUP_CONTROLLER.read_text(encoding="utf-8"),
+                     filename=str(SETUP_CONTROLLER))
+    values = [
+        node.value.value
+        for node in tree.body
+        if isinstance(node, (ast.Assign, ast.AnnAssign))
+        for target in (
+            node.targets if isinstance(node, ast.Assign) else [node.target]
+        )
+        if isinstance(target, ast.Name)
+        and target.id == "RUNTIME_MANAGER_VERSION"
+        and isinstance(node.value, ast.Constant)
+        and isinstance(node.value.value, str)
+    ]
+    if len(values) != 1 or not values[0] or any(
+            character not in "0123456789." for character in values[0]):
+        raise RuntimeError("setup controller has no unique safe runtime-manager version")
+    return values[0]
+
+
+def verify_runtime_manager_package(kit: Path) -> Path:
+    """Fail release preparation if setup names an absent or mismatched DEB."""
+    version = runtime_manager_version()
+    package = kit / f"packages/srd-runtime-manager_{version}_iphoneos-arm64.deb"
+    dpkg_deb = kit / "host-mac/runtime/bin/dpkg-deb"
+    if package.is_symlink() or not package.is_file():
+        raise RuntimeError(
+            "required runtime-manager bootstrap package is missing: "
+            + package.relative_to(kit).as_posix()
+        )
+    if dpkg_deb.is_symlink() or not dpkg_deb.is_file():
+        raise RuntimeError("bundled dpkg-deb is unavailable for device-package verification")
+    expected = {
+        "Package": "com.liquidskysecurity.srd-runtime-manager",
+        "Version": version,
+        "Architecture": "iphoneos-arm64",
+    }
+    for field, wanted in expected.items():
+        result = subprocess.run(
+            [str(dpkg_deb), "--field", str(package), field],
+            check=True, capture_output=True, text=True, timeout=30,
+        )
+        observed = result.stdout.strip()
+        if observed != wanted:
+            raise RuntimeError(
+                f"runtime-manager package {field} mismatch: "
+                f"expected {wanted!r}, observed {observed!r}"
+            )
+    print(
+        f"RUNTIME_MANAGER_PACKAGE=PASS version={version} "
+        f"sha256={digest(package)}",
+        flush=True,
+    )
+    return package
+
+
+def verify_runtime_builder_inputs(kit: Path) -> None:
+    """Require every source file compiled during first-device enrollment."""
+    missing = [
+        relative for relative in sorted(REQUIRED_RUNTIME_BUILD_INPUTS)
+        if (kit / relative).is_symlink() or not (kit / relative).is_file()
+    ]
+    if missing:
+        raise RuntimeError(
+            "required first-runtime Xcode inputs are missing: " + ", ".join(missing)
+        )
+    print(
+        "FIRST_RUNTIME_BUILD_INPUTS=PASS files="
+        + str(len(REQUIRED_RUNTIME_BUILD_INPUTS)),
+        flush=True,
+    )
+
+
+def verify_dpkg_build_capability(kit: Path) -> None:
+    """Prove the offline helper can build, inspect, and extract a device DEB."""
+    helper = kit / "host-mac/runtime/bin/dpkg-deb"
+    if helper.is_symlink() or not helper.is_file():
+        raise RuntimeError("bundled dpkg-deb build helper is missing")
+    def checked(argv: list[str], *, timeout: int,
+                environment: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+        try:
+            return subprocess.run(
+                argv, check=True, capture_output=True, text=True,
+                timeout=timeout, env=environment,
+            )
+        except (OSError, subprocess.SubprocessError) as error:
+            raise RuntimeError(
+                "bundled dpkg-deb build capability is unavailable"
+            ) from error
+    with tempfile.TemporaryDirectory(prefix=".0sky-dpkg-build-", dir=kit.parent) as folder:
+        work = Path(folder)
+        root = work / "root"
+        control = root / "DEBIAN/control"
+        payload = root / "var/jb/usr/share/0sky-release-probe.txt"
+        control.parent.mkdir(parents=True)
+        payload.parent.mkdir(parents=True)
+        control.write_text(
+            "Package: codes.openai.research.release-probe\n"
+            "Version: 1.0\nArchitecture: iphoneos-arm64\n"
+            "Description: Offline build-capability probe\n",
+            encoding="utf-8",
+        )
+        payload.write_text("0-Sky offline device package build probe\n", encoding="utf-8")
+        first, second = work / "first.deb", work / "second.deb"
+        environment = dict(os.environ)
+        environment["SOURCE_DATE_EPOCH"] = "1789257600"
+        for destination in (first, second):
+            checked(
+                [str(helper), "--root-owner-group", "-b", str(root), str(destination)],
+                timeout=60, environment=environment,
+            )
+        if digest(first) != digest(second):
+            raise RuntimeError("bundled dpkg-deb build output is not reproducible")
+        for field, expected in (
+            ("Package", "codes.openai.research.release-probe"),
+            ("Version", "1.0"),
+            ("Architecture", "iphoneos-arm64"),
+        ):
+            result = checked(
+                [str(helper), "--field", str(first), field], timeout=30,
+            )
+            if result.stdout.strip() != expected:
+                raise RuntimeError("bundled dpkg-deb build metadata proof failed")
+        extracted = work / "extracted"
+        checked(
+            [str(helper), "--extract", str(first), str(extracted)], timeout=30,
+        )
+        if (extracted / payload.relative_to(root)).read_bytes() != payload.read_bytes():
+            raise RuntimeError("bundled dpkg-deb build extraction proof failed")
+    print("DPKG_DEB_OFFLINE_BUILD=PASS reproducible=YES", flush=True)
 
 
 def stage_link_control_only(verified_kit: Path, destination: Path) -> None:
@@ -113,6 +260,7 @@ def apply_portability_overrides(kit: Path) -> None:
     overlays = {
         "automation/CrypStoreAutomation/trollstorelite-srd-bridge.py": ROOT / "bridge/DeviceRuntime/trollstorelite-srd-bridge.py",
         "automation/CrypStoreAutomation/bootsplash-launch.py": ROOT / "bridge/DeviceRuntime/bootsplash_launch.py",
+        **RUNTIME_MANAGER_ADDITIONS,
     }
     for package, destinations in (
         (compatibility, ("automation/CrypStoreAutomation/zero_sky_compat", "automation/tools/srd-runtime-manager/zero_sky_compat")),
@@ -134,13 +282,12 @@ def apply_portability_overrides(kit: Path) -> None:
         slot = "./" + relative
         rows = [row for row in rows if row.split(None, 1)[-1] != slot]
         rows.append(f"{digest(target)}  {slot}")
-    # Old vendor entry points are retained only in the verified input kit.
-    # Release-facing wrappers delegate to the canonical compatibility engine.
+    # Obsolete vendor entry points are retained only in the verified input
+    # kit. Release-facing wrappers delegate to the compatibility engine. The
+    # source-controlled SRDssh bootstrap and installer above are canonical
+    # transactional adapters and must remain executable for fresh devices.
     guard = ROOT / "bridge/HostTools/compatibility_guard.py"
     for relative in (
-        "srdssh/bootstrap.py",
-        "srdssh/install_cryptex_native.py",
-        "filza/install_cryptex_native.py",
         "automation/CrypStoreAutomation/crypstore_keeper.py",
         "automation/CrypStoreAutomation/sileo-package-bridge-v8.py",
         "automation/CrypStoreAutomation/sileo-research-bridge.py",
@@ -209,6 +356,12 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
         candidate = work / "release-kit"
         count = stage(source, candidate, release=True)
         apply_portability_overrides(candidate)
+        verify_runtime_builder_inputs(candidate)
+        print("HOST_RUNTIME_BUILD=START pinned dual-architecture runtime", flush=True)
+        build_host_runtime(candidate, ROOT / ".build/host-runtime-cache")
+        verify_host_runtime(candidate)
+        verify_dpkg_build_capability(candidate)
+        verify_runtime_manager_package(candidate)
         staged_control = stage_control_payload(candidate, build=False)
         if staged_control["sha256"] != digest(embedded / "packages/Commissary-Universal.ipa"):
             raise RuntimeError("Link and release kit have different Control payload bytes")
@@ -228,7 +381,9 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
         if deny_file:
             scan += ["--deny-file", str(deny_file.resolve(strict=True))]
         subprocess.run(scan, timeout=120, check=True)
-        python312 = shutil.which("python3.12")
+        python312 = str(candidate / "host-mac/runtime/bin/python3")
+        if not Path(python312).is_file():
+            python312 = shutil.which("python3.12") or ""
         if not python312:
             raise RuntimeError("Python 3.12 is required for the offline install test")
         subprocess.run([sys.executable, str(ROOT / "tools/test_offline_install.py"),
@@ -236,6 +391,7 @@ def prepare(source: Path, output: Path, *, deny_file: Path | None = None) -> int
                        timeout=900, check=True)
         subprocess.run([sys.executable, str(ROOT / "tools/wheel_inventory.py"),
                         str(candidate)], timeout=120, check=True)
+        prune_release_artifacts(candidate)
         (candidate / APPROVAL_NAME).write_text(
             json.dumps({"schema_version": 1, "states": list(APPROVAL_STATES)},
                        sort_keys=True) + "\n", encoding="utf-8")
@@ -270,13 +426,73 @@ def main() -> int:
         parser.error("source and output must be different directories")
     try:
         prepare(args.source, args.output, deny_file=args.deny_file)
+    except RuntimeBuildError as error:
+        print(json.dumps({"category": "host-runtime-source-missing",
+                          "detail": error.detail}), file=sys.stderr)
+        print("REQUIRED_ACTION:", file=sys.stderr)
+        for line in error.remediation.splitlines():
+            print(f"  {line}", file=sys.stderr)
+        return 2
     except subprocess.CalledProcessError as error:
         operation = Path(error.cmd[1] if len(error.cmd) > 1 else error.cmd[0]).name
         print(f"RELEASE_KIT=FAIL operation={operation} exit={error.returncode}",
               file=sys.stderr)
         return 2
     except (OSError, RuntimeError, subprocess.SubprocessError, ValueError) as error:
-        print(f"RELEASE_KIT=FAIL {type(error).__name__}", file=sys.stderr)
+        message = str(error)
+        known = (
+            ("offline Mac wheel architecture coverage failed", "OFFLINE_WHEEL_ARCHITECTURE_COVERAGE_FAILED"),
+            ("required portable script is missing:", "REQUIRED_PORTABLE_SCRIPT_MISSING"),
+            ("required Mac helper lacks Universal 2 slices", "MAC_HELPER_NOT_UNIVERSAL2"),
+            ("Python 3.12 is required", "PYTHON312_MISSING"),
+            ("generated release kit manifest failed validation", "GENERATED_MANIFEST_INVALID"),
+            ("required runtime-manager bootstrap package is missing:",
+             "DEVICE_RUNTIME_BOOTSTRAP_MISSING"),
+            ("runtime-manager package ", "DEVICE_RUNTIME_BOOTSTRAP_METADATA_MISMATCH"),
+            ("required first-runtime Xcode inputs are missing:",
+             "FIRST_RUNTIME_XCODE_INPUTS_MISSING"),
+            ("bundled dpkg-deb build", "OFFLINE_DPKG_BUILD_UNAVAILABLE"),
+        )
+        code = next((value for text, value in known if text in message),
+                    type(error).__name__.upper())
+        print(f"RELEASE_KIT=FAIL code={code}", file=sys.stderr)
+        if code == "REQUIRED_PORTABLE_SCRIPT_MISSING":
+            relative = message.partition(":")[2].strip()
+            if relative and not Path(relative).is_absolute() and ".." not in Path(relative).parts:
+                print(f"MISSING_RELATIVE_PATH={relative}", file=sys.stderr)
+        elif code in {
+            "DEVICE_RUNTIME_BOOTSTRAP_MISSING",
+            "DEVICE_RUNTIME_BOOTSTRAP_METADATA_MISMATCH",
+        }:
+            print(f"DETAIL={message}", file=sys.stderr)
+            print("REQUIRED_ACTION:", file=sys.stderr)
+            print(
+                "  Supply the exact controller-selected runtime-manager DEB with "
+                "Package=com.liquidskysecurity.srd-runtime-manager, matching Version, "
+                "and Architecture=iphoneos-arm64. Rebuild and verify the DEB; do not "
+                "rename a different package to bypass this gate.",
+                file=sys.stderr,
+            )
+        elif code == "FIRST_RUNTIME_XCODE_INPUTS_MISSING":
+            print(f"DETAIL={message}", file=sys.stderr)
+            print("REQUIRED_ACTION:", file=sys.stderr)
+            print(
+                "  Recreate the external kit from its manifest-verified source. "
+                "It must include test_host.c, test_tweak.c, and test_tweak.plist "
+                "under automation/tools/srd-runtime-manager. These historical "
+                "test-named files are production enrollment compiler inputs.",
+                file=sys.stderr,
+            )
+        elif code == "OFFLINE_DPKG_BUILD_UNAVAILABLE":
+            print(f"DETAIL={message}", file=sys.stderr)
+            print("REQUIRED_ACTION:", file=sys.stderr)
+            print(
+                "  Rebuild the pinned host runtime from this source revision. "
+                "The bundled dpkg-deb helper must reproducibly support "
+                "`--root-owner-group -b ROOT OUTPUT` in addition to field and "
+                "extract operations; users must not install Homebrew dpkg.",
+                file=sys.stderr,
+            )
         return 2
     return 0
 

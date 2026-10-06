@@ -48,3 +48,22 @@ def require_identity(value: str | None, category: str, identities: list[Identity
     if len(matches) != 1:
         raise RuntimeError("BLOCKED_MISSING_DISTRIBUTION_SIGNING_IDENTITY")
     return matches[0].fingerprint
+
+
+def resolve_identity(value: str | None, category: str,
+                     identities: list[Identity]) -> str:
+    """Validate an explicit fingerprint or select the sole valid identity.
+
+    Automatic selection is deliberately limited to exactly one identity in the
+    requested category. Machines with multiple release identities must make
+    the choice explicit, preventing an accidental cross-team release.
+    """
+    if value:
+        return require_identity(value, category, identities)
+    matches = [identity for identity in identities
+               if identity.category == category]
+    if not matches:
+        raise RuntimeError("BLOCKED_MISSING_DISTRIBUTION_SIGNING_IDENTITY")
+    if len(matches) != 1:
+        raise RuntimeError("BLOCKED_AMBIGUOUS_DISTRIBUTION_SIGNING_IDENTITY")
+    return matches[0].fingerprint

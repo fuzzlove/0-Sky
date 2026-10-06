@@ -23,7 +23,7 @@ class LinkWorkerTransactionTests(unittest.TestCase):
             source,
         )
         self.assertIn(
-            "if bundle_id in NATIVE_FIRST_PARTY else\n"
+            'if bundle_id == "com.liquidsky.CrypStore" else\n'
             "                      register_and_link",
             source,
         )
@@ -44,7 +44,7 @@ class LinkWorkerTransactionTests(unittest.TestCase):
                 if argv[0] == "/usr/bin/ditto":
                     (Path(argv[-1]) / "Payload/ZeroSky.app").mkdir(parents=True)
 
-            def fail_registration(*_args):
+            def fail_registration(*_args, **_kwargs):
                 calls.append("register")
                 raise RuntimeError("registration interrupted")
 
@@ -67,7 +67,9 @@ class LinkWorkerTransactionTests(unittest.TestCase):
                 "evaluate_control_compatibility": lambda _path: {"result": "COMPATIBLE"},
                 "snapshot_native_control": lambda *_args: previous,
                 "build_install_cryptex": lambda *_args: ("verified-cryptex", root),
-                "install_native_control": fail_registration,
+                "locate_mount": lambda *_args: "/verified/mount/ZeroSky.app",
+                "foreground_launch_policy": lambda *_args: "REQUIRED",
+                "register_and_link": fail_registration,
                 "rollback_native_control": rollback,
             }
             with patch.dict(globals_, replacements):

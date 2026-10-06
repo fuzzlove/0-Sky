@@ -47,6 +47,66 @@ class EnvironmentPreflightTests(unittest.TestCase):
             self.assertEqual(result["kit"]["status"], "BLOCKED")
             self.assertEqual(result["status"], "BLOCKED")
 
+    def test_missing_theos_prints_complete_install_sequence(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            result = preflight.report(mode="development", kit=Path(folder) / "missing-kit",
+                                      environment={}, discover_device=False)
+        self.assertEqual(result["theos"]["status"], "BLOCKED")
+        action = result["theos"]["remediation"]
+        self.assertIn("git clone --recursive", action)
+        self.assertIn("dd5c14bb9d91311e221d51b5bfb8c9e5948156db", action)
+        self.assertIn("submodule update --init --recursive", action)
+
+    def test_human_report_prints_exact_repair_command(self) -> None:
+        value = {"status": "BLOCKED", "toolchain": [{"tool": "xcodebuild",
+                 "status": "FAIL", "remediation":
+                 "sudo xcode-select -s /Applications/Xcode.app/Contents/Developer"}],
+                 "kit": {"status": "PASS"}, "host_runtime": {"status": "REPAIRABLE",
+                 "remediation": "python3 tools/build_host_runtime.py KIT"},
+                 "theos": {"status": "BLOCKED", "remediation": "git clone --recursive URL"}}
+        rendered = preflight.human_report(value)
+        self.assertIn("Required action:", rendered)
+        self.assertIn("sudo xcode-select", rendered)
+        self.assertIn("python3 tools/build_host_runtime.py", rendered)
+        self.assertIn("git clone --recursive", rendered)
+
+    @patch.object(preflight, "discover_signing_identities", return_value=[])
+    def test_release_signing_lists_each_missing_requirement(self, _discover) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            result = preflight.report(mode="release", kit=Path(folder) / "missing-kit",
+                                      environment={}, discover_device=False)
+        security = result["security"]
+        self.assertEqual(security["status"], "BLOCKED")
+        self.assertIn("Developer ID Application", security["detail"])
+        self.assertIn("Developer ID Installer", security["detail"])
+        self.assertIn("notarytool", security["remediation"])
+
+    @patch.object(preflight, "validate_notary_profile", return_value=True)
+    @patch.object(preflight, "discover_signing_identities")
+    def test_release_signing_accepts_one_identity_of_each_type(self, discover, _notary) -> None:
+        from tools.signing_identities import Identity
+        discover.return_value = [Identity("A" * 40, "Developer ID Application"),
+                                 Identity("B" * 40, "Developer ID Installer")]
+        with tempfile.TemporaryDirectory() as folder:
+            result = preflight.report(mode="release", kit=Path(folder) / "missing-kit",
+                                      notary_profile="release-profile", environment={},
+                                      discover_device=False)
+        self.assertEqual(result["security"]["status"], "PASS")
+
+    @patch.object(preflight, "validate_notary_profile", return_value=False)
+    @patch.object(preflight, "discover_signing_identities")
+    def test_release_signing_rejects_invalid_notary_profile(self, discover, _notary) -> None:
+        from tools.signing_identities import Identity
+        discover.return_value = [Identity("A" * 40, "Developer ID Application"),
+                                 Identity("B" * 40, "Developer ID Installer")]
+        with tempfile.TemporaryDirectory() as folder:
+            result = preflight.report(mode="release", kit=Path(folder) / "missing-kit",
+                                      notary_profile="invalid-profile", environment={},
+                                      discover_device=False)
+        self.assertEqual(result["security"]["status"], "BLOCKED")
+        self.assertEqual(result["security"]["notary_profile"], "invalid")
+        self.assertIn("did not authenticate", result["security"]["remediation"])
+
 
 if __name__ == "__main__":
     unittest.main()

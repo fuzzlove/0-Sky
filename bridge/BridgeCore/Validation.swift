@@ -73,6 +73,11 @@ public enum BridgeValidation {
             "HOME": FileManager.default.homeDirectoryForCurrentUser.path,
             "LANG": "en_US.UTF-8",
             "LC_ALL": "en_US.UTF-8",
+            // Some approved Python entry points execute directly from the
+            // signed application kit.  Never let those processes add
+            // __pycache__ files to the bundle and invalidate its resource
+            // seal after first launch.
+            "PYTHONDONTWRITEBYTECODE": "1",
         ]
         for (key, value) in overrides {
             guard matches(allowed, key), !value.contains("\0") else {

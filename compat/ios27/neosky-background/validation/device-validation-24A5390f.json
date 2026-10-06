@@ -1,0 +1,78 @@
+{
+  "schema": 1,
+  "target": {
+    "hardware_model": "iPhone13,2",
+    "ios_version": "27.0",
+    "ios_build": "24A5390f",
+    "device_identifier": "REDACTED"
+  },
+  "package": {
+    "identifier": "xyz.0sky.neoskybackground",
+    "version": "1.0.0+0sky27.7",
+    "host_artifact_sha256": "9adc1294fd36c9fb9cdb31be98b8914101e2f391f47271e5291a33c75bd2b18b",
+    "installation": "VERIFIED",
+    "backup_before_install": "/var/jb/var/lib/srd-runtime/backups/pre-neosky-20261004T001308Z"
+  },
+  "runtime_refresh": {
+    "status": "SUCCESS",
+    "generation": "20261004T001312Z",
+    "standard_refresh_issue": "host entry point selected Python 3.9 while the runtime builder requires Python >=3.12",
+    "tested_workaround": "run the support sync_runtime_cryptex.py with the repository .venv/bin/python"
+  },
+  "runtime": {
+    "current_variant_injection": "VERIFIED",
+    "installed_dylib_sha256": "f82810d3e7459aaf25a184a13eaeea62c05313d94fdbf28c9ad0b39ec1d7f546",
+    "home_visual": {
+      "status": "VERIFIED_CURRENT_VARIANT",
+      "version": "1.0.0+0sky27.7",
+      "result": "native statistics visible behind Home Screen icons after late injection without forcing a UIKit layout pass",
+      "screenshot_sha256": "69e91d2e1e5b24e2612507760bfaffc11b9d501755f935d47eb85a726860b114",
+      "screenshot_retained_in_repository": false
+    },
+    "lock_visual": {
+      "status": "FAILED_UNVERIFIED",
+      "versions_tested": [
+        "1.0.0+0sky27.4",
+        "1.0.0+0sky27.5"
+      ],
+      "result": "hook diagnostics became active but screenshots contained no NeoSky text",
+      "current_default": "disabled"
+    },
+    "quarantine": "NOT_QUARANTINED",
+    "diagnostics": {
+      "exactBuild": true,
+      "homeActive": true,
+      "lockActive": false,
+      "status": "active-home"
+    },
+    "combined_stack_loaded": [
+      "AppSyncUnified-FrontBoard.dylib",
+      "Atria.dylib",
+      "CraneSB.dylib",
+      "CraneSBCompat.dylib",
+      "Cylinder.dylib",
+      "Jellyfish27.dylib",
+      "NeoSkyBackground.dylib",
+      "Stella.dylib"
+    ]
+  },
+  "crash_evidence": {
+    "latest_report": "SpringBoard-2026-10-03-192041.ips",
+    "exception": "EXC_CRASH SIGABRT",
+    "failure_signature": "NSAssertionHandler -> SBHomeScreenController createModalLibraryControllerForWindowScene -> SBContinuityDisplayDelayedUIWindowSceneDelegate",
+    "neosky_faulting_frame": false,
+    "notes": "NeoSky was present in the loaded image list but no tweak appeared in the faulting stack. Earlier transition reports had a distinct Atria doesNotRecognizeSelector signature. Do not describe the combined stack as crash-free."
+  },
+  "afc2": {
+    "status_before_repair": "InvalidService",
+    "repair_backup": "/var/jb/var/lib/srd-runtime/backups/pre-afc2-registry-repair-20261004T001742Z.json",
+    "status_after_repair": "FUNCTIONAL_PASS",
+    "root_listing_verified": true,
+    "post_runtime_refresh_recheck": "FUNCTIONAL_PASS"
+  },
+  "remaining_gaps": [
+    "Lock Screen visual output remains unverified and default-off.",
+    "The standard host refresh path still selects Python 3.9 instead of the required Python >=3.12.",
+    "Longer combined-stack soak testing is required because one unrelated SpringBoard Continuity assertion occurred after the runtime refresh."
+  ]
+}

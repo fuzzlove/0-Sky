@@ -72,7 +72,11 @@ public struct BridgeEnvironment: Sendable {
         var backends: [any DeviceDiscoveryBackend] = [
             CoreDeviceDiscoveryBackend(runner: runner)
         ]
-        if let python = Self.findPymobilePython(supportRoot: paths.supportRoot) {
+        let managedPython = try? paths.projectPython()
+        let discoveryPython = paths.bundledKitRoot == nil
+            ? (managedPython ?? Self.findPymobilePython(supportRoot: paths.supportRoot))
+            : managedPython
+        if let python = discoveryPython {
             backends.append(PymobileDeviceDiscoveryBackend(pythonURL: python, runner: runner))
             backends.append(RemoteXPCDiscoveryBackend(pythonURL: python, runner: runner))
         }
@@ -123,6 +127,8 @@ public struct BridgeEnvironment: Sendable {
     }
 
     private static func findPymobilePython(supportRoot: URL) -> URL? {
+        let shared = supportRoot.appendingPathComponent("venv/bin/python3")
+        if FileManager.default.isExecutableFile(atPath: shared.path) { return shared }
         let instances = supportRoot.appendingPathComponent("instances")
         let directories = (try? FileManager.default.contentsOfDirectory(
             at: instances, includingPropertiesForKeys: nil,
@@ -131,9 +137,6 @@ public struct BridgeEnvironment: Sendable {
         for directory in directories.sorted(by: { $0.path < $1.path }) {
             let candidate = directory.appendingPathComponent("venv/bin/python3")
             if FileManager.default.isExecutableFile(atPath: candidate.path) { return candidate }
-        }
-        if let discovered = HostToolResolver.executable("python3") {
-            return URL(fileURLWithPath: discovered)
         }
         return nil
     }

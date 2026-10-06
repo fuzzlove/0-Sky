@@ -36,17 +36,20 @@ struct DashboardView: View {
                     DependencyCard(model: model)
                 }
                 HStack {
-                    Button("Fix Bridge") { model.fixBridge() }
+                    Button("Set Up Bridge and SRD") { model.openSetupAssistant(step: 0) }
                         .buttonStyle(.borderedProminent)
                         .controlSize(.large)
+                        .disabled(model.isBusy)
+                    Button("Repair") { model.fixBridge() }
+                        .controlSize(.large)
                         .disabled(model.isBusy || model.selectedDevice == nil)
-                    Button("Reconnect") { model.reconnect() }
+                    if model.iosSetupError != nil {
+                        Button("Resume") { model.openSetupAssistant(step: 7) }
+                            .controlSize(.large)
+                            .disabled(model.isBusy || model.selectedDevice == nil)
+                    }
+                    Button("Diagnostics") { model.runDiagnostics() }
                         .controlSize(.large)
-                    Button("Run Diagnostics") { model.runDiagnostics() }
-                        .controlSize(.large)
-                    Button("Set Up iOS Components") { model.openSetupAssistant(step: 7) }
-                        .controlSize(.large)
-                        .disabled(model.selectedDevice == nil)
                     Spacer()
                     Text(DiagnosticRedactor.redact(model.statusMessage)).foregroundStyle(.secondary)
                 }
@@ -288,7 +291,7 @@ struct DependencyCard: View {
                 }
             }
             if model.hasMissingDependencies {
-                Text("One guided installer adds Homebrew Python 3.12, dpkg, USB tooling, and the pinned offline 0-Sky environment.")
+                Text("One guided installer verifies the bundled Python 3.12 and USB tools, then creates the pinned offline 0-Sky environment. No Homebrew installation is required.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 Button("Install All 0-Sky Requirements") {
@@ -356,7 +359,7 @@ struct DevicesView: View {
                         HealthDetails(snapshot: model.health)
                         HStack {
                             if !model.selectedHasProfile {
-                                Button("Set Up New Device") { model.enrollSelectedDevice() }
+                                Button("Set Up New Device…") { model.enrollSelectedDevice() }
                                     .buttonStyle(.borderedProminent)
                             }
                             Button("Pair This Mac") { model.pairDevice() }
@@ -1208,7 +1211,7 @@ struct SetupAssistantView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Welcome to 0-Sky Bridge").font(.largeTitle.bold())
+            Text("Set Up Bridge and SRD").font(.largeTitle.bold())
             ProgressView(value: Double(step + 1), total: Double(steps.count))
             Text("Step \(step + 1) of \(steps.count)")
                 .font(.caption.monospacedDigit()).foregroundStyle(.secondary)
@@ -1217,7 +1220,7 @@ struct SetupAssistantView: View {
             if step == 1 && model.hasMissingDependencies {
                 Button("Install All 0-Sky Requirements") { model.installMissingDependencies() }
                     .buttonStyle(.borderedProminent)
-                Text("Installs Python 3.12, dpkg, USB tools, and the isolated 0-Sky Python environment. Terminal keeps Apple and Homebrew prompts visible.")
+                Text("Verifies the app's bundled Python 3.12, Debian extractor, and USB tools, then creates the isolated 0-Sky Python environment. Terminal shows every required action; Homebrew is not required.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             if step == 7 {
@@ -1226,9 +1229,11 @@ struct SetupAssistantView: View {
                         Label(component, systemImage: "shippingbox")
                             .font(.callout)
                     }
-                    Button(model.selectedHasProfile
-                           ? "Install Complete 0-Sky iOS Project…"
-                           : "Enroll New Device and Install Complete Project…") {
+                    Button(model.iosSetupError != nil
+                           ? "Resume Verified Setup…"
+                           : (model.selectedHasProfile
+                              ? "Install Complete 0-Sky iOS Project…"
+                              : "Enroll New Device and Install Complete Project…")) {
                         confirmIOSComponentSetup = true
                     }
                     .buttonStyle(.borderedProminent)
@@ -1316,11 +1321,11 @@ struct SetupAssistantView: View {
     private var instruction: String {
         switch step {
         case 0: "0-Sky Bridge requires macOS 15 or later and Apple developer services for SRD workflows."
-        case 1: "Select Install Missing Dependencies to add only missing Homebrew tools and the pinned offline Python environment. Installed components are preserved."
+        case 1: "Select Install All 0-Sky Requirements. It verifies the self-contained runtime and repairs only the pinned per-user environment. If the app bundle is incomplete, it explains exactly how to reinstall or rebuild it."
         case 2: "The app inspects instance-scoped USB, worker, bridge, and Bluetooth services."
         case 3: "Connect and unlock an authorized iPhone or iPad. Discovery runs continuously."
         case 4: "Approve this Mac using Apple's normal Trust This Computer and Developer Paired Macs workflows."
-        case 5: "Use Pair This Mac. The operation adds this computer to the device's bounded trusted-Mac registry without replacing existing computers."
+        case 5: "For an already prepared SRD, Pair This Mac adds this computer to the bounded trusted-Mac registry. For a fresh SRD, continue to Complete Project Setup; it establishes SRDssh over exact-device RemoteXPC before it creates the host pairing."
         case 6: "Enable wireless pairing while USB remains connected."
         case 7: "Install the complete device-side 0-Sky Project—including Link and Control—with one reviewed, instance-scoped operation. Detailed output is retained in the researcher console and logs."
         case 8: "0-Sky Link is verified over the authenticated, pinned device connection."

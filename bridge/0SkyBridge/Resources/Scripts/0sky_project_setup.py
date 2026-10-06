@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import base64
 import datetime as dt
 import hashlib
 import inspect
@@ -28,6 +29,7 @@ import sys
 import threading
 import time
 from typing import Any
+import zipfile
 
 _config_module_directory = Path(__file__).resolve().parent
 if not (_config_module_directory / "zero_sky_user_config.py").is_file():
@@ -63,7 +65,12 @@ IDENTITY_DEFAULT = Path(USER_CONFIG["paths"]["ssh_identity"])
 UDID_RE = re.compile(r"^[A-Za-z0-9-]{20,80}$")
 FILZA_BUNDLE_ID = "com.tigisoftware.Filza"
 FILZA_VERSION = "4.0"
-RUNTIME_MANAGER_VERSION = "2.4.17"
+# This is the immutable bootstrap package shipped in the verified kit. Newer
+# runtime sources are assembled into the per-device Cryptex immediately after
+# this package establishes Python. Keep this value synchronized with the
+# package release gate in tools/prepare_release_kit.py; never name an artifact
+# that the bundle does not contain.
+RUNTIME_MANAGER_VERSION = "2.4.10"
 FILZA_CRYPTEX_ID = "codes.rambo.research.filza.permanent"
 FILZA_CRYPTEX_VERSION = "1.0.1789361256"
 FILZA_APP_NAME = "FilzaFixed.6907.app"
@@ -105,9 +112,51 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def bundled_ipa_identity(path: Path, expected_bundle_id: str) -> dict[str, str]:
+    """Return the release-bound identity instead of duplicating a version."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            unsafe = [name for name in names if (Path(name).is_absolute()
+                      or ".." in Path(name).parts or "\\" in name)]
+            infos = [name for name in names if name.startswith("Payload/")
+                     and name.count("/") == 2 and name.endswith(".app/Info.plist")]
+            if unsafe or len(infos) != 1:
+                raise ValueError("unsafe or ambiguous application archive")
+            info = plistlib.loads(archive.read(infos[0]))
+    except (OSError, ValueError, zipfile.BadZipFile, plistlib.InvalidFileException) as error:
+        raise PoCError(f"invalid bundled application payload: {path.name}: {error}") from error
+    if info.get("CFBundleIdentifier") != expected_bundle_id:
+        raise PoCError(f"bundled application identity mismatch: {path.name}")
+    version = info.get("CFBundleShortVersionString")
+    build = info.get("CFBundleVersion")
+    if not isinstance(version, str) or not version or not isinstance(build, str) or not build:
+        raise PoCError(f"bundled application version is missing: {path.name}")
+    return {"bundle_id": expected_bundle_id, "version": version, "build": build}
+
+
+def safe_manifest_entry(root: Path, path: Path) -> bool:
+    """Accept regular files and only relative links contained by the kit."""
+    if not path.is_file():
+        return False
+    if not path.is_symlink():
+        return True
+    try:
+        target = Path(os.readlink(path))
+        if target.is_absolute() or ".." in target.parts:
+            return False
+        resolved_root = root.resolve(strict=True)
+        resolved_target = path.resolve(strict=True)
+        return resolved_root in resolved_target.parents
+    except (OSError, RuntimeError):
+        return False
+
+
 def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = None,
         capture: bool = False, input_data: bytes | None = None,
-        log_file: Path | None = None) -> subprocess.CompletedProcess:
+        log_file: Path | None = None,
+        stream_output: bool = False,
+        environment: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     command = [str(value) for value in argv]
     executable = Path(command[0]).name
     phase = Path(command[1]).stem if len(command) > 1 and command[1].endswith(".py") else executable
@@ -121,13 +170,18 @@ def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = Non
         stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        env=environment,
     )
     _ACTIVE_CHILD = process
     output_queue: queue.Queue[tuple[str, bytes | None]] = queue.Queue()
 
     def drain(name: str, stream: Any) -> None:
         try:
-            for block in iter(lambda: stream.read(64 * 1024), b""):
+            # Child stages flush progress one line at a time. A large buffered
+            # read waits for 64 KiB or EOF and made the GUI show only its
+            # heartbeat for long-running native stages. Read complete lines so
+            # the private artifact and expandable technical log update live.
+            for block in iter(stream.readline, b""):
                 output_queue.put((name, block))
         finally:
             output_queue.put((name, None))
@@ -182,7 +236,7 @@ def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = Non
                 if log_handle:
                     log_handle.write(block)
                     log_handle.flush()
-                if not capture:
+                if stream_output or not capture:
                     console = sys.stdout.buffer if stream_name == "stdout" else sys.stderr.buffer
                     console.write(block)
                     console.flush()
@@ -194,6 +248,11 @@ def run(argv: list[str | Path], *, check: bool = True, timeout: int | None = Non
                 next_heartbeat = now + 10
     finally:
         _ACTIVE_CHILD = None
+        for reader in readers:
+            reader.join(timeout=1)
+        for stream in (process.stdout, process.stderr):
+            if stream is not None:
+                stream.close()
         if log_handle:
             log_handle.close()
     completed = subprocess.CompletedProcess(
@@ -271,17 +330,10 @@ def verify_manifest() -> int:
         expected, raw = line.split(None, 1)
         relative = raw.strip().lstrip("*").removeprefix("./")
         path = KIT / relative
-        # The minimal SRDssh payload deliberately uses one relative `sh ->
-        # toybox` applet link. Accept only that exact, non-traversing link;
-        # every other manifest entry must remain a regular file.
-        approved_link = (
-            relative == "srdssh/payload-root/usr/bin/sh"
-            and path.is_symlink()
-            and os.readlink(path) == "toybox"
-        )
-        if (not path.is_file()
-                or (path.is_symlink() and not approved_link)
-                or sha256(path) != expected):
+        # The Universal Python runtime and SRD payload intentionally contain
+        # relative applet/entry-point links. Accept them only when they cannot
+        # traverse and resolve to a manifest-bound file inside this kit.
+        if not safe_manifest_entry(KIT, path) or sha256(path) != expected:
             raise PoCError(f"kit integrity check failed: {relative}")
         count += 1
     if count < 10:
@@ -356,6 +408,68 @@ def slug_for(device: dict[str, str], existing: dict[str, str] | None) -> str:
     return f"{family}-srd-{suffix}"
 
 
+def canonical_profile_binding(device: dict[str, str]) -> dict[str, str] | None:
+    """Recover the endpoint reserved by an interrupted deterministic setup."""
+    instance = slug_for(device, None)
+    directory = SUPPORT / "instances" / instance
+    config = directory / "config.json"
+    if not directory.exists():
+        return None
+    if directory.is_symlink() or not directory.is_dir():
+        raise PoCError("the deterministic setup directory is unsafe; export Diagnostics")
+    if not config.exists():
+        return None
+    if config.is_symlink() or not config.is_file():
+        raise PoCError("the deterministic setup profile is unsafe; export Diagnostics")
+    try:
+        value = json.loads(config.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as error:
+        raise PoCError(
+            "the deterministic setup profile is unreadable; use Repair Host Profile"
+        ) from error
+    raw_port = value.get("ssh_port")
+    try:
+        port = int(raw_port)
+    except (TypeError, ValueError) as error:
+        raise PoCError(
+            "the interrupted setup profile has no valid local SSH port; use Repair Host Profile"
+        ) from error
+    expected = {
+        "udid": device["udid"], "instance": instance, "ssh_host": "127.0.0.1",
+    }
+    mismatch = next(
+        (key for key, wanted in expected.items() if str(value.get(key, "")) != wanted),
+        None,
+    )
+    if mismatch is not None or not 1024 <= port <= 65535:
+        field = mismatch or "ssh_port"
+        raise PoCError(
+            f"the interrupted setup profile has an invalid {field} field; "
+            "use Repair Host Profile"
+        )
+    return {"instance": instance, "port": str(port)}
+
+
+def configured_profile_ports() -> set[int]:
+    """Reserve other profiles' valid ports without trusting their identity."""
+    instances = SUPPORT / "instances"
+    if not instances.is_dir() or instances.is_symlink():
+        return set()
+    ports: set[int] = set()
+    for directory in instances.iterdir():
+        config = directory / "config.json"
+        if (directory.is_symlink() or not directory.is_dir()
+                or config.is_symlink() or not config.is_file()):
+            continue
+        try:
+            port = int(json.loads(config.read_text(encoding="utf-8")).get("ssh_port"))
+        except (OSError, ValueError, TypeError):
+            continue
+        if 1024 <= port <= 65535:
+            ports.add(port)
+    return ports
+
+
 def assign_targets(devices: list[dict[str, str]], requested: list[str],
                    base_port: int) -> list[dict[str, Any]]:
     by_udid = {item["udid"]: item for item in devices}
@@ -364,17 +478,27 @@ def assign_targets(devices: list[dict[str, str]], requested: list[str],
     if missing:
         raise PoCError("requested USB device(s) not visible: " + ", ".join(missing))
     bindings = launchagent_bindings()
+    reserved = configured_profile_ports()
     used: set[int] = set()
     targets: list[dict[str, Any]] = []
     next_port = base_port
     for udid in selected:
         item = dict(by_udid[udid])
-        existing = bindings.get(udid)
+        agent = bindings.get(udid)
+        profile = canonical_profile_binding(item)
+        if agent and profile and agent != profile:
+            raise PoCError(
+                "the exact-device LaunchAgent and interrupted profile disagree; "
+                "use Repair Host Profile before setup"
+            )
+        existing = agent or profile
         port = int(existing["port"]) if existing and existing.get("port", "").isdigit() else 0
         if not port:
-            while next_port in used or not tcp_free(next_port):
+            while next_port in used or next_port in reserved or not tcp_free(next_port):
                 next_port += 1
             port, next_port = next_port, next_port + 1
+        elif port in used:
+            raise PoCError("selected device profiles claim the same local SSH port")
         used.add(port)
         item.update(port=port, instance=slug_for(item, existing))
         targets.append(item)
@@ -403,6 +527,77 @@ def ssh_base(target: dict[str, Any], identity: Path) -> list[str]:
         "-i", str(identity),
         "-p", str(target["port"]), "root@127.0.0.1",
     ]
+
+
+def synchronize_bootstrap_host_key(target: dict[str, Any], identity: Path) -> None:
+    """Commit the exact-USB bootstrap pin to the persistent host profile.
+
+    SRDssh owns its activation pin below ``STATE_ROOT`` while the long-lived
+    worker uses the instance pin below ``SUPPORT``. A legitimate Cryptex
+    replacement may rotate the former after verified exact-UDID USB
+    installation. Copy it only after proving UID 0 through that new pin; never
+    learn or replace trust from a LAN endpoint.
+    """
+    source = STATE_ROOT / target["instance"] / "srdssh/device-known-hosts"
+    destination = SUPPORT / "instances" / target["instance"] / "device-known-hosts"
+    if (not source.is_file() or source.is_symlink()
+            or source.stat().st_mode & 0o077):
+        raise PoCError("the exact-USB bootstrap host-key pin is missing or unsafe")
+    alias = "0sky-device-" + hashlib.sha256(target["udid"].encode()).hexdigest()[:24]
+    allowed = {"ssh-ed25519", "ssh-rsa", "ecdsa-sha2-nistp256",
+               "ecdsa-sha2-nistp384", "ecdsa-sha2-nistp521"}
+    records = []
+    for raw in source.read_text(encoding="utf-8").splitlines():
+        if not raw.strip() or raw.lstrip().startswith("#"):
+            continue
+        fields = raw.split()
+        try:
+            decoded = base64.b64decode(fields[2], validate=True)
+        except (IndexError, ValueError) as error:
+            raise PoCError("the exact-USB bootstrap host-key pin is malformed") from error
+        if len(fields) != 3 or fields[0] != alias or fields[1] not in allowed or len(decoded) < 32:
+            raise PoCError("the exact-USB bootstrap host-key pin is malformed")
+        records.append(raw.strip())
+    if not records:
+        raise PoCError("the exact-USB bootstrap host-key pin is empty")
+
+    value = str(source).replace("\\", "\\\\").replace(" ", "\\ ")
+    proof = run([
+        "/usr/bin/ssh", "-o", "BatchMode=yes", "-o", "ConnectTimeout=10",
+        "-o", "IdentitiesOnly=yes", "-o", "StrictHostKeyChecking=yes",
+        "-o", f"UserKnownHostsFile={value}", "-o", "GlobalKnownHostsFile=/dev/null",
+        "-o", f"HostKeyAlias={alias}", "-o", "PasswordAuthentication=no",
+        "-o", "KbdInteractiveAuthentication=no", "-i", identity,
+        "-p", str(target["port"]), "root@127.0.0.1", "id -u",
+    ], check=False, capture=True, timeout=20)
+    if proof.returncode or proof.stdout.strip() != b"0":
+        raise PoCError("the rotated exact-USB host key did not prove UID 0")
+
+    destination.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    if destination.parent.is_symlink():
+        raise PoCError("the device profile directory is unsafe")
+    os.chmod(destination.parent, 0o700)
+    if destination.exists() and (destination.is_symlink() or not destination.is_file()
+                                 or destination.stat().st_mode & 0o077):
+        raise PoCError("the persistent device host-key pin is unsafe")
+    encoded = ("\n".join(records) + "\n").encode("ascii")
+    if destination.is_file() and destination.read_bytes() == encoded:
+        return
+    temporary = destination.with_name(
+        f".{destination.name}.{os.getpid()}.{time.time_ns()}.tmp"
+    )
+    flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL
+    if hasattr(os, "O_NOFOLLOW"):
+        flags |= os.O_NOFOLLOW
+    descriptor = os.open(temporary, flags, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb", closefd=False) as stream:
+            stream.write(encoded); stream.flush(); os.fsync(stream.fileno())
+    finally:
+        os.close(descriptor)
+    os.replace(temporary, destination)
+    os.chmod(destination, 0o600)
+    log(f"{target['instance']}: committed the exact-USB verified Dropbear host key to the persistent profile")
 
 
 def remote(target: dict[str, Any], identity: Path, command: str, *,
@@ -774,6 +969,7 @@ def setup_companion(python: Path, target: dict[str, Any], identity: Path,
         python, KIT / "host-mac/install.py", "--udid", target["udid"],
         "--ssh-key", identity, "--host", "127.0.0.1", "--port", str(target["port"]),
         "--instance-name", target["instance"], "--support", SUPPORT,
+        "--refresh-staged-assets",
     ]
     if not repair_pairing:
         # Normal install may show Apple's Lockdown Trust UI if required. The
@@ -786,14 +982,62 @@ def stage_companion_assets(python: Path, target: dict[str, Any],
                            identity: Path, run_dir: Path) -> None:
     """Stage the verified per-device recovery tree before SSH exists."""
     support = SUPPORT / "instances" / target["instance"]
-    if (support / ".install-complete").is_file():
+    current_manifest = sha256(KIT / "SHA256SUMS")
+    try:
+        installed_manifest = json.loads(
+            (support / "config.json").read_text(encoding="utf-8")
+        ).get("source_manifest_sha256")
+        completed_manifest = (support / ".install-complete").read_text(
+            encoding="ascii"
+        ).strip()
+    except (OSError, ValueError):
+        installed_manifest = completed_manifest = None
+    if installed_manifest == current_manifest and completed_manifest == current_manifest:
         return
     run([
         python, KIT / "host-mac/install.py", "--udid", target["udid"],
         "--ssh-key", identity, "--host", "127.0.0.1",
         "--port", str(target["port"]), "--instance-name", target["instance"],
-        "--support", SUPPORT, "--stage-only",
+        "--support", SUPPORT, "--stage-only", "--refresh-staged-assets",
     ], timeout=600, log_file=run_dir / "stage-companion.log")
+
+
+def require_offline_device_package_builder() -> Path:
+    """Fail before device mutation when the signed kit cannot build runtime DEBs."""
+    helper = KIT / "host-mac/runtime/bin/dpkg-deb"
+    if helper.is_symlink() or not helper.is_file():
+        raise PoCError(
+            "the installed 0-Sky kit is incomplete: its offline dpkg-deb helper "
+            "is missing. Install the complete current 0-Sky Bridge package and "
+            "choose Resume; do not install Homebrew as a workaround."
+        )
+    try:
+        result = subprocess.run(
+            [str(helper), "--version"], capture_output=True, text=True,
+            timeout=15, check=False,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise PoCError(
+            "the installed 0-Sky kit cannot run its offline device-package "
+            "builder. Reinstall the complete current package and choose Resume."
+        ) from error
+    if result.returncode or result.stdout.strip() != "0-Sky dpkg-deb compatibility 1.2":
+        raise PoCError(
+            "the installed 0-Sky kit has an outdated dpkg-deb helper that cannot "
+            "both build and unpack the Zstandard-compressed first trusted runtime. "
+            "Install the complete current 0-Sky Bridge package and choose Resume; "
+            "Xcode and Homebrew are not the missing dependencies."
+        )
+    return helper
+
+
+def offline_runtime_builder_environment(helper: Path) -> dict[str, str]:
+    """Expose only the signed dpkg-deb plus Apple system build tools."""
+    environment = dict(os.environ)
+    environment["PATH"] = os.pathsep.join((
+        str(helper.parent), "/usr/bin", "/bin", "/usr/sbin", "/sbin",
+    ))
+    return environment
 
 
 def ensure_first_runtime(python: Path, target: dict[str, Any],
@@ -805,6 +1049,27 @@ def ensure_first_runtime(python: Path, target: dict[str, Any],
         check=False, capture=True, timeout=20,
     ).returncode == 0:
         return
+    package_builder = require_offline_device_package_builder()
+    instance = SUPPORT / "instances" / target["instance"]
+    builder = instance / "automation/tools/srd-runtime-manager/build_poc.py"
+    builder_root = builder.parent
+    required_builder_inputs = (
+        builder,
+        builder_root / "test_host.c",
+        builder_root / "test_tweak.c",
+        builder_root / "test_tweak.plist",
+    )
+    missing_builder_inputs = [
+        path.name for path in required_builder_inputs
+        if path.is_symlink() or not path.is_file()
+    ]
+    if missing_builder_inputs:
+        raise PoCError(
+            "the installed 0-Sky kit is incomplete: first-runtime Xcode input(s) "
+            + ", ".join(missing_builder_inputs)
+            + " are missing. Install the complete current 0-Sky Bridge package "
+              "and choose Resume; Xcode itself is not the missing dependency."
+        )
     token_command = r'''T=
 for C in /private/var/run/com.apple.security.cryptexd/mnt/com.liquidsky.srdssh.*/usr/bin/toybox; do
  [ -x "$C" ] && T="$C" && break
@@ -845,11 +1110,10 @@ test "$("$T" wc -c < /var/jb/etc/trollstorelite-srd-bridge.token)" -eq 65'''
         + " ".join(shlex.quote(path) for path in remote_paths),
         check=False, timeout=600, log_file=run_dir / "first-runtime.log",
     )
-    instance = SUPPORT / "instances" / target["instance"]
-    builder = instance / "automation/tools/srd-runtime-manager/build_poc.py"
     build_output = instance / "automation/artifacts/srd-runtime-poc/build"
     run([python, builder, "--output", build_output], timeout=600,
-        log_file=run_dir / "first-runtime-build.log")
+        log_file=run_dir / "first-runtime-build.log",
+        environment=offline_runtime_builder_environment(package_builder))
     known_hosts = STATE_ROOT / target["instance"] / "srdssh/device-known-hosts"
     sync = instance / "automation/tools/srd-runtime-manager/sync_runtime_cryptex.py"
     alias = "0sky-device-" + hashlib.sha256(target["udid"].encode()).hexdigest()[:24]
@@ -858,7 +1122,7 @@ test "$("$T" wc -c < /var/jb/etc/trollstorelite-srd-bridge.token)" -eq 65'''
         "--key", identity, "--udid", target["udid"],
         "--known-hosts", known_hosts, "--host-alias", alias,
         "--frida-root", KIT / "frida/17.18.0-ios",
-    ], timeout=1800, log_file=run_dir / "first-runtime-sync.log")
+    ], timeout=2100, log_file=run_dir / "first-runtime-sync.log")
     remote(target, identity, "/var/jb/usr/bin/dpkg --configure --pending",
            timeout=600, log_file=run_dir / "first-runtime.log")
     proof = remote(
@@ -928,10 +1192,14 @@ ps ax -o command= 2>/dev/null | "$G" -q '[f]rida-server$' '''
 
 
 def direct_components_current(target: dict[str, Any], identity: Path) -> bool:
+    control = bundled_ipa_identity(
+        KIT / "packages/Commissary-Universal.ipa", "com.liquidsky.CrypStore")
     link = app_info(target, identity, "codes.liquidsky.research.zerosky")
+    control_app = app_info(target, identity, "com.liquidsky.CrypStore")
     return (
         package_version(target, identity, "com.catvnc.server") == "0.0.2"
-        and app_info(target, identity, "com.liquidsky.CrypStore").get("version") == "3.5.28"
+        and control_app.get("version") == control["version"]
+        and control_app.get("build") == control["build"]
         and link.get("version") == "1.9.0"
         and link.get("build") == "48"
         and link.get("distribution") == "0-Sky Link"
@@ -1101,7 +1369,7 @@ def install_filza(python: Path, target: dict[str, Any], identity: Path,
         target["udid"],
         filza / "BuildManifest.plist",
     ]
-    run(command, timeout=960, log_file=run_dir / "filza-install.log")
+    run(command, timeout=2100, log_file=run_dir / "filza-install.log")
 
     register = r'''import hashlib,json,os,pathlib,plistlib,subprocess,sys
 root=pathlib.Path("/private/var/run/com.apple.security.cryptexd/mnt")
@@ -1208,6 +1476,17 @@ def pair_remotexpc(python: Path, run_dir: Path) -> None:
         timeout=210, log_file=run_dir / "remote-pairing.log")
 
 
+def needs_remotexpc_pairing(completed: subprocess.CompletedProcess[bytes]) -> bool:
+    """Offer Paired Macs only when the bootstrap failed at RemoteXPC trust.
+
+    A later SSH, package, or runtime failure must retain its real diagnosis;
+    treating every nonzero bootstrap result as missing pairing hides the root
+    cause and starts an unrelated three-minute pair-host wait.
+    """
+    detail = (completed.stdout + completed.stderr).decode("utf-8", "replace")
+    return "FAILED CLOSED: RemoteXPC/cryptexd preflight failed" in detail
+
+
 def enforcement_report(error: BaseException) -> str:
     text = str(error).lower()
     if any(marker in text for marker in ("pair", "lockdown", "trust", "remotexpc", "tunnel")):
@@ -1229,8 +1508,54 @@ def enforcement_report(error: BaseException) -> str:
             "UNSUPPORTED_BYPASS_REQUIRED=NO")
 
 
+def atomic_private_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.{time.time_ns()}.tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as stream:
+            json.dump(value, stream, indent=2, sort_keys=True)
+            stream.write("\n")
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(temporary, path)
+        os.chmod(path, 0o600)
+    finally:
+        if temporary.exists():
+            temporary.unlink()
+
+
+def persist_setup_state(report: dict[str, Any], status: str,
+                        error: str | None = None) -> None:
+    raw = report.get("state_file")
+    if not raw or report.get("check_only"):
+        return
+    results = report.get("stage_results", {})
+    value: dict[str, Any] = {
+        "schema": 1,
+        "device_udid": report["target"]["udid"],
+        "instance": report["target"]["instance"],
+        "status": status,
+        "attempt": report["attempt"],
+        "resumed": report["resumed"],
+        "current_stage": report["stages"][-1] if report["stages"] else None,
+        "last_completed_stage": next(
+            (name for name in reversed(report["stages"])
+             if results.get(name) == "passed"), None),
+        "stages": results,
+        "updated_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+    if error:
+        value["error"] = error[-2000:]
+    atomic_private_json(Path(raw), value)
+
+
 def begin_stage(report: dict[str, Any], name: str) -> None:
+    if report["stages"]:
+        report["stage_results"][report["stages"][-1]] = "passed"
     report["stages"].append(name)
+    report["stage_results"][name] = "running"
+    persist_setup_state(report, "running")
     log(f"stage started: {name}")
 
 
@@ -1238,7 +1563,30 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
                    root_run: Path) -> dict:
     run_dir = root_run / target["instance"]
     run_dir.mkdir(parents=True, exist_ok=True)
-    report: dict[str, Any] = {"target": target, "started_at": dt.datetime.now(dt.timezone.utc).isoformat(), "stages": []}
+    state_file = STATE_ROOT / target["instance"] / "setup-state.json"
+    previous: dict[str, Any] = {}
+    if state_file.is_file() and not state_file.is_symlink():
+        try:
+            previous = json.loads(state_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError) as error:
+            raise PoCError(
+                "persisted setup state is unreadable; preserve it for diagnostics"
+            ) from error
+        if previous.get("device_udid") != target["udid"]:
+            raise PoCError("persisted setup state belongs to another device")
+    if args.resume and not previous:
+        raise PoCError("--resume requested but no setup state exists for this exact device")
+    report: dict[str, Any] = {
+        "target": target,
+        "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+        "stages": [],
+        "stage_results": {},
+        "state_file": str(state_file),
+        "attempt": int(previous.get("attempt", 0)) + 1,
+        "resumed": bool(previous and previous.get("status") != "complete"),
+        "resume_from": previous.get("current_stage") if previous else None,
+        "check_only": bool(args.check),
+    }
     state = STATE_ROOT / target["instance"] / "srdssh"
     bootstrap = [
         python, KIT / "srdssh/bootstrap.py", "--kit", KIT / "srdssh",
@@ -1260,16 +1608,19 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
             begin_stage(report, "stage-verified-companion-assets")
             stage_companion_assets(python, target, args.identity, run_dir)
         begin_stage(report, "dropbear-procursus")
-        first = run(bootstrap, check=False, capture=True, timeout=1800,
+        first = run(bootstrap, check=False, capture=True, stream_output=True, timeout=1800,
                     log_file=run_dir / "dropbear-procursus.log")
-        if first.returncode and args.pair_remotexpc:
+        if first.returncode and args.pair_remotexpc and needs_remotexpc_pairing(first):
             pair_remotexpc(python, run_dir)
-            first = run(bootstrap, check=False, capture=True, timeout=1800,
+            first = run(bootstrap, check=False, capture=True, stream_output=True, timeout=1800,
                         log_file=run_dir / "dropbear-procursus-retry.log")
         if first.returncode:
             detail = (first.stdout + first.stderr).decode("utf-8", "replace")
             raise PoCError("Dropbear/Procursus stage failed after supported transport fallbacks:\n" + detail[-6000:])
+        if not args.check:
+            synchronize_bootstrap_host_key(target, args.identity)
         if args.check:
+            report["stage_results"]["dropbear-procursus"] = "passed"
             report.update(passed=True, check_only=True)
             return report
 
@@ -1346,7 +1697,11 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         if args.force_components or not direct_components_current(target, args.identity):
             bootstrap_components(python, target, args.identity, run_dir)
         else:
-            log(f"{target['instance']}: latest CatVNC 0.0.2, 0-Sky Control 3.5.28, and 0-Sky Link 1.9.0 already present; preserving them")
+            control = bundled_ipa_identity(
+                KIT / "packages/Commissary-Universal.ipa", "com.liquidsky.CrypStore")
+            log(f"{target['instance']}: latest CatVNC 0.0.2, "
+                f"0-Sky Control {control['version']}, and 0-Sky Link 1.9.0 "
+                "already present; preserving them")
 
         ensure_bootsplash_launcher(target, args.identity, run_dir)
 
@@ -1375,13 +1730,16 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
             ).stdout.decode().strip(),
         }
         mcm_prefix = "/private/var/containers/Bundle/Application/"
+        control = bundled_ipa_identity(
+            KIT / "packages/Commissary-Universal.ipa", "com.liquidsky.CrypStore")
         mcm_parity = all(
             str(final[name].get("path", "")).startswith(mcm_prefix)
             for name in ("commissary", "zero_sky", "filza")
         )
         final["mcm_registration_parity"] = mcm_parity
         passed = (final["catvnc"] == "0.0.2" and
-                  final["commissary"].get("version") == "3.5.28" and
+                  final["commissary"].get("version") == control["version"] and
+                  final["commissary"].get("build") == control["build"] and
                   final["zero_sky"].get("version") == "1.9.0" and
                   final["zero_sky"].get("build") == "48" and
                   final["zero_sky"].get("distribution") == "0-Sky Link" and
@@ -1395,14 +1753,20 @@ def process_target(python: Path, target: dict[str, Any], args: argparse.Namespac
         report.update(final=final, passed=passed)
         if not passed:
             raise PoCError("post-install version/pairing gate failed: " + json.dumps(final))
+        if report["stages"]:
+            report["stage_results"][report["stages"][-1]] = "passed"
+        persist_setup_state(report, "complete")
         return report
     except Exception as error:
+        if report["stages"]:
+            report["stage_results"][report["stages"][-1]] = "failed"
         report.update(passed=False, error=f"{type(error).__name__}: {error}",
                       enforcement=enforcement_report(error))
+        persist_setup_state(report, "blocked", report["error"])
         raise
     finally:
         report["finished_at"] = dt.datetime.now(dt.timezone.utc).isoformat()
-        (run_dir / "result.json").write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+        atomic_private_json(run_dir / "result.json", report)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -1430,6 +1794,7 @@ def parser() -> argparse.ArgumentParser:
     )
     p.add_argument("--pair-remotexpc", action="store_true", help="offer iOS 27 Paired Macs code flow after a denial")
     p.add_argument("--repair-pairing", action="store_true", help="reissue the exact-UDID bridge pairing marker")
+    p.add_argument("--resume", action="store_true", help="resume persisted setup for this exact device after interruption")
     p.add_argument("--force-dropbear", action="store_true", help="replace even a working Dropbear Cryptex")
     p.add_argument("--force-components", action="store_true", help="reinstall CatVNC, 0-Sky Control, 0-Sky Link, and Filza")
     p.add_argument("--force-filza", action="store_true", help="reinstall only the reviewed Filza 4.0 Cryptex")
@@ -1534,6 +1899,10 @@ def main() -> int:
         return 0
     if not devices:
         raise PoCError("no USB-connected Apple device is visible")
+    if not args.check and not args.udid:
+        raise PoCError("device-changing setup requires an explicit --udid selection")
+    if args.resume and len(args.udid) != 1:
+        raise PoCError("--resume requires exactly one explicit --udid")
     targets = assign_targets(devices, args.udid, args.base_port)
     if args.reuse_port:
         if len(targets) != 1 or len(args.udid) != 1:

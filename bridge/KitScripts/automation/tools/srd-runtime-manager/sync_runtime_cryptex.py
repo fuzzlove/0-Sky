@@ -203,7 +203,7 @@ def include_offline_python(root: pathlib.Path,
         "python3.9_3.9.9-1_iphoneos-arm64.deb",
         "python3_3.9.9-1_iphoneos-arm64.deb",
     ]
-    tools, tool_environment = host_tool_environment(("dpkg-deb", "zstd"))
+    tools, tool_environment = host_tool_environment(("dpkg-deb",))
     dpkg_deb = tools["dpkg-deb"]
     with tempfile.TemporaryDirectory(prefix="0sky-python-", dir=root.parent) as temporary:
         stage = pathlib.Path(temporary)
@@ -213,7 +213,11 @@ def include_offline_python(root: pathlib.Path,
                 raise RuntimeError(f"immutable offline Python package is unavailable: {package}")
             destination = stage / package.stem
             destination.mkdir()
-            run([dpkg_deb, "-x", package, destination], env=tool_environment,
+            # Execute the signed helper with this process's managed interpreter.
+            # Its locked environment supplies zstandard for Procursus .tar.zst
+            # packages; the helper's shebang intentionally has no site packages.
+            run([sys.executable, dpkg_deb, "-x", package, destination],
+                env=tool_environment,
                 show_output=False)
             payload = destination / "var/jb"
             if not payload.is_dir() or payload.is_symlink():
@@ -232,7 +236,15 @@ def run(argv, *, data=None, timeout=1200, cwd=None, env=None, check=True, show_o
     if result.stdout and show_output:
         print(result.stdout.decode("utf-8", "replace"), end="", flush=True)
     if check and result.returncode:
-        raise RuntimeError(f"command failed with status {result.returncode}: {argv}")
+        output = result.stdout.decode("utf-8", "replace").strip()
+        # Bound failure propagation. The host app applies its diagnostic
+        # redactor before display/export, while this tail preserves the actual
+        # missing dependency or compiler error needed for recovery.
+        tail = output[-8192:]
+        detail = f"\n--- command output (last 8192 characters) ---\n{tail}" if tail else ""
+        raise RuntimeError(
+            f"command failed with status {result.returncode}: {argv}{detail}"
+        )
     return result
 
 
@@ -682,11 +694,9 @@ def read_companion_entitlements(binary: pathlib.Path) -> dict | None:
     entitlement blob with an entitlement-free signature.  Always measure the
     effective set before accepting a reviewed helper.
     """
-    ldid = find_host_tool("ldid")
-    if ldid is None:
-        raise RuntimeError("ldid is required to verify the reviewed Crane helper")
     extracted = subprocess.run(
-        [ldid, "-e", str(binary)], stdin=subprocess.DEVNULL,
+        ["/usr/bin/codesign", "--display", "--entitlements", ":-", str(binary)],
+        stdin=subprocess.DEVNULL,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, check=False)
     if extracted.returncode or not extracted.stdout.strip():
         return None

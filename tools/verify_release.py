@@ -16,11 +16,18 @@ import tempfile
 import zipfile
 
 try:
+    from .release_manifest import ManifestError, verify as verify_release_manifest
+except ImportError:
+    from release_manifest import ManifestError, verify as verify_release_manifest
+
+try:
     from .kit_manifest import verify as verify_kit_manifest
-    from .release_sanitize import audit, load_deny_patterns
+    from .host_runtime_manifest import RuntimeManifestError, verify as verify_host_runtime
+    from .release_sanitize import audit, blocking_findings, load_deny_patterns
 except ImportError:
     from kit_manifest import verify as verify_kit_manifest
-    from release_sanitize import audit, load_deny_patterns
+    from host_runtime_manifest import RuntimeManifestError, verify as verify_host_runtime
+    from release_sanitize import audit, blocking_findings, load_deny_patterns
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -38,6 +45,7 @@ REQUIRED_MAC_BINARIES = {
 REQUIRED_KIT_FILES = (
     "SHA256SUMS", "RELEASE_KIT_MANIFEST.json", "PORTABILITY.json", "host-mac/install.py",
     "host-mac/pair.py", "host-mac/requirements-lock.txt",
+    "host-mac/HOST_RUNTIME_MANIFEST.json",
     "payloads/0-Sky-Link-1.9.0-universal.ipa",
 )
 REQUIRED_APP_SCRIPTS = (
@@ -50,6 +58,9 @@ FORBIDDEN_PARTS = {".git", ".env", ".ssh", "DerivedData", "__pycache__",
 DEBUG_ENTITLEMENTS = {"com.apple.security.get-task-allow",
                       "com.apple.security.cs.allow-dyld-environment-variables",
                       "com.apple.security.cs.allow-unsigned-executable-memory"}
+NONPORTABLE_RUNTIME_PATH = re.compile(
+    rb"(?:/Users/|/home/|/Volumes/|/private/(?:tmp|var/folders)/|/tmp/|"
+    rb"/var/folders/|/opt/homebrew/|/usr/local/Cellar/|/opt/local/)")
 
 
 def run(argv: list[str], timeout: int = 60) -> subprocess.CompletedProcess[bytes]:
@@ -62,6 +73,18 @@ def is_macho(path: Path) -> bool:
             return stream.read(4) in MACHO_MAGIC
     except OSError:
         return False
+
+
+def required_architectures_for(relative: str) -> set[str]:
+    """Return the slices required for this installed macOS binary.
+
+    The host runtime intentionally ships one verified interpreter tree per
+    architecture. All ordinary app/helper binaries remain Universal 2.
+    """
+    for arch in REQUIRED_ARCHS:
+        if f"Contents/Resources/Kit/host-mac/runtime/python/{arch}/" in relative:
+            return {arch}
+    return set(REQUIRED_ARCHS)
 
 
 def sha256(path: Path) -> str:
@@ -84,7 +107,37 @@ def runtime_kit_issues(app: Path) -> list[str]:
         return ["DEPENDENCY_KIT_INCOMPLETE"]
     if any(not (scripts / relative).is_file() for relative in REQUIRED_APP_SCRIPTS):
         return ["DEPENDENCY_INSTALLER_MISSING"]
-    return verify_kit_manifest(kit)
+    if kit_access_issues(kit):
+        return ["DEPENDENCY_KIT_NOT_USER_READABLE"]
+    issues = verify_kit_manifest(kit)
+    try:
+        verify_host_runtime(kit)
+    except (OSError, RuntimeManifestError, subprocess.SubprocessError):
+        issues.append("HOST_RUNTIME_INVALID")
+    return issues
+
+
+def mode_allows_installed_user(mode: int) -> bool:
+    """Whether root-owned package content can be consumed by a normal account."""
+    if stat.S_ISDIR(mode):
+        return mode & 0o005 == 0o005
+    if stat.S_ISREG(mode):
+        if mode & 0o004 != 0o004:
+            return False
+        return not mode & 0o111 or mode & 0o001 == 0o001
+    return True
+
+
+def kit_access_issues(kit: Path) -> list[str]:
+    if not kit.is_dir():
+        return ["KIT_ROOT_MISSING"]
+    issues: list[str] = []
+    for item in [kit, *kit.rglob("*")]:
+        if item.is_symlink():
+            continue
+        if not mode_allows_installed_user(item.stat().st_mode):
+            issues.append(item.relative_to(kit).as_posix() if item != kit else ".")
+    return issues
 
 
 def platform_of(path: Path) -> str:
@@ -105,6 +158,41 @@ def architecture_of(path: Path) -> set[str]:
     if result.returncode:
         return set()
     return set(result.stdout.decode("ascii", "replace").split())
+
+
+def runtime_path_issues(path: Path) -> list[str]:
+    """Inspect Mach-O dependency and rpath load commands, not debug strings."""
+    commands = run(["/usr/bin/otool", "-l", str(path)], timeout=20)
+    if commands.returncode:
+        return ["MACHO_LOAD_COMMANDS_UNREADABLE"]
+    dependencies: list[bytes] = []
+    rpaths: list[bytes] = []
+    dependency_commands = {
+        b"LC_LOAD_DYLIB", b"LC_LOAD_WEAK_DYLIB", b"LC_REEXPORT_DYLIB",
+        b"LC_LOAD_UPWARD_DYLIB",
+    }
+    current: bytes | None = None
+    for line in commands.stdout.splitlines():
+        stripped = line.strip()
+        if stripped.startswith(b"cmd "):
+            current = stripped.removeprefix(b"cmd ").split(b" ", 1)[0]
+        elif current in dependency_commands and stripped.startswith(b"name "):
+            parts = stripped.split()
+            if len(parts) >= 2:
+                dependencies.append(parts[1])
+        elif current == b"LC_RPATH" and stripped.startswith(b"path "):
+            parts = stripped.split()
+            if len(parts) >= 2:
+                rpaths.append(parts[1])
+    bad_dependency = any(NONPORTABLE_RUNTIME_PATH.search(value)
+                         for value in dependencies)
+    uses_rpath = any(value.startswith(b"@rpath/") for value in dependencies)
+    has_portable_rpath = any(not NONPORTABLE_RUNTIME_PATH.search(value)
+                             for value in rpaths)
+    unusable_build_rpath = (uses_rpath and bool(rpaths) and not has_portable_rpath)
+    return ["NONPORTABLE_MACHO_RUNTIME_PATH"] if (
+        bad_dependency or unusable_build_rpath
+    ) else []
 
 
 def wheel_coverage(host_kit: Path) -> tuple[int, list[str]]:
@@ -167,13 +255,17 @@ def wheel_coverage(host_kit: Path) -> tuple[int, list[str]]:
                             issues.append("WHEEL_SLICE_MISSING:" + wheel.name.split("-")[0])
                         if platform_of(target) != "MACOS":
                             issues.append("WHEEL_PLATFORM_INVALID:" + wheel.name.split("-")[0])
+                        if runtime_path_issues(target):
+                            issues.append("WHEEL_NONPORTABLE_RUNTIME_PATH:" +
+                                          wheel.name.split("-")[0])
             except (OSError, RuntimeError, zipfile.BadZipFile):
                 issues.append("WHEEL_INVALID:" + wheel.name.split("-")[0])
     return native_count, issues
 
 
 def entitlement_status(path: Path) -> str:
-    result = run(["/usr/bin/codesign", "-d", "--entitlements", "-", str(path)], 20)
+    result = run(["/usr/bin/codesign", "-d", "--entitlements", "-", "--xml",
+                  str(path)], 20)
     if result.returncode:
         return "FAIL"
     raw = result.stdout.strip()
@@ -216,10 +308,15 @@ def package_payload(package: Path, destination: Path) -> Path:
         parts = raw.split("\t")
         if len(parts) != 4:
             raise ValueError("package ownership manifest malformed")
-        _, mode, user_id, group_id = parts
-        if user_id != "0" or group_id != "0" or int(mode, 8) & (
+        relative, mode, user_id, group_id = parts
+        numeric_mode = int(mode, 8)
+        if user_id != "0" or group_id != "0" or numeric_mode & (
             stat.S_IWOTH | stat.S_ISUID | stat.S_ISGID):
             raise ValueError("package ownership or permissions unsafe")
+        kit_prefix = "./Applications/0SkyBridge.app/Contents/Resources/Kit"
+        if (relative == kit_prefix or relative.startswith(kit_prefix + "/")) and not (
+                mode_allows_installed_user(numeric_mode)):
+            raise ValueError("package kit is not readable by the installed app user")
     payload = destination / "Payload"
     app = payload / "Applications/0SkyBridge.app"
     if not app.is_dir():
@@ -258,7 +355,7 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
            ) -> tuple[dict[str, str], list[str]]:
     values: dict[str, str] = {key: "NOT_EXECUTED" for key in (
         "Main executable", "arm64", "x86_64", "Universal 2", "Nested binaries checked",
-        "Python wheel coverage",
+        "Python wheel coverage", "Bundled host runtime",
         "Application", "Installer", "Dependency kit", "EULA", "Permissions", "Code signature",
         "Hardened runtime", "Entitlements", "Gatekeeper assessment", "Notarization",
         "Stapling", "Signing team consistency", "Developer username leak", "Developer HOME leak", "Hostname leak",
@@ -280,6 +377,9 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
     values["Application"] = "PASS"
     kit_errors = runtime_kit_issues(app)
     values["Dependency kit"] = "FAIL" if kit_errors else "PASS"
+    values["Bundled host runtime"] = (
+        "FAIL" if "HOST_RUNTIME_INVALID" in kit_errors else "PASS"
+    )
     errors.extend(kit_errors)
     values["Tool discovery"] = "PASS" if all(shutil.which(tool) for tool in
         ("xcrun", "codesign", "spctl", "pkgutil")) else "FAIL"
@@ -293,21 +393,30 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
         errors.append("UNEXPECTED_DEVELOPMENT_FILE")
     bad_modes = [item for item in app.rglob("*") if not item.is_symlink()
                  and item.stat().st_mode & (stat.S_IWOTH | stat.S_ISUID | stat.S_ISGID)]
-    values["Permissions"] = "FAIL" if bad_modes else "PASS"
+    inaccessible_kit = kit_access_issues(app / "Contents/Resources/Kit")
+    values["Permissions"] = "FAIL" if bad_modes or inaccessible_kit else "PASS"
     if bad_modes:
         errors.append("UNSAFE_PERMISSIONS")
+    if inaccessible_kit:
+        errors.append("BUNDLED_KIT_NOT_USER_READABLE")
     native = [item for item in all_files if is_macho(item)]
     mac_native: list[Path] = []
     mac_arches: dict[str, set[str]] = {}
+    architecture_errors: list[str] = []
     device_native = 0
     for item in native:
         relative = item.relative_to(app).as_posix()
+        if runtime_path_issues(item):
+            errors.append("NONPORTABLE_MACHO_RUNTIME_PATH:" + relative)
         platform = platform_of(item)
         if platform == "MACOS":
             mac_native.append(item)
             mac_arches[relative] = architecture_of(item)
-            if not REQUIRED_ARCHS.issubset(mac_arches[relative]):
-                errors.append("MISSING_UNIVERSAL_SLICE:" + relative)
+            required_arches = required_architectures_for(relative)
+            if not required_arches.issubset(mac_arches[relative]):
+                category = ("RUNTIME_ARCHITECTURE_MISMATCH:" if len(required_arches) == 1
+                            else "MISSING_UNIVERSAL_SLICE:")
+                architecture_errors.append(category + relative)
         elif platform in {"IOS", "IOSSIMULATOR", "TVOS", "WATCHOS"}:
             device_native += 1
             if not relative.startswith("Contents/Resources/Kit/"):
@@ -316,19 +425,20 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
             errors.append("UNKNOWN_MACHO_PLATFORM:" + relative)
     found_mac = {p.relative_to(app).as_posix() for p in mac_native}
     if not REQUIRED_MAC_BINARIES.issubset(found_mac):
-        errors.append("REQUIRED_MAC_BINARY_MISSING")
+        architecture_errors.append("REQUIRED_MAC_BINARY_MISSING")
+    errors.extend(architecture_errors)
     values["Nested binaries checked"] = f"{len(mac_native)} macOS; {device_native} device"
     wheel_native, wheel_issues = wheel_coverage(app / "Contents/Resources/Kit/host-mac")
     values["Python wheel coverage"] = (f"PASS ({wheel_native} native files)"
                                        if not wheel_issues else "FAIL")
     errors.extend(wheel_issues)
     values["Architecture discovery"] = "PASS" if native and not any(
-        issue.startswith(("UNKNOWN_MACHO", "REQUIRED_MAC_BINARY")) for issue in errors) else "FAIL"
+        issue.startswith(("UNKNOWN_MACHO", "REQUIRED_MAC_BINARY", "MISSING_UNIVERSAL_SLICE",
+                          "RUNTIME_ARCHITECTURE_MISMATCH")) for issue in errors) else "FAIL"
     values["Main executable"] = "PASS" if "Contents/MacOS/0SkyBridge" in found_mac else "FAIL"
     required_present = REQUIRED_MAC_BINARIES.issubset(found_mac)
     for key in ("arm64", "x86_64"):
-        values[key] = ("PASS" if required_present and
-                       all(key in archs for archs in mac_arches.values()) else "FAIL")
+        values[key] = "PASS" if required_present and not architecture_errors else "FAIL"
     values["Universal 2"] = ("PASS" if all(values[key] == "PASS" for key in REQUIRED_ARCHS)
                               and not any(issue.startswith("UNKNOWN_MACHO") for issue in errors)
                               else "FAIL")
@@ -374,19 +484,22 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
         errors.append("EULA_MISMATCH")
     deny = load_deny_patterns(deny_file) if deny_file else None
     findings = audit([app], deny)
+    blocked_findings = blocking_findings(findings)
     values["Developer username leak"] = values["Developer HOME leak"] = (
-        "FAIL" if any(f["category"] == "fixed-home-path" or
-                      f["category"].startswith("project-") for f in findings) else "PASS")
-    values["Hostname leak"] = "FAIL" if any("host" in f["category"] for f in findings) else "PASS"
+        "FAIL" if any(f["category"].startswith("project-")
+                      for f in blocked_findings) else "PASS")
+    values["Hostname leak"] = "FAIL" if any("host" in f["category"]
+                                                for f in blocked_findings) else "PASS"
     values["Repository-path leak"] = values["Hard-coded path scan"] = (
-        "FAIL" if any(f["category"] in {"fixed-home-path", "temporary-build-path"}
-                      or f["category"].startswith("project-") for f in findings) else "PASS")
-    values["UDID leak"] = "FAIL" if any(f["category"] == "physical-device-id" for f in findings) else "PASS"
-    values["Email leak"] = "FAIL" if any("email" in f["category"] for f in findings) else "PASS"
-    values["Credential scan"] = "FAIL" if any(f["category"] == "embedded-password" for f in findings) else "PASS"
-    values["Private-key scan"] = "FAIL" if any(f["category"] == "private-key" for f in findings) else "PASS"
-    if findings:
-        errors.extend(sorted({"SANITIZE_" + f["category"].upper().replace("-", "_") for f in findings}))
+        "FAIL" if any(f["category"].startswith("project-")
+                      for f in blocked_findings) else "PASS")
+    values["UDID leak"] = "FAIL" if any(f["category"] == "physical-device-id" for f in blocked_findings) else "PASS"
+    values["Email leak"] = "FAIL" if any("email" in f["category"] for f in blocked_findings) else "PASS"
+    values["Credential scan"] = "FAIL" if any(f["category"] == "embedded-password" for f in blocked_findings) else "PASS"
+    values["Private-key scan"] = "FAIL" if any(f["category"] == "private-key" for f in blocked_findings) else "PASS"
+    if blocked_findings:
+        errors.extend(sorted({"SANITIZE_" + f["category"].upper().replace("-", "_")
+                              for f in blocked_findings}))
     if package is not None:
         if not package.is_file():
             errors.append("INSTALLER_MISSING")
@@ -410,7 +523,7 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
                     unpacked = package_payload(package, Path(temp) / "expanded")
                     if not same_tree(app, unpacked):
                         errors.append("PACKAGE_PAYLOAD_DIFFERS")
-                    if audit([Path(temp) / "expanded"], deny):
+                    if blocking_findings(audit([Path(temp) / "expanded"], deny)):
                         errors.append("PACKAGE_PAYLOAD_PII")
                 except (OSError, ValueError):
                     errors.append("PACKAGE_EXPANSION_INVALID")
@@ -427,7 +540,7 @@ def verify(app: Path, package: Path | None, deny_file: Path | None,
 
 def report_text(values: dict[str, str], errors: list[str], *, candidate: bool = False) -> str:
     groups = {
-        "ARCHITECTURE": ("Main executable", "arm64", "x86_64", "Universal 2", "Nested binaries checked", "Python wheel coverage"),
+        "ARCHITECTURE": ("Main executable", "arm64", "x86_64", "Universal 2", "Nested binaries checked", "Python wheel coverage", "Bundled host runtime"),
         "PACKAGING": ("Application", "Installer", "Dependency kit", "EULA", "Permissions"),
         "SECURITY": ("Code signature", "Hardened runtime", "Entitlements",
                      *("Entitlements " + name for name in ENTITLEMENT_TARGETS),
@@ -451,16 +564,57 @@ def report_text(values: dict[str, str], errors: list[str], *, candidate: bool = 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--app", required=True, type=Path)
+    parser.add_argument("--app", type=Path,
+                        help="staged app; optional when --package is provided")
     parser.add_argument("--package", type=Path)
+    parser.add_argument("--release-directory", type=Path,
+                        help="verify the four-file release allowlist and checksums")
     parser.add_argument("--deny-file", type=Path)
     parser.add_argument("--notarized", action="store_true")
     parser.add_argument("--candidate", action="store_true",
                         help="verify all structural gates, report distribution signing BLOCKED")
     parser.add_argument("--report", required=True, type=Path)
     args = parser.parse_args()
-    values, errors = verify(args.app, args.package, args.deny_file, args.notarized,
-                            distribution=not args.candidate)
+    if args.app is None and args.package is None and args.release_directory is None:
+        parser.error("one of --app, --package, or --release-directory is required")
+    manifest_errors: list[str] = []
+    release_metadata: dict[str, object] = {}
+    if args.release_directory:
+        try:
+            manifest = verify_release_manifest(args.release_directory)
+            release_metadata = manifest
+            if manifest.get("mode") == "distribution":
+                args.notarized = True
+            packages = [row["path"] for row in manifest["files"]
+                        if row.get("role") == "installer"]
+            if args.package is None:
+                args.package = args.release_directory / packages[0]
+            elif args.package.resolve() != (args.release_directory / packages[0]).resolve():
+                manifest_errors.append("RELEASE_PACKAGE_NOT_IN_MANIFEST")
+        except (ManifestError, OSError, ValueError, KeyError, IndexError, TypeError):
+            manifest_errors.append("RELEASE_MANIFEST_INVALID")
+    if args.app is None and args.package is None:
+        values, errors = {}, []
+    elif args.app is None:
+        with tempfile.TemporaryDirectory(prefix="0sky-package-only-audit-") as temp:
+            try:
+                app = package_payload(args.package, Path(temp) / "expanded")
+                values, errors = verify(app, args.package, args.deny_file, args.notarized,
+                                        distribution=not args.candidate)
+            except (OSError, ValueError):
+                values = {}
+                errors = ["PACKAGE_EXPANSION_INVALID"]
+    else:
+        values, errors = verify(args.app, args.package, args.deny_file, args.notarized,
+                                distribution=not args.candidate)
+    if release_metadata:
+        values.update({
+            "Product": str(release_metadata.get("product", "UNKNOWN")),
+            "Version": str(release_metadata.get("version", "UNKNOWN")),
+            "Build": str(release_metadata.get("build", "UNKNOWN")),
+            "Build mode": str(release_metadata.get("mode", "UNKNOWN")),
+        })
+    errors.extend(manifest_errors)
     args.report.parent.mkdir(parents=True, exist_ok=True)
     args.report.write_text(report_text(values, errors, candidate=args.candidate), encoding="utf-8")
     print(f"RELEASE_GATE={'FAIL' if errors else 'BLOCKED' if args.candidate else 'PASS'} errors={len(errors)}")

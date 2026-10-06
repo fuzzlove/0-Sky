@@ -1,0 +1,47 @@
+{
+  "entries": [
+    {
+      "category": "private-key",
+      "file": "host-mac/wheelhouse/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl",
+      "member_prefix": "Crypto/SelfTest/Cipher/test_pkcs1_15.py",
+      "member_sha256": "9f7ae293bbedfdaf32bd892c9b81679a1d0fe82a480624d77827d98f5602c906",
+      "reason": "Exact public PyCryptodome self-test fixture; not generated or used as a 0-Sky user credential"
+    },
+    {
+      "category": "private-key",
+      "file": "host-mac/wheelhouse/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl",
+      "member_prefix": "Crypto/SelfTest/PublicKey/test_import_DSA.py",
+      "member_sha256": "d9a5613097b67f8a4d22d08366ca7adc805dc1fc6a8f3042400e1ac6fa9685e8",
+      "reason": "Exact public PyCryptodome self-test fixture; not generated or used as a 0-Sky user credential"
+    },
+    {
+      "category": "private-key",
+      "file": "host-mac/wheelhouse/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl",
+      "member_prefix": "Crypto/SelfTest/PublicKey/test_import_ECC.py",
+      "member_sha256": "c41b3b050c5450bf06a8005806f5fe20488718eefce7a7c13799da3f8c4c3ddf",
+      "reason": "Exact public PyCryptodome self-test fixture; not generated or used as a 0-Sky user credential"
+    },
+    {
+      "category": "private-key",
+      "file": "host-mac/wheelhouse/pycryptodome-3.23.0-cp37-abi3-macosx_10_9_universal2.whl",
+      "member_prefix": "Crypto/SelfTest/PublicKey/test_import_RSA.py",
+      "member_sha256": "9ee884deb5c9703349d7b660ed3ff806c93eff2c62850b9e46aa7500a2697e08",
+      "reason": "Exact public PyCryptodome self-test fixture; not generated or used as a 0-Sky user credential"
+    },
+    {
+      "category": "private-key",
+      "file": "offline-python/libpython3.9_3.9.9-1_iphoneos-arm64.deb",
+      "member_prefix": "var/jb/usr/lib/python3.9/test/",
+      "reason": "Public CPython TLS test fixtures; not generated or used as 0-Sky user credentials",
+      "sha256": "06777dac1c01154ab09cba6ea4ed8d5a63e82af37cfb7a5ececa2f1ba274b00b"
+    },
+    {
+      "category": "project-local-address-*",
+      "file": "offline-python/libpython3.9_3.9.9-1_iphoneos-arm64.deb",
+      "member_prefix": "var/jb/usr/lib/python3.9/test/",
+      "reason": "Public CPython networking test fixtures; not generated host configuration",
+      "sha256": "06777dac1c01154ab09cba6ea4ed8d5a63e82af37cfb7a5ececa2f1ba274b00b"
+    }
+  ],
+  "schema": 1
+}

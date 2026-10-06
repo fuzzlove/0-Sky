@@ -9,6 +9,8 @@ IOS_SDK_VERSION ?= 26.5
 IOS_MIN_VERSION ?= 26.0
 ARCHS ?= arm64 arm64e
 SOURCE_DATE_EPOCH ?= 1790899200
+SRD_UDID ?=
+SRD_INSTANCE ?=
 export SOURCE_DATE_EPOCH
 
 DOWNLOAD_DIR := $(CURDIR)/downloads
@@ -29,16 +31,28 @@ AFC2D_ARCHIVE := $(DOWNLOAD_DIR)/afc2d-$(AFC2D_COMMIT).tar.gz
 AFC2D_URL := https://github.com/Cannathea/afc2d-arm64/archive/$(AFC2D_COMMIT).tar.gz
 AFC2D_SHA256 := 92b804570960798f82a42beffa430d55cb1271b5e87f68272d3881ad5d33e80a
 AFC2D_SOURCE := $(BUILD_DIR)/afc2d
-AFC2D_SYSTEM_AFCD := $(CURDIR)/inputs/afcd-iPhone13,2-24A5390f
+COMPATIBILITY_PROFILE ?= $(CURDIR)/profiles/iPhone13,2-24A5390f.json
+AFC2D_SYSTEM_AFCD ?= $(CURDIR)/inputs/afcd-iPhone13,2-24A5390f
+AFC2D_SYSTEM_AFCD_SHA256 = $(shell /usr/bin/python3 -c 'import json;print(json.load(open("$(COMPATIBILITY_PROFILE)"))["system_binaries"]["/usr/libexec/afcd"]["sha256"])')
+AFC2D_COMPAT_HEADER := $(AFC2D_SOURCE)/0sky-compatibility.h
 AFC2D_HELPER := $(AFC2D_SOURCE)/layout/usr/libexec/afc2d
 AFC2D_SHIM_SOURCE := $(CURDIR)/helpers/afc2d-xpc-shim.c
 AFC2D_SHIM := $(AFC2D_SOURCE)/layout/usr/lib/afc2d-xpc-shim.dylib
 AFC2D_DEB := $(AFC2D_SOURCE)/packages/com.cannathea.afc2d-arm64_1.2.0+0sky27.5_iphoneos-arm64.deb
 AFC2D_DIST := $(DIST_DIR)/com.cannathea.afc2d-arm64_1.2.0+0sky27.5_iphoneos-arm64.deb
 
-.PHONY: all download source patch build package check clean distclean
+.PHONY: all discover-profile download source patch build package check clean distclean FORCE
 
 all: check
+
+FORCE:
+
+discover-profile:
+	test -n "$(SRD_UDID)"
+	test -n "$(SRD_INSTANCE)"
+	./scripts/discover-device-profile.py --udid "$(SRD_UDID)" \
+		--instance "$(SRD_INSTANCE)" --inputs-dir "$(CURDIR)/inputs" \
+		--profiles-dir "$(CURDIR)/profiles"
 
 download: $(APPSYNC_ARCHIVE) $(AFC2D_ARCHIVE)
 
@@ -90,18 +104,22 @@ $(APPSYNC_DEB): $(APPSYNC_SOURCE)/.patched
 	$(MAKE) -C "$(APPSYNC_SOURCE)" clean package \
 		THEOS="$(THEOS)" THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 \
 		ARCHS="$(ARCHS)" TARGET="iphone:clang:$(IOS_SDK_VERSION):$(IOS_MIN_VERSION)" \
-		ADDITIONAL_LDFLAGS="-Wl,-no_uuid" \
+		ADDITIONAL_LDFLAGS="" \
 		TARGET_CODESIGN=/usr/bin/codesign TARGET_CODESIGN_FLAGS="--force --sign -"
 
-$(AFC2D_SOURCE)/.helper: $(AFC2D_SOURCE)/.patched $(AFC2D_SYSTEM_AFCD) scripts/build-afc2d-helper.py patches/afc2d/afcd-entitlements.plist $(AFC2D_SHIM_SOURCE) $(CURDIR)/Makefile
-	./scripts/build-afc2d-helper.py "$(AFC2D_SYSTEM_AFCD)" "$(AFC2D_HELPER)"
+$(AFC2D_COMPAT_HEADER): FORCE $(AFC2D_SOURCE)/.patched $(COMPATIBILITY_PROFILE) scripts/render-compatibility-header.py
+	./scripts/render-compatibility-header.py "$(COMPATIBILITY_PROFILE)" "$@"
+
+$(AFC2D_SOURCE)/.helper: $(AFC2D_SOURCE)/.patched $(AFC2D_COMPAT_HEADER) $(AFC2D_SYSTEM_AFCD) scripts/build-afc2d-helper.py patches/afc2d/afcd-entitlements.plist $(AFC2D_SHIM_SOURCE) $(CURDIR)/Makefile
+	./scripts/build-afc2d-helper.py --expected-sha256 "$(AFC2D_SYSTEM_AFCD_SHA256)" \
+		"$(AFC2D_SYSTEM_AFCD)" "$(AFC2D_HELPER)"
 	mkdir -p "$(dir $(AFC2D_SHIM))"
 	SDK="$$(xcrun --sdk iphoneos --show-sdk-path)"; \
 	CLANG="$$(xcrun --sdk iphoneos --find clang)"; \
-		"$$CLANG" -arch arm64 -isysroot "$$SDK" -miphoneos-version-min=$(IOS_MIN_VERSION) -Os -dynamiclib -Wl,-no_uuid \
+		"$$CLANG" -arch arm64 -isysroot "$$SDK" -miphoneos-version-min=$(IOS_MIN_VERSION) -Os -dynamiclib \
 		-Wl,-install_name,/var/jb/usr/lib/afc2d-xpc-shim.dylib -Wl,-reexport_framework,CoreFoundation \
 		"$(AFC2D_SHIM_SOURCE)" -o "$(AFC2D_SOURCE)/.afc2d-xpc-shim.arm64"; \
-		"$$CLANG" -arch arm64e -isysroot "$$SDK" -miphoneos-version-min=$(IOS_MIN_VERSION) -Os -dynamiclib -Wl,-no_uuid \
+		"$$CLANG" -arch arm64e -isysroot "$$SDK" -miphoneos-version-min=$(IOS_MIN_VERSION) -Os -dynamiclib \
 		-Wl,-install_name,/var/jb/usr/lib/afc2d-xpc-shim.dylib -Wl,-reexport_framework,CoreFoundation \
 		"$(AFC2D_SHIM_SOURCE)" -o "$(AFC2D_SOURCE)/.afc2d-xpc-shim.arm64e"
 	lipo -create "$(AFC2D_SOURCE)/.afc2d-xpc-shim.arm64" \
@@ -121,7 +139,7 @@ $(AFC2D_DEB): $(AFC2D_SOURCE)/.helper
 	$(MAKE) -C "$(AFC2D_SOURCE)" clean package \
 		THEOS="$(THEOS)" THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1 \
 		ARCHS="$(ARCHS)" TARGET="iphone:clang:$(IOS_SDK_VERSION):$(IOS_MIN_VERSION)" \
-		ADDITIONAL_LDFLAGS="-Wl,-no_uuid" \
+		ADDITIONAL_LDFLAGS="" \
 		TARGET_CODESIGN=/usr/bin/codesign TARGET_CODESIGN_FLAGS="--force --sign -"
 
 package: $(APPSYNC_DIST) $(AFC2D_DIST)

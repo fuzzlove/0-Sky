@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import plistlib
@@ -11,7 +12,7 @@ import unittest
 from unittest.mock import patch
 
 from tools.release_sanitize import audit
-from tools.stage_verified_kit import digest, stage
+from tools.stage_verified_kit import REQUIRED_RUNTIME_BUILD_INPUTS, digest, stage
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -38,6 +39,113 @@ OTHER = "00000000-0000000000000002"
 
 
 class InstallerLifecycleTests(unittest.TestCase):
+    def _kit(self, root: Path, revision: str) -> Path:
+        kit = root / revision
+        paths = []
+        for name in installer.STAGED_DIRS:
+            path = kit / name / "revision.txt"
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(revision, encoding="utf-8")
+            paths.append(path)
+        (kit / "SHA256SUMS").write_text("".join(
+            f"{hashlib.sha256(path.read_bytes()).hexdigest()}  "
+            f"./{path.relative_to(kit).as_posix()}\n"
+            for path in paths
+        ), encoding="utf-8")
+        return kit
+
+    def _instance_config(self, root: Path, digest: str, udid: str = UDID) -> dict:
+        return {
+            "schema": 2, "instance": "fixture-srd", "udid": udid,
+            "ssh_host": "127.0.0.1", "ssh_port": "2222",
+            "ssh_remote_port": "22", "ssh_key": str(root / "identity"),
+            "source_manifest_sha256": digest,
+        }
+
+    def test_kit_revision_refresh_is_explicit_private_and_idempotent(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old_kit = self._kit(root, "old-kit")
+            new_kit = self._kit(root, "new-kit")
+            directory = root / "support/instances/fixture-srd"
+            old = self._instance_config(root, "old-digest")
+            new = self._instance_config(root, "new-digest")
+            installer.stage_instance(old_kit, directory, old)
+            (directory / "logs/preserved.log").write_text("diagnostic evidence")
+            (directory / "venv").mkdir()
+            (directory / "venv/runtime").write_text("managed runtime")
+            (directory / "pairing-state.json").write_text("pairing material")
+            (directory / ".install-complete").write_text("old-digest\n")
+
+            with self.assertRaisesRegex(installer.InstallError, "another kit revision"):
+                installer.stage_instance(new_kit, directory, new)
+            self.assertEqual((directory / "host-mac/revision.txt").read_text(), "old-kit")
+
+            checkpoint = installer.stage_instance(
+                new_kit, directory, new, refresh_staged_assets=True
+            )
+            self.assertIsNotNone(checkpoint)
+            assert checkpoint is not None
+            self.assertEqual((directory / "host-mac/revision.txt").read_text(), "new-kit")
+            self.assertEqual((checkpoint / "host-mac/revision.txt").read_text(), "old-kit")
+            self.assertEqual((directory / "logs/preserved.log").read_text(), "diagnostic evidence")
+            self.assertEqual((directory / "venv/runtime").read_text(), "managed runtime")
+            self.assertEqual((directory / "pairing-state.json").read_text(), "pairing material")
+            self.assertFalse((directory / ".install-complete").exists())
+            self.assertEqual(checkpoint.stat().st_mode & 0o777, 0o700)
+            self.assertEqual((checkpoint / "config.json").stat().st_mode & 0o777, 0o600)
+            checkpoints = list((directory / "kit-refresh-backups").iterdir())
+            self.assertIsNone(installer.stage_instance(
+                new_kit, directory, new, refresh_staged_assets=True
+            ))
+            self.assertEqual(list((directory / "kit-refresh-backups").iterdir()), checkpoints)
+
+    def test_kit_revision_refresh_refuses_endpoint_change_before_mutation(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old_kit = self._kit(root, "old-kit")
+            new_kit = self._kit(root, "new-kit")
+            directory = root / "support/instances/fixture-srd"
+            old = self._instance_config(root, "old-digest")
+            installer.stage_instance(old_kit, directory, old)
+            changed = self._instance_config(root, "new-digest", OTHER)
+            with self.assertRaisesRegex(installer.InstallError, "another endpoint"):
+                installer.stage_instance(
+                    new_kit, directory, changed, refresh_staged_assets=True
+                )
+            self.assertEqual((directory / "host-mac/revision.txt").read_text(), "old-kit")
+            self.assertFalse((directory / "kit-refresh-backups").exists())
+
+    def test_failed_kit_revision_refresh_restores_previous_assets_and_marker(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            old_kit = self._kit(root, "old-kit")
+            new_kit = self._kit(root, "new-kit")
+            directory = root / "support/instances/fixture-srd"
+            old = self._instance_config(root, "old-digest")
+            new = self._instance_config(root, "new-digest")
+            installer.stage_instance(old_kit, directory, old)
+            marker = directory / ".install-complete"
+            marker.write_text("old-digest\n")
+            original_atomic_json = installer.atomic_json
+
+            def fail_final_config(path, value):
+                if path == directory / "config.json":
+                    raise OSError("injected final config failure")
+                return original_atomic_json(path, value)
+
+            with patch.object(installer, "atomic_json", side_effect=fail_final_config):
+                with self.assertRaisesRegex(OSError, "injected final config failure"):
+                    installer.stage_instance(
+                        new_kit, directory, new, refresh_staged_assets=True
+                    )
+            self.assertEqual((directory / "host-mac/revision.txt").read_text(), "old-kit")
+            self.assertEqual(marker.read_text(), "old-digest\n")
+            self.assertEqual(
+                json.loads((directory / "config.json").read_text())["source_manifest_sha256"],
+                "old-digest",
+            )
+
     def test_device_bridge_supervisor_uses_unauthenticated_health_probe(self):
         supervisor = (HOST.parent /
                       "KitScripts/automation/CrypStoreAutomation/device_bridge_supervisor.sh")
@@ -172,6 +280,53 @@ class InstallerLifecycleTests(unittest.TestCase):
             (source / "SHA256SUMS").write_text(manifest)
             self.assertEqual(stage(source, output), 10)
             self.assertFalse((output / "unlisted-private-key").exists())
+
+    def test_release_staging_omits_python_cache_artifacts(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "kit", root / "output"
+            cache = source / "host-mac/__pycache__"
+            cache.mkdir(parents=True)
+            files = [source / f"asset-{index}" for index in range(10)]
+            files += [cache / "install.cpython-312.pyc", source / "host-mac/helper.pyo"]
+            for index, path in enumerate(files):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(f"fixture {index}".encode())
+            files[0].chmod(0o600)
+            files[1].chmod(0o700)
+            (source / "SHA256SUMS").write_text("".join(
+                f"{digest(path)}  ./{path.relative_to(source).as_posix()}\n"
+                for path in files))
+            self.assertEqual(stage(source, output, release=True), 10)
+            self.assertFalse((output / "host-mac/__pycache__").exists())
+            self.assertFalse((output / "host-mac/helper.pyo").exists())
+            self.assertEqual(output.stat().st_mode & 0o777, 0o755)
+            self.assertEqual((output / "asset-0").stat().st_mode & 0o777, 0o644)
+            self.assertEqual((output / "asset-1").stat().st_mode & 0o777, 0o755)
+
+    def test_release_staging_keeps_first_runtime_compiler_inputs(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source, output = root / "kit", root / "output"
+            files = [source / f"asset-{index}" for index in range(10)]
+            files += [source / relative for relative in REQUIRED_RUNTIME_BUILD_INPUTS]
+            files += [source / "automation/tools/srd-runtime-manager/test_manager.py"]
+            for index, path in enumerate(files):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_bytes(f"fixture {index}".encode())
+            (source / "SHA256SUMS").write_text("".join(
+                f"{digest(path)}  ./{path.relative_to(source).as_posix()}\n"
+                for path in files))
+
+            self.assertEqual(
+                stage(source, output, release=True),
+                10 + len(REQUIRED_RUNTIME_BUILD_INPUTS),
+            )
+            for relative in REQUIRED_RUNTIME_BUILD_INPUTS:
+                self.assertTrue((output / relative).is_file(), relative)
+            self.assertFalse(
+                (output / "automation/tools/srd-runtime-manager/test_manager.py").exists()
+            )
 
     def test_sanitizer_reports_categories_without_values(self):
         with tempfile.TemporaryDirectory() as temporary:

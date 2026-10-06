@@ -1,0 +1,18 @@
+{
+  "schema": 1,
+  "python": {
+    "version": "3.12.14+20260901",
+    "license": "PSF-2.0 (CPython); MPL-2.0 (python-build-standalone build system); additional embedded component notices retained in each archive",
+    "upstream": "https://github.com/astral-sh/python-build-standalone",
+    "archives": {
+      "arm64": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-aarch64-apple-darwin-install_only_stripped.tar.gz",
+        "sha256": "81a359f1cfadd4da11766534c5913791cea55f26e1bb902cacd2a531bb1e4b2b"
+      },
+      "x86_64": {
+        "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20260901/cpython-3.12.14%2B20260901-x86_64-apple-darwin-install_only_stripped.tar.gz",
+        "sha256": "65b195c9cedc1fef6767f044f9822069adbd1bd9204d424ece4628776fdc04bb"
+      }
+    }
+  }
+}

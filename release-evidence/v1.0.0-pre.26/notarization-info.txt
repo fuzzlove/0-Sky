@@ -1,0 +1,9 @@
+0-Sky Bridge v1.0.0-pre.26 notarization evidence
+
+Apple notary service status: Accepted
+Staple operation: PASS
+Staple validation: PASS
+Gatekeeper source: Notarized Developer ID
+Independent post-download verification: PASS
+
+The credential profile, Apple account identifier, app-specific password, private keys, certificate fingerprints, and submission account metadata are intentionally not retained.

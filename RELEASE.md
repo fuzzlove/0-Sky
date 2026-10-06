@@ -1,21 +1,35 @@
 # Release procedure
 
+Release state, deprecation, artifact retention, rollback, checksum, SBOM,
+signing, and notarization requirements are normative in
+[`docs/RELEASE_POLICY.md`](docs/RELEASE_POLICY.md). The current supported
+release is recorded in [`manifests/release-status.json`](manifests/release-status.json)
+and must pass `python3 tools/verify_release_policy.py`.
+
 For the signed Universal 2 package pipeline, start with
 [`docs/RELEASE.md`](docs/RELEASE.md) and [`scripts/build_release.sh`](scripts/build_release.sh).
 The steps below describe lower-level inputs and verification.
+
+Use a new empty `--output` directory for every build. The canonical pipeline
+publishes exactly one package plus `RELEASE_AUDIT.txt`,
+`RELEASE_MANIFEST.json`, and `SHA256SUMS`; stale or extra output files fail the
+build rather than being silently included.
 
 Use a clean checkout and a separately obtained, authorized kit. Keep the kit,
 signing identities, pairing records, SSH keys, provisioning profiles, and
 generated device state outside Git. Verify the kit's provenance before use.
 No personal Team ID or signing certificate is supplied by this repository.
+The kit must contain `host-mac/HOST_RUNTIME_MANIFEST.json` and every declared
+Universal 2 Python/host-tool runtime file; missing components fail closed with
+`HOST_RUNTIME=FAIL`.
 
 1. Run `python3 tools/verify_eula.py` and review the canonical legal artifact
    under `bridge/0SkyBridge/Resources/Legal`. A changed text digest, version,
    or effective-date mismatch blocks release. Preserve the legal text unless
    the authorized document owner supplies a revision. The EULA version is
    independent of the app version.
-2. Run `python3 tools/environment_preflight.py --mode release --kit KIT
-   --skip-device`. A missing signing input is BLOCKED. A configured input is
+2. Run `python3 tools/environment_preflight.py --human --mode release --kit KIT
+   --theos /absolute/path/to/locked/theos --skip-device`. A missing signing input is BLOCKED. A configured input is
    only a preflight signal; verify the actual certificate, entitlements, and
    provisioning on the final artifacts.
 3. Run `python3 tools/prepare_release_kit.py KIT RELEASE_KIT`. Pass
@@ -33,7 +47,8 @@ No personal Team ID or signing certificate is supplied by this repository.
 6. Sign and notarize the Mac app with the publisher's own credentials and
    required entitlements. Verify signatures and architecture slices after
    signing. The local `build.sh` output is unsigned and is **not** a public
-   release artifact.
+   release artifact. `scripts/build_release.sh` emits the minimal checksummed
+   release set only after all gates pass.
 7. On a clean account, verify the complete first-launch EULA, unchecked
    acceptance controls, explicit Decline/Accept paths, and a persisted local
    version/digest/timestamp record. Verify a newer EULA requires acceptance
@@ -42,6 +57,15 @@ No personal Team ID or signing certificate is supplied by this repository.
    pairing, CoreDevice, root SSH, Link icon and registration, Control, bridge,
    wireless reconnect where applicable, upgrade, uninstall/restore, and
    reinstall. Preserve the existing bootstrap and pairing material.
+
+Independently verify a published directory without relying on a retained build
+tree:
+
+```sh
+python3 tools/release_manifest.py verify /path/to/release
+scripts/verify_release.sh --release-directory /path/to/release \
+  --report /tmp/0sky-independent-release-audit.txt
+```
 
 The scanner covers known high-confidence home paths, device IDs, private key
 headers, embedded passwords, developer CoreDevice hostnames, local IPs,

@@ -1,0 +1,30 @@
+{
+  "assets": [
+    {
+      "bytes": 290051970,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "sha256": "7eab748c43fcc1789944ba6590ab083004e711d829d8acf44d11ec2dcc4cd68f"
+    },
+    {
+      "bytes": 1347,
+      "name": "RELEASE_AUDIT.txt",
+      "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0"
+    },
+    {
+      "bytes": 520,
+      "name": "RELEASE_MANIFEST.json",
+      "sha256": "0c53f4ac9a5d8bd7bd4a31b2c3c7e8a9acc839e510787ab4fa2cced0b3de6253"
+    },
+    {
+      "bytes": 284,
+      "name": "SHA256SUMS",
+      "sha256": "4f3c01a370ce5eaf04412d58df9a646a0300a7552af3a304d7e34e065c0f045e"
+    }
+  ],
+  "commit": "a60643b98e469fc3863af6d7a310c42182c0bf50",
+  "draft": false,
+  "prerelease": true,
+  "published_at": "2026-10-05T23:49:23Z",
+  "schema": 1,
+  "tag": "v1.0.0-pre.26"
+}

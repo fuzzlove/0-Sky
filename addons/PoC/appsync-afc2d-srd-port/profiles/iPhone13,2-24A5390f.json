@@ -1,0 +1,154 @@
+{
+  "architecture": "arm64e",
+  "device": {
+    "build": "24A5390f",
+    "product": "iPhone13,2",
+    "version": "27.0"
+  },
+  "dyld_shared_caches": [
+    {
+      "discovery_method": "_dyld_get_shared_cache_uuid and _dyld_get_shared_cache_range",
+      "kind": "process_primary_shared_cache",
+      "mapped_size": 6393724928,
+      "uuid": "01C9902F-36E8-3CEC-AB61-33FAFE547A30"
+    }
+  ],
+  "offsets": {
+    "cf_runloop_return": {
+      "discovery_method": "resolve _CFRunLoopRun through the indirect symbol table and require one BL from LC_MAIN",
+      "evidence": {
+        "call_instruction": "0x94021337",
+        "call_site_image_offset": "0xf450",
+        "candidate_count": 1,
+        "instruction_mask": "0xfc000000",
+        "resolved_symbol": "_CFRunLoopRun"
+      },
+      "expected_section": "__TEXT,__text",
+      "file_offset": "0xf454",
+      "image": "/usr/libexec/lockdownd",
+      "meaning": "saved return PC immediately after lockdownd main calls _CFRunLoopRun",
+      "runtime_resolution": "current_lockdownd_mach_header + value",
+      "type": "image_relative_virtual_address",
+      "unslid_virtual_address": "0x10000f454",
+      "validation": {
+        "checks": [
+          "unique candidate",
+          "inside __TEXT,__text",
+          "instruction semantics matched",
+          "file and virtual bounds checked"
+        ],
+        "result": "PASS"
+      },
+      "value": "0xf454"
+    },
+    "service_ark_add_entry": {
+      "discovery_method": "xref the unique service_ark_add_entry_block_invoke marker, identify its arm64e function, then require one enclosing function reference",
+      "evidence": {
+        "block_reference_count": 1,
+        "block_start_image_offset": "0x1b380",
+        "candidate_count": 1,
+        "entry_instruction_0": "0xd503237f",
+        "entry_instruction_1": "0xd10243ff",
+        "marker_file_offset": "0x9f68d",
+        "marker_unslid_virtual_address": "0x10009f68d",
+        "marker_xref_count": 2
+      },
+      "expected_section": "__TEXT,__text",
+      "file_offset": "0x1b268",
+      "image": "/usr/libexec/lockdownd",
+      "meaning": "entry point of lockdownd's internal service_ark_add_entry function",
+      "runtime_resolution": "current_lockdownd_mach_header + value",
+      "type": "image_relative_virtual_address",
+      "unslid_virtual_address": "0x10001b268",
+      "validation": {
+        "checks": [
+          "unique candidate",
+          "inside __TEXT,__text",
+          "instruction semantics matched",
+          "file and virtual bounds checked"
+        ],
+        "result": "PASS"
+      },
+      "value": "0x1b268"
+    },
+    "service_ark_in_main_frame": {
+      "base": "lockdownd LC_MAIN frame pointer",
+      "discovery_method": "require the unique main sequence that passes two stack locals to the service-ark loader and stores its result",
+      "evidence": {
+        "ark_slot_from_sp": "0x18",
+        "candidate_count": 1,
+        "first_local_from_sp": "0x10",
+        "frame_pointer_from_sp": "0x80",
+        "instruction_words": [
+          "0x910043e0",
+          "0x910023e1",
+          "0x94000782",
+          "0xf9000be0"
+        ],
+        "main_image_offset": "0xf2a4",
+        "sequence_image_offset": "0xf3f4"
+      },
+      "expected_section": null,
+      "file_offset": null,
+      "meaning": "stack slot containing the live service-ark pointer",
+      "operation": "subtract",
+      "runtime_resolution": "main_frame_pointer - value",
+      "type": "frame_relative_displacement",
+      "unslid_virtual_address": null,
+      "validation": {
+        "checks": [
+          "unique candidate",
+          "positive aligned displacement",
+          "LC_MAIN bounds checked",
+          "four-instruction semantic sequence matched"
+        ],
+        "result": "PASS"
+      },
+      "value": "0x68"
+    }
+  },
+  "packages": [
+    {
+      "filename": "ai.akemi.appsyncunified_116.0+0sky26.1_iphoneos-arm64.deb",
+      "files": {
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-FrontBoard.dylib": "d185f4226da9be30202483c7adb6425936977e2c80542fc20d9a769e95916e7b",
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-FrontBoard.plist": "eff0e07afd4afa6713eea91fde32a92d420c39361f2ee021548dc3e01cb552ea",
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-installd.dylib": "b9b4e62ad7c2a652e0ba99825eb9a833457c36e8bfc7252d14c7b3c1abf218da",
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/AppSyncUnified-installd.plist": "98d31c678ba9eec7e15cfdc849c2bd26da866d19d5b2e880be5e7cd9c95e3385"
+      },
+      "installable": true,
+      "package": "ai.akemi.appsyncunified",
+      "package_sha256": "0e50dc13f9487d368bdfea3f272b0b6f28352e0a1460fccf1634b3054ac7302f",
+      "version": "116.0+0sky26.1"
+    },
+    {
+      "filename": "com.cannathea.afc2d-arm64_1.2.0+0sky27.5_iphoneos-arm64.deb",
+      "files": {
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/afc2dService.dylib": "2d3f609d6de2484f50eee8c1b6ceb76279215c2960f87baa068310a696b84440",
+        "/var/jb/Library/MobileSubstrate/DynamicLibraries/afc2dService.plist": "81221171550150d8cdb6bb341284741d2f02118bcee7dbaaccec0e71ef3e29a2",
+        "/var/jb/usr/lib/afc2d-xpc-shim.dylib": "152b2f68129eb04bb89572d1100e40478b77e8f539c34631dfaddee510bdfeff",
+        "/var/jb/usr/libexec/afc2d": "c900211619e202e1469f049ad7e721897396f3b0e6b27cfa9c9378ffe0b2284e"
+      },
+      "installable": true,
+      "package": "com.cannathea.afc2d-arm64",
+      "package_sha256": "c8288eb788a77e5a1ed7497628e8633c63347aedf1fa97169f1f87f82ab18eb7",
+      "version": "1.2.0+0sky27.5"
+    }
+  ],
+  "schema": 2,
+  "status": "reviewed",
+  "system_binaries": {
+    "/usr/libexec/afcd": {
+      "architecture": "arm64e",
+      "sha256": "fd53a6c591dedf2b1c30e8d5c542f3df5e80099306607a52eaa4e4f2958c87f8",
+      "size": 75888,
+      "uuid": "E2F4C1C3-4229-3259-B79F-522E0CC8FD6D"
+    },
+    "/usr/libexec/lockdownd": {
+      "architecture": "arm64e",
+      "sha256": "e6844bdf52dd3dfab0558c004f85506ca56892c69f318df88aedfe3306e1ebf7",
+      "size": 968928,
+      "uuid": "C59E0BD6-8B64-32DD-A33A-2670801CD9E4"
+    }
+  }
+}

@@ -1434,6 +1434,21 @@ def archive_contains_app(deb_path):
         r"(?:^|\s)\.?/(?:var/jb/)?Applications/[^\s/]+\.app/(?:Info\.plist|[^\s]+)",
         text, re.MULTILINE | re.IGNORECASE))
 
+
+def archive_contains_runtime_code(deb_path):
+    """Detect code whose first execution must wait for Cryptex renewal."""
+    listed = subprocess.run(
+        ["/var/jb/usr/bin/dpkg-deb", "--contents", deb_path],
+        cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60, check=False)
+    if listed.returncode != 0:
+        return False
+    text = listed.stdout.decode("utf-8", "replace")
+    return bool(re.search(
+        r"(?:^|\s)(?:\./|/)?var/jb/(?:Library/MobileSubstrate/DynamicLibraries|"
+        r"usr/lib/TweakInject)/[^\s/]+\.dylib(?:\s|$)",
+        text, re.MULTILINE | re.IGNORECASE))
+
 def dependency_error(output):
     lower = output.lower()
     return any(value in lower for value in (
@@ -2053,16 +2068,12 @@ def integration_report(package_name, app_filter=None):
             messages.append(
                 f"Installed {len(payload['tweaks'])} tweak dylib(s); runtime manager "
                 "activation is pending the verified Mac runtime sync.")
-        if os.path.isfile(RUNTIME_MANAGER):
-            requested = subprocess.run(
-                ["/var/jb/usr/bin/python3", RUNTIME_MANAGER, "sync"],
-                cwd="/var/jb/var/tmp", env=ENV, stdin=subprocess.DEVNULL,
-                stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=15, check=False)
-            if requested.returncode == 0:
-                messages.append("Dynamic ElleKit registry refresh requested.")
-            else:
-                failures.append("Dynamic ElleKit registry refresh failed: " +
-                                requested.stderr.decode("utf-8", "replace")[-1000:])
+        # Do not ask the live manager to inject newly installed bytes before
+        # queue_runtime_sync() has sealed those exact CodeDirectories into a
+        # personalized trust generation. The authenticated Mac sync below
+        # renews the Cryptex, restarts the manager, and performs first injection.
+        messages.append("Dynamic ElleKit registry refresh deferred until the "
+                        "authenticated Mac runtime sync completes.")
     return payload, messages, failures
 
 
@@ -2749,6 +2760,8 @@ def install_deb(path):
     archive_dir = "/var/jb/var/cache/apt/archives"
     os.makedirs(archive_dir, mode=0o755, exist_ok=True)
     destination = os.path.join(archive_dir, "crypstore-" + str(uuid.uuid4()) + ".deb")
+    pause_path = "/var/mobile/pl/srd-runtime-paused"
+    pause_owned = False
     try:
         shutil.copyfile(source, destination)
         os.chown(destination, 0, 0)
@@ -2788,6 +2801,12 @@ def install_deb(path):
             return {"status": 190, "stdout": inspection.stdout.decode("utf-8", "replace"),
                     "stderr": ("This package contains a desktop app. Connect the paired Mac before installing "
                                "so 0-Sky Control can build its Cryptex and register its icon atomically.")}
+        if archive_contains_runtime_code(destination) and not os.path.exists(pause_path):
+            os.makedirs(os.path.dirname(pause_path), mode=0o755, exist_ok=True)
+            descriptor = os.open(
+                pause_path, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o600)
+            os.close(descriptor)
+            pause_owned = True
         with LOCK:
             completed, refresh_output = apt_install(destination)
         stdout = inspection.stdout + b"\n" + refresh_output + completed.stdout
@@ -2847,6 +2866,9 @@ def install_deb(path):
             "version": metadata.get("Version", ""),
         }
     finally:
+        if pause_owned:
+            try: os.unlink(pause_path)
+            except OSError: pass
         try: os.unlink(destination)
         except OSError: pass
 

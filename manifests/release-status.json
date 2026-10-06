@@ -1,0 +1,222 @@
+{
+  "current": {
+    "commit": "a60643b98e469fc3863af6d7a310c42182c0bf50",
+    "installer": {
+      "bytes": 290051970,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "sha256": "7eab748c43fcc1789944ba6590ab083004e711d829d8acf44d11ec2dcc4cd68f"
+    },
+    "prerelease": true,
+    "release_url": "https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.26",
+    "state": "CURRENT_VERIFIED_SUPPORTED",
+    "tag": "v1.0.0-pre.26"
+  },
+  "deprecated": [
+    {
+      "commit": "d6c3a14602dc7554874afd2fea47d78082f4e1f9",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.2"
+    },
+    {
+      "commit": "c0f121572cbf6e7a0340f71bb401cb9a8c221660",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.3-r2"
+    },
+    {
+      "commit": "b7eb23032aafaddb60ef3c5c3d08914d6182b2a8",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.4"
+    },
+    {
+      "commit": "beed3b344c2f6be8af64f73d1c070364f865f221",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.5"
+    },
+    {
+      "commit": "9d52b4f611315979482f8d8963cff317f399a26f",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.6"
+    },
+    {
+      "commit": "4216978ce7643c3bb770a67889f0413f72a7dd7a",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.7"
+    },
+    {
+      "commit": "d16f289a4a12340f62fcc6a8dc0aa4af01512581",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.8"
+    },
+    {
+      "commit": "3f9421a68cd101ad421008a1b721f2ee1aa8239a",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.9"
+    },
+    {
+      "commit": "bdbe3dc6ac3d06c667ff7d6a15b7ec36b224f09a",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.10"
+    },
+    {
+      "commit": "5349e3a682e5d5d558fd5b9a7c7a46c873da9032",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.11"
+    },
+    {
+      "commit": "2a1ca4a7d165bb111d1801dcd298b243d38420ed",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.12"
+    },
+    {
+      "commit": "4c99d1d4bcee059375c19ba0019da852ccb67a15",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.13"
+    },
+    {
+      "commit": "1aa3438052bf8dcb926a739a5f558638a9307070",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.14"
+    },
+    {
+      "commit": "9b6854421a6068bdcecea857006a6f5bef86dfd5",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.15"
+    },
+    {
+      "commit": "698b1d0ad3d5654ad19e104f9f98914f457ba80b",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.16"
+    },
+    {
+      "commit": "896787b5e2c95d672f39f456ab780d9aea6ca5e6",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.17"
+    },
+    {
+      "commit": "fee4446f17ebcdec9a973e29f413efce96142d70",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.18"
+    },
+    {
+      "commit": "da192473fda37897ede41f1671813fb2ea268e76",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.19"
+    },
+    {
+      "commit": "5a99edaa89445bdbb7b15d8178ae1678dba04c66",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.20"
+    },
+    {
+      "commit": "01400ec78de4dbc28eeb4936d4d929cba4e7b548",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.21"
+    },
+    {
+      "commit": "7e085e77cec51985874ce813291cb7243274ba94",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.22"
+    },
+    {
+      "commit": "8ffa9ef38886535007493558234f031bf735e491",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.23"
+    },
+    {
+      "commit": "04b0bc2b46b2b989c5c1cb77ee3580e5efbde836",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.24"
+    },
+    {
+      "commit": "9bd4a31292a8fed3c6a3a2b061903d964a0d7d45",
+      "state": "DEPRECATED_UNSUPPORTED_HISTORICAL_ONLY",
+      "tag": "v1.0.0-pre.25"
+    }
+  ],
+  "removed_from_distribution": [
+    {
+      "bytes": 12748657,
+      "name": "0-sky-c0f121572cbf-source.tar.gz",
+      "reason": "historical source archive fails the current source privacy/binary admission policy",
+      "sha256": "e975100cc58f5fd2d5ccbb947f39036d993d4f54315efe0ffde92889601149b0",
+      "tag": "v1.0.0-pre.3-r2"
+    },
+    {
+      "bytes": 99,
+      "name": "0-sky-c0f121572cbf-source.tar.gz.sha256",
+      "reason": "checksum sidecar for the removed historical source archive",
+      "sha256": "69d0506d9a372a9984f9f239ec22d85fc11ea9a6db036626462f8fa38dc4c164",
+      "tag": "v1.0.0-pre.3-r2"
+    },
+    {
+      "bytes": 290043305,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "1bd3c26f69057089db56554c927cc648325c7b0853aa72bb8cad16936bb9da62",
+      "tag": "v1.0.0-pre.17"
+    },
+    {
+      "bytes": 290041382,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "6077a85a2bc3a82df659706173e7d17b1c2ea68453b52db744a81fbd8322f439",
+      "tag": "v1.0.0-pre.18"
+    },
+    {
+      "bytes": 290044691,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "de7bc8ca27bcd0a4181de5e3ac6063f4f1ce071c72e2297aecff0701a65e0999",
+      "tag": "v1.0.0-pre.19"
+    },
+    {
+      "bytes": 290043990,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "5aa512c8956d2a29d6933e20a06d61ebce7643029e0e11b998d7ab071ae4af11",
+      "tag": "v1.0.0-pre.20"
+    },
+    {
+      "bytes": 290033011,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "10e3780eb0dc394ed871794af5f34bd665d54caa37d580dd117fb630a5b1371a",
+      "tag": "v1.0.0-pre.21"
+    },
+    {
+      "bytes": 290044515,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "1e0c059dd997517de4baf0326b5e626d6dd8846c56e8527e6ac888912536e3b9",
+      "tag": "v1.0.0-pre.22"
+    },
+    {
+      "bytes": 290036112,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "190fb6675f1ebf27005b5f4889aef8a81cc222002d568857b5f27cb38d2a4439",
+      "tag": "v1.0.0-pre.23"
+    },
+    {
+      "bytes": 290035674,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "e0f51e2a25d33a8e5827bbe10301de4c5ad26f1db4e67311b56b6525305b04b3",
+      "tag": "v1.0.0-pre.24"
+    },
+    {
+      "bytes": 290042638,
+      "name": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "reason": "documented runtime failure and current independent release verification failure",
+      "sha256": "c75b02db2c63909eed196f98b1833939e32eac1209f22cfd1d66572444b146be",
+      "tag": "v1.0.0-pre.25"
+    }
+  ],
+  "retained_provenance": {
+    "git_history": "PRESERVED",
+    "historical_metadata_assets": "PRESERVED_WHEN_NOT_EXECUTABLE",
+    "historical_release_notes": "PRESERVED_WITH_DEPRECATION_BANNER",
+    "published_tags": "PRESERVED_UNMOVED"
+  },
+  "schema": 1
+}

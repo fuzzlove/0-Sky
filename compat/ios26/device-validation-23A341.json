@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "validated_at": "2026-10-04",
+  "evidence_level": "retained-live-session-report",
+  "device": {
+    "product_type": "iPhone15,4",
+    "os_version": "26.0",
+    "build": "23A341",
+    "architecture": "arm64e",
+    "darwin_major": 25
+  },
+  "components": {
+    "control": "3.5.36",
+    "link": "1.9.0 (48)",
+    "runtime_manager": "2.4.20"
+  },
+  "results": [
+    {
+      "stage": "cryptex-personalization-and-install",
+      "result": "PASS",
+      "detail": "Fresh domain-3 nonce, live TSS ticket, exact selected device, and userspace USB transport produced INSTALL SUCCESS."
+    },
+    {
+      "stage": "durable-application-registration",
+      "result": "PASS",
+      "detail": "Link and Control remained registered at durable MCM-backed application paths after the runtime rebuild."
+    },
+    {
+      "stage": "runtime-generation-and-launch",
+      "result": "PASS",
+      "detail": "Runtime Manager, Control, Link, PreferenceLoader, and the measured tweak set were verified against the retained session checklist."
+    },
+    {
+      "stage": "catvnc-optional-backboard-hook",
+      "result": "PARTIAL",
+      "detail": "SpringBoard/menu/server behavior passed; the backboardd hook was rejected and quarantined without killing backboardd."
+    }
+  ],
+  "cryptex_image_type_selection": {
+    "ios_26_0_through_26_3": 9,
+    "ios_26_4_and_later": 10,
+    "ios_27": 10
+  },
+  "evidence_document": "addons/PoC/IOS26_COMPATIBILITY_NOTES.md",
+  "limitations": [
+    "This retained session did not validate the replacement root-owned Intel package produced after the pre.10 permission defect.",
+    "No device identifier, pairing record, private key, nonce value, or ticket is retained in this public record.",
+    "Other device models and OS builds still require exact capability and compatibility checks."
+  ]
+}

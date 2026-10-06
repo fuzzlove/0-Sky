@@ -10,12 +10,35 @@ Credits: 0-Sky Project.
 """
 
 from __future__ import annotations
-import argparse, hashlib, json, pathlib, shlex, subprocess, sys, time
+import argparse, hashlib, json, pathlib, plistlib, shlex, subprocess, sys, time, zipfile
 from instance import resolve as resolve_support
 
 
 def log(message: str) -> None:
     print(f"[0-Sky Link device bootstrap] {message}", flush=True)
+
+
+def ipa_identity(path: pathlib.Path, expected_bundle_id: str) -> tuple[str, str]:
+    """Read the exact version gate from one bounded, verified IPA payload."""
+    try:
+        with zipfile.ZipFile(path) as archive:
+            names = archive.namelist()
+            unsafe = [name for name in names if (pathlib.PurePosixPath(name).is_absolute()
+                      or ".." in pathlib.PurePosixPath(name).parts or "\\" in name)]
+            infos = [name for name in names if name.startswith("Payload/")
+                     and name.count("/") == 2 and name.endswith(".app/Info.plist")]
+            if unsafe or len(infos) != 1:
+                raise ValueError("unsafe or ambiguous application archive")
+            info = plistlib.loads(archive.read(infos[0]))
+    except (OSError, ValueError, zipfile.BadZipFile, plistlib.InvalidFileException) as error:
+        raise SystemExit(f"invalid bundled application payload: {path.name}: {error}") from error
+    if info.get("CFBundleIdentifier") != expected_bundle_id:
+        raise SystemExit(f"bundled application identity mismatch: {path.name}")
+    version = info.get("CFBundleShortVersionString")
+    build = info.get("CFBundleVersion")
+    if not isinstance(version, str) or not version or not isinstance(build, str) or not build:
+        raise SystemExit(f"bundled application version is missing: {path.name}")
+    return version, build
 
 
 def main() -> int:
@@ -219,7 +242,7 @@ with urllib.request.urlopen(request,timeout=10) as response:
     else:
         log("renewing dpkg/filter-derived SRD runtime trust")
         if not args.dry_run:
-            subprocess.run(command,check=True)
+            subprocess.run(command, check=True, timeout=1800)
             # A successful installer process is not itself proof of injection.
             # Wait for the live endpoint to confirm ElleKit and at least one
             # dylib/target before printing the success milestone.
@@ -334,8 +357,11 @@ raise SystemExit(0 if result.get('status')==0 else 1)
                 time.sleep(1)
             else: raise SystemExit("0-Sky Control bridge did not become ready")
         if args.apps or args.commissary:
-            install_ipa(packages/"Commissary-Universal.ipa",
-                        "com.liquidsky.CrypStore", version="3.5.28", build="3.5.28.0")
+            control = packages/"Commissary-Universal.ipa"
+            control_version, control_build = ipa_identity(
+                control, "com.liquidsky.CrypStore")
+            install_ipa(control, "com.liquidsky.CrypStore",
+                        version=control_version, build=control_build)
         if args.apps:
             sileo = support/"apps/Sileo-0-Sky.ipa"
             if sileo.is_file():

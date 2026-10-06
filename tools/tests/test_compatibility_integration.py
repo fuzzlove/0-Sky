@@ -40,9 +40,7 @@ class CoreCompatibilityTests(unittest.TestCase):
 class ReleaseCompatibilityTests(unittest.TestCase):
     def test_engine_bytes_manifest_idempotency_and_legacy_guards(self):
         from tools import prepare_release_kit as release
-        retired = ('srdssh/bootstrap.py', 'srdssh/install_cryptex_native.py',
-                   'filza/install_cryptex_native.py',
-                   'automation/CrypStoreAutomation/crypstore_keeper.py',
+        retired = ('automation/CrypStoreAutomation/crypstore_keeper.py',
                    'automation/CrypStoreAutomation/sileo-package-bridge-v8.py',
                    'automation/CrypStoreAutomation/sileo-research-bridge.py')
         with tempfile.TemporaryDirectory() as directory:
@@ -63,6 +61,14 @@ class ReleaseCompatibilityTests(unittest.TestCase):
                 self.assertEqual(hashlib.sha256((kit / relative).read_bytes()).hexdigest(), expected)
             self.assertEqual((kit / 'host-mac/bootstrap_device.py').read_bytes(),
                              (ROOT / 'bridge/HostTools/bootstrap_device.py').read_bytes())
+            for relative in ('srdssh/bootstrap.py',
+                             'srdssh/install_cryptex_native.py',
+                             'filza/install_cryptex_native.py',
+                             'filza/generate_trust_cache.py'):
+                self.assertEqual(
+                    (kit / relative).read_bytes(),
+                    release.OVERRIDES[relative].read_bytes(),
+                )
             for relative in retired:
                 result = subprocess.run([sys.executable, str(kit / relative)], stdout=subprocess.PIPE,
                                         stderr=subprocess.PIPE, timeout=10, check=False)

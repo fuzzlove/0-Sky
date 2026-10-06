@@ -7,7 +7,6 @@ import hashlib
 from pathlib import Path
 
 
-EXPECTED_INPUT_SHA256 = "fd53a6c591dedf2b1c30e8d5c542f3df5e80099306607a52eaa4e4f2958c87f8"
 MEDIA_ROOT = b"/private/var/mobile/Media\0"
 FULL_ROOT = b"/\0" + b"\0" * (len(MEDIA_ROOT) - 2)
 SYSTEM_XPC_SERVICE = b"com.apple.afcd\0"
@@ -22,13 +21,14 @@ AFC2_SECTION = b"__0sky" + b"\0" * 10
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--expected-sha256", required=True)
     parser.add_argument("source", type=Path)
     parser.add_argument("output", type=Path)
     args = parser.parse_args()
 
     source = args.source.read_bytes()
     digest = hashlib.sha256(source).hexdigest()
-    if digest != EXPECTED_INPUT_SHA256:
+    if digest != args.expected_sha256.lower():
         raise ValueError(f"unexpected system afcd SHA-256: {digest}")
     if source.count(MEDIA_ROOT) != 1:
         raise ValueError("expected exactly one compiled-in AFC media root")

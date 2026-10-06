@@ -191,7 +191,7 @@ public enum SecurityDiagnosticsCatalog {
               limitations: ["Package contents are not exported and destructive repair is not automatic."]),
         .init(id: "FRIDA_HOST", title: "Frida host tool", category: "Research tooling",
               purpose: "Confirm an approved host Frida executable is installed and version-readable.",
-              method: "Select an allowlisted project/Homebrew path and run only `--version` with a ten-second timeout.",
+              method: "Select the managed 0-Sky tool path and run only `--version` with a ten-second timeout.",
               expected: "Host Frida returns a non-empty version.", evidenceCollected: ["available boolean", "version", "exit code"],
               dataAccessed: ["allowlisted host executable"], privileges: "Unprivileged Mac user",
               limitations: ["This does not attach to a process."]),

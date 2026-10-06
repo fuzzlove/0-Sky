@@ -52,16 +52,14 @@ phase then failed at the expected PII gate. Copies of the GUI, service, and
 helper passed the binary-string scan after `strip -S`. This is compile and
 sanitization evidence, not a signed release build.
 
-The external kit is outside Git and currently fails the release sanitizer:
-signed Frida and PreferenceLoader payloads contain former builders' home paths.
-Replacing those signed binaries with verified, sanitized, correctly signed
-payloads is an external input requirement. Editing them in place would break
-signatures and manifest hashes. Do not publish a package made from this kit.
-An expanded scan of the previously built unsigned app also finds patterns for
-private IPs, key headers, passwords, and a personal-payment URL within
-compressed wheels, Debian packages, and IPAs. Some patterns may be upstream
-test fixtures; they still require source/provenance review or clean replacement
-before public distribution. A source-tree-only scan cannot certify them.
+The external kit is outside Git and is admitted only through its checksum and
+release manifests. Its upstream payloads retain build/debug strings and public
+test fixtures. These are reported as advisories rather than confused with
+runtime dependency paths or user secrets. The verifier reads Mach-O load
+commands directly and blocks a real nonportable dependency/RPATH. Public test
+keys are accepted only for an exact archive SHA-256, category, and member
+prefix; changed bytes fail closed. A source-tree-only scan still cannot certify
+the package, so the staged app and expanded installer are always scanned.
 
 ## Environment findings
 
@@ -71,7 +69,7 @@ before public distribution. A source-tree-only scan cannot certify them.
 | Developer ID application/installer identities and notary profile | BUILD_CONFIGURATION / SECRET | Caller-supplied; never log credentials. |
 | Xcode, SDK, `lipo`, `codesign`, packaging tools | RUNTIME_DISCOVERY | Resolve through PATH/`xcrun`; preflight each. |
 | DerivedData, output directory, repository absolute path | DEVELOPMENT_ARTIFACT | Use explicit staging paths and audit final bytes. |
-| Home paths in signed external device binaries | PII | Block release pending replacement. |
+| Home paths in signed external device binaries | UPSTREAM_BUILD_ADVISORY | Preserve signatures; inspect actual load commands structurally and rebuild only if runtime portability fails. |
 | Test fixture UDIDs, addresses, home paths | DEVELOPMENT_ARTIFACT | Keep out of release allowlist. |
 | Device ID, SSH endpoint, local support paths | RUNTIME_DISCOVERY | Discover per device and store outside app bundle. |
 | Standard `/usr/bin` Apple tools and `/var/jb` device paths | REQUIRED_PUBLIC_METADATA | Platform paths, not a developer prefix. |
@@ -81,3 +79,15 @@ before public distribution. A source-tree-only scan cannot certify them.
 The audit is a baseline, not a certification of the ignored kit, old releases,
 or untested Intel hardware. The release pipeline must fail closed until its
 actual staged app and extracted package pass the gates.
+
+## Current distribution evidence
+
+The canonical distribution pipeline subsequently produced a four-file
+Universal 2 release set. Developer ID application and installer signatures,
+hardened runtime, entitlements, Gatekeeper, notary acceptance, staple
+validation, embedded-kit integrity, offline wheel coverage, structural runtime
+paths, and the blocking privacy scan passed. A second package-only verification
+expanded the installer independently and ended `FINAL_RESULT=PASS`, including
+staple validation. Runtime execution on physical Intel hardware, a clean
+account install/upgrade/uninstall rehearsal, and live SRD matrix testing remain
+`NOT_EXECUTED`; slice inspection is not relabeled as those hardware tests.

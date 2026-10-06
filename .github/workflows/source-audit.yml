@@ -13,6 +13,9 @@ jobs:
         with:
           python-version: '3.12'
       - run: python3 tools/pii_audit.py .
+      - run: python3 tools/verify_release_policy.py
+      - run: python3 tools/repository_inventory.py --output /tmp/repository-inventory.json
+      - run: diff -u manifests/repository-inventory.json /tmp/repository-inventory.json
   release-tool-tests:
     runs-on: macos-latest
     steps:
@@ -27,7 +30,7 @@ jobs:
       - run: cd bridge && swift run BridgeCoreTests
       - run: python3 control/TrollStoreLite/tests/test_device_compatibility.py
       - run: python3 tools/verify_eula.py
-      - run: bash -n build.sh scripts/build_release.sh scripts/verify_release.sh bridge/Scripts/embed_verified_kit.sh
+      - run: bash -n build.sh scripts/build_release.sh scripts/verify_release.sh setup_0sky_devices.sh bridge/Scripts/embed_verified_kit.sh
       - run: zsh -n link/build.sh 'bridge/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command'
   ios27-compatibility:
     runs-on: macos-latest

@@ -5,6 +5,7 @@ import importlib.util
 import json
 from pathlib import Path
 import plistlib
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -125,3 +126,99 @@ class WorkerIPAHashTests(unittest.TestCase):
         preflight = source.index('stage("Checking device workspace"')
         retirement = source.index('stage("Retiring prior registration"')
         self.assertLess(preflight, retirement)
+
+    def test_control_native_install_uses_exact_device_devicectl(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            app = root / "Path With Spaces" / "CrypStore.app"
+            app.mkdir(parents=True)
+            job = root / "job"
+            job.mkdir()
+
+            def execute(argv, **kwargs):
+                if argv == ["/usr/bin/xcrun", "--find", "devicectl"]:
+                    return subprocess.CompletedProcess(
+                        argv, 0, b"/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl\n", b"")
+                result = Path(argv[argv.index("--json-output") + 1])
+                result.write_text(json.dumps({
+                    "result": {"installedApplications": [{"bundleIdentifier": "fixture"}]}
+                }))
+                return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+            with mock.patch.object(worker, "DEVICE_UDID", "selected-device"), \
+                    mock.patch.object(worker, "run", side_effect=execute) as run:
+                worker.install_app_with_devicectl(app, job)
+
+            install = run.call_args_list[1].args[0]
+            self.assertEqual(install[0],
+                             Path("/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl"))
+            self.assertEqual(install[install.index("--device") + 1], "selected-device")
+            self.assertEqual(install[install.index("--device") + 2], str(app))
+            self.assertNotIn("pymobiledevice3", " ".join(map(str, install)))
+
+    def test_control_native_launch_uses_exact_device_devicectl(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+
+            def execute(argv, **kwargs):
+                if argv == ["/usr/bin/xcrun", "--find", "devicectl"]:
+                    return subprocess.CompletedProcess(
+                        argv, 0, b"/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl\n", b"")
+                result = Path(argv[argv.index("--json-output") + 1])
+                result.write_text(json.dumps({
+                    "result": {"process": {"processIdentifier": 4242}}
+                }))
+                return subprocess.CompletedProcess(argv, 0, b"", b"")
+
+            with mock.patch.object(worker, "DEVICE_UDID", "selected-device"), \
+                    mock.patch.object(worker, "run", side_effect=execute) as run:
+                worker.launch_app_with_devicectl("com.liquidsky.CrypStore", root)
+
+            launch = run.call_args_list[1].args[0]
+            self.assertEqual(launch[0],
+                             Path("/Applications/Xcode.app/Contents/Developer/usr/bin/devicectl"))
+            self.assertEqual(launch[1:4], ["device", "process", "launch"])
+            self.assertEqual(launch[launch.index("--device") + 1], "selected-device")
+            self.assertIn("--terminate-existing", launch)
+            self.assertEqual(launch[-1], "com.liquidsky.CrypStore")
+
+    def test_native_launch_proof_does_not_repeat_uiopen(self):
+        running = subprocess.CompletedProcess(
+            ["ssh"], 0,
+            b"/var/containers/Bundle/Application/F/CrypStore.app/CrypStore\n",
+            b"")
+        with mock.patch.object(worker, "ssh", return_value=running) as ssh, \
+                mock.patch.object(worker.time, "sleep"):
+            worker.verify_foreground_launch(
+                "com.liquidsky.CrypStore",
+                "/private/var/containers/Bundle/Application/F/CrypStore.app",
+                "CrypStore", observation_seconds=0.01,
+                launch_already_requested=True)
+        self.assertTrue(all("uiopen" not in call.args[0]
+                            for call in ssh.call_args_list))
+
+    def test_fresh_link_uses_bounded_cryptex_registration(self):
+        source = WORKER.read_text(encoding="utf-8")
+        start = source.index("def process_link_install(")
+        end = source.index("\ndef ", start + 5)
+        implementation = source[start:end]
+        self.assertIn("register_and_link(", implementation)
+        self.assertNotIn("install_native_control(", implementation)
+        self.assertIn("locate_mount(", implementation)
+
+    def test_devicectl_requirement_is_actionable(self):
+        missing = subprocess.CompletedProcess(
+            ["/usr/bin/xcrun", "--find", "devicectl"], 72, b"", b"missing")
+        with tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(worker, "DEVICE_UDID", "selected-device"), \
+                mock.patch.object(worker, "run", return_value=missing):
+            with self.assertRaisesRegex(RuntimeError, "Install the complete supported Xcode"):
+                worker.install_app_with_devicectl(Path(folder) / "Control.app", Path(folder))
+
+    def test_fixed_cryptex_image_uses_transfer_sized_deadline(self):
+        source = WORKER.read_text(encoding="utf-8")
+        start = source.index("def build_install_cryptex(")
+        end = source.index("\ndef ", start + 5)
+        implementation = source[start:end]
+        self.assertIn("timeout=1020", implementation)
+        self.assertNotIn("timeout=300", implementation)

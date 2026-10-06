@@ -2,16 +2,79 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from tools import prepare_release_kit as release
-from tools.stage_verified_kit import digest
+from tools.stage_verified_kit import REQUIRED_RUNTIME_BUILD_INPUTS, digest
 from tools.verify_prepared_kit import verify
 
 
 class PrepareReleaseKitTests(unittest.TestCase):
+    def test_runtime_manager_package_matches_controller_and_debian_metadata(self) -> None:
+        self.assertEqual(release.runtime_manager_version(), "2.4.10")
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            package = kit / "packages/srd-runtime-manager_2.4.10_iphoneos-arm64.deb"
+            package.parent.mkdir(parents=True)
+            package.write_bytes(b"immutable package fixture")
+            helper = kit / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text("fixture", encoding="utf-8")
+            fields = {
+                "Package": "com.liquidskysecurity.srd-runtime-manager",
+                "Version": "2.4.10",
+                "Architecture": "iphoneos-arm64",
+            }
+
+            def field_result(argv, **_kwargs):
+                return subprocess.CompletedProcess(
+                    argv, 0, stdout=fields[argv[-1]] + "\n", stderr=""
+                )
+
+            with patch.object(release.subprocess, "run", side_effect=field_result):
+                self.assertEqual(release.verify_runtime_manager_package(kit), package)
+
+    def test_missing_runtime_manager_package_blocks_release(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesRegex(RuntimeError, "bootstrap package is missing"):
+                release.verify_runtime_manager_package(Path(folder))
+
+    def test_first_runtime_builder_inputs_are_release_requirements(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            with self.assertRaisesRegex(RuntimeError, "Xcode inputs are missing"):
+                release.verify_runtime_builder_inputs(kit)
+            for relative in REQUIRED_RUNTIME_BUILD_INPUTS:
+                path = kit / relative
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("fixture\n", encoding="utf-8")
+            release.verify_runtime_builder_inputs(kit)
+
+    def test_bundled_dpkg_build_capability_is_executed(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            helper = kit / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text(
+                (release.ROOT / "bridge/HostRuntime/dpkg_deb.py").read_text(),
+                encoding="utf-8",
+            )
+            helper.chmod(0o755)
+            release.verify_dpkg_build_capability(kit)
+
+    def test_extract_only_dpkg_helper_blocks_release(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            kit = Path(folder)
+            helper = kit / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text("#!/bin/sh\necho extract-only >&2\nexit 64\n")
+            helper.chmod(0o755)
+            with self.assertRaisesRegex(RuntimeError, "build capability is unavailable"):
+                release.verify_dpkg_build_capability(kit)
+
     def test_overrides_are_manifest_bound_and_idempotent(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
@@ -23,8 +86,6 @@ class PrepareReleaseKitTests(unittest.TestCase):
             target.write_text("print('old')\n", encoding="utf-8")
             manifest = kit / "SHA256SUMS"
             retired = (
-                "srdssh/bootstrap.py", "srdssh/install_cryptex_native.py",
-                "filza/install_cryptex_native.py",
                 "automation/CrypStoreAutomation/crypstore_keeper.py",
                 "automation/CrypStoreAutomation/sileo-package-bridge-v8.py",
                 "automation/CrypStoreAutomation/sileo-research-bridge.py",
@@ -49,6 +110,25 @@ class PrepareReleaseKitTests(unittest.TestCase):
                              (release.ROOT / "bridge/DeviceRuntime/zero_sky_core/research_toolkit_manifest.json").read_bytes())
             self.assertIn(f"{digest(catalog)}  ./automation/tools/srd-runtime-manager/zero_sky_core/research_toolkit_manifest.json",
                           manifest.read_text(encoding="utf-8"))
+            injector_license = kit / "automation/tools/srd-runtime-manager/sandboxed-injector/LICENSE"
+            self.assertEqual(injector_license.read_bytes(),
+                             release.RUNTIME_MANAGER_ADDITIONS[
+                                 "automation/tools/srd-runtime-manager/sandboxed-injector/LICENSE"
+                             ].read_bytes())
+            self.assertIn(f"{digest(injector_license)}  ./automation/tools/srd-runtime-manager/sandboxed-injector/LICENSE",
+                          manifest.read_text(encoding="utf-8"))
+
+    def test_filza_uses_the_reviewed_transactional_installer(self) -> None:
+        source = release.OVERRIDES["filza/install_cryptex_native.py"]
+        canonical = release.ROOT / (
+            "bridge/KitScripts/automation/CrypStoreAutomation/native-install/"
+            "install_cryptex_native.py")
+        self.assertEqual(source, canonical)
+        text = source.read_text(encoding="utf-8")
+        self.assertIn("UserspaceRsdTunnel", text)
+        self.assertIn("rebuild_legacy_image", text)
+        self.assertIn("INSTALL SUCCESS", text)
+        self.assertNotIn("Compatibility UNKNOWN", text)
 
     def test_unprepared_kit_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as folder:

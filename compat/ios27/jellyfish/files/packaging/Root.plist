@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>title</key><string>Jellyfish</string>
+  <key>items</key>
+  <array>
+    <dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>iOS 27 Compatibility</string><key>footerText</key><string>Disabled by default until the exact-build runtime probe succeeds.</string></dict>
+    <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>Enabled</string><key>defaults</key><string>xyz.royalapps.jellyfish</string><key>key</key><string>enabled</string><key>default</key><false/><key>PostNotification</key><string>xyz.royalapps.jellyfish.changed</string></dict>
+    <dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>Layout</string></dict>
+    <dict><key>cell</key><string>PSSegmentCell</string><key>label</key><string>Alignment</string><key>defaults</key><string>xyz.royalapps.jellyfish</string><key>key</key><string>alignment</string><key>default</key><integer>0</integer><key>validTitles</key><array><string>Left</string><string>Center</string><string>Right</string></array><key>validValues</key><array><integer>0</integer><integer>1</integer><integer>2</integer></array><key>PostNotification</key><string>xyz.royalapps.jellyfish.changed</string></dict>
+    <dict><key>cell</key><string>PSSliderCell</string><key>label</key><string>Text Size (%)</string><key>defaults</key><string>xyz.royalapps.jellyfish</string><key>key</key><string>fontSize</string><key>default</key><integer>100</integer><key>min</key><integer>70</integer><key>max</key><integer>120</integer><key>showValue</key><true/><key>PostNotification</key><string>xyz.royalapps.jellyfish.changed</string></dict>
+    <dict><key>cell</key><string>PSSliderCell</string><key>label</key><string>Edge Padding</string><key>defaults</key><string>xyz.royalapps.jellyfish</string><key>key</key><string>xpadding</string><key>default</key><integer>16</integer><key>min</key><integer>0</integer><key>max</key><integer>30</integer><key>showValue</key><true/><key>PostNotification</key><string>xyz.royalapps.jellyfish.changed</string></dict>
+    <dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>Date</string></dict>
+    <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>Use Custom Date Format</string><key>defaults</key><string>xyz.royalapps.jellyfish</string><key>key</key><string>useCustomDateFormat</string><key>default</key><false/><key>PostNotification</key><string>xyz.royalapps.jellyfish.changed</string></dict>
+    <dict><key>cell</key><string>PSEditTextCell</string><key>label</key><string>Date Format</string><key>defaults</key><string>xyz.royalapps.jellyfish</string><key>key</key><string>customDateFormat</string><key>default</key><string>EEEE, MMMM d</string><key>PostNotification</key><string>xyz.royalapps.jellyfish.changed</string></dict>
+    <dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>Appearance</string></dict>
+    <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>Text Shadow</string><key>defaults</key><string>xyz.royalapps.jellyfish</string><key>key</key><string>showTextShadow</string><key>default</key><true/><key>PostNotification</key><string>xyz.royalapps.jellyfish.changed</string></dict>
+    <dict><key>cell</key><string>PSSwitchCell</string><key>label</key><string>Show Battery</string><key>defaults</key><string>xyz.royalapps.jellyfish</string><key>key</key><string>alwaysShowBatteryPercentage</string><key>default</key><false/><key>PostNotification</key><string>xyz.royalapps.jellyfish.changed</string></dict>
+  </array>
+</dict>
+</plist>

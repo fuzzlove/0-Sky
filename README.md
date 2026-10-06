@@ -2,6 +2,23 @@
 
 Note: This is a work in progress and the building blocks for where the project is currently.
 
+## Current Supported Release
+
+**CURRENT / VERIFIED / SUPPORTED:**
+[`v1.0.0-pre.26`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.26)
+
+Use only the package and three verification files attached to that release.
+It is the sole release that passed the current independent release verifier and
+the complete Intel-host/iOS 27 SRD package UAT. Verify the downloaded four-file
+set before opening the installer.
+
+Every earlier release is **DEPRECATED / UNSUPPORTED / DO NOT USE**. Historical
+tags and release notes remain available for provenance, but known-broken binary
+installers have been removed from public distribution. Do not install packages
+marked deprecated, unsupported, withdrawn, test, development, or experimental.
+See [`docs/RELEASE_POLICY.md`](docs/RELEASE_POLICY.md) and the
+[`release cleanup report`](docs/RELEASE_CLEANUP_REPORT.md).
+
 0-Sky is an authorized Apple Security Research Device control plane. This
 repository publishes the source for the three first-party applications:
 
@@ -17,6 +34,34 @@ application flow require explicit agreement and authorization certification.
 The source tree deliberately excludes device identifiers, pairing records,
 credentials, tokens, SSH keys, provisioning profiles, certificates, research
 sessions, logs, compiled applications, and device-derived evidence.
+
+## Installation
+
+The recommended user path is a verified, signed Universal 2 macOS package.
+Follow [`INSTALL.md`](INSTALL.md), verify the four-file release set before
+opening the package, then use **Install All 0-Sky Requirements** inside Bridge.
+The installer discovers Intel or Apple-silicon tools at runtime, maintains an
+isolated pinned Python environment, and requires explicit selection and
+verification of the exact connected SRD.
+
+A source checkout is not a complete installer: authorized Apple assets, signed
+device payloads, the offline wheelhouse, and publisher credentials remain
+external. Developers should use [`BUILDING.md`](BUILDING.md); release engineers
+should use only [`scripts/build_release.sh`](scripts/build_release.sh) and the
+procedure in [`RELEASE.md`](RELEASE.md). See
+[`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) for repair and uninstall,
+and [`docs/SUPPORTED_PLATFORMS.md`](docs/SUPPORTED_PLATFORMS.md) for the
+evidence-scoped compatibility matrix.
+
+Before building, run the human-readable doctor. Every missing mandatory item
+is printed with the exact installation or repair command; it never reports only
+"dependency missing":
+
+```sh
+python3 tools/environment_preflight.py --human --mode development \
+  --kit "/absolute/path/to/authorized kit" \
+  --theos "/absolute/path/to/locked/theos" --skip-device
+```
 
 ## Screenshots
 
@@ -44,9 +89,9 @@ device, signing, and runtime requirements. Each component also has its own
 README with exact build commands.
 
 The binary Bridge release provides **Install All 0-Sky Requirements** in the
-GUI. Its guided Terminal installer provisions native Python 3.12,
-`dpkg`/`dpkg-deb`, USB/build tools, and the isolated pinned runtime instead of
-requiring end users to assemble those prerequisites manually.
+GUI. Its guided installer uses the embedded, hash-verified Intel/Apple-silicon
+Python 3.12 runtime plus built-in `dpkg-deb`, USB listing, and USB forwarding
+compatibility helpers. It does not require Homebrew or a developer Python.
 
 ## Quick source checks
 
@@ -62,20 +107,28 @@ researcher-provided signing/authorization environment described in the
 requirements. This repository does not contain Apple-provided SRD assets or
 any reusable signing credential.
 
-## Pre-releases
+## Releases
 
-[`v1.0.0-pre.4`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.4)
-is the latest source prerelease and includes the clean-checkout and CI repairs.
-It contains no installer assets. External signed device payloads must pass the
-release sanitization gate before new installers can be published.
+The supported download is
+[`v1.0.0-pre.26`](https://github.com/fuzzlove/0-Sky/releases/tag/v1.0.0-pre.26).
+A downloadable artifact is acceptable only when its `RELEASE_MANIFEST.json`,
+`SHA256SUMS`, and `RELEASE_AUDIT.txt` verify. Source tags do not imply that a
+binary installer passed distribution signing, notarization, clean-machine, or
+hardware tests. Older releases are retained only as deprecated historical
+records and are not installation sources.
 
-The earlier installer prerelease has been withdrawn. No verified installer
-assets are currently published for this source revision.
+A complete development candidate can assemble its host runtime automatically.
+Public distribution still requires reviewed replacement device payloads plus
+the publisher's Developer ID and notarization credentials; the release gate
+prints those external actions explicitly and does not claim success early.
 
 ## Security and privacy
 
 Use only with devices and systems you own or are explicitly authorized to
 research. Review [`SECURITY.md`](SECURITY.md) and [`PRIVACY.md`](PRIVACY.md).
+The current cleanup findings, retained uncertainties, removed files, executed
+validation, and release blockers are recorded in
+[`docs/REPOSITORY_AUDIT.md`](docs/REPOSITORY_AUDIT.md).
 
 ## Attribution and licensing
 

@@ -29,6 +29,9 @@ public struct BridgePaths: Sendable {
         let requiredFiles = [
             "SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
             "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+            "host-mac/HOST_RUNTIME_MANIFEST.json",
+            "host-mac/runtime/bin/python3", "host-mac/runtime/bin/dpkg-deb",
+            "host-mac/runtime/bin/iproxy", "host-mac/runtime/bin/idevice_id",
             "host-mac/install.py", "host-mac/pair.py",
             "host-mac/requirements-lock.txt", "payloads/0-Sky-Link-1.9.0-universal.ipa",
         ]
@@ -194,12 +197,21 @@ public struct BridgePaths: Sendable {
 
     public func projectPython() throws -> URL {
         let candidate = supportRoot.appendingPathComponent("venv/bin/python3")
-        guard FileManager.default.isExecutableFile(atPath: candidate.path) else {
+        guard managedPythonIsApproved(candidate) else {
             throw BridgeCoreError.dependencyMissing(
-                "pinned 0-Sky Python environment; install missing dependencies first"
+                "pinned 0-Sky Python environment. Open Dependencies, click "
+                + "Install All 0-Sky Requirements, wait for REQUIREMENTS=PASS, "
+                + "then return here and choose Resume. The repair uses the "
+                + "signed bundled Python and does not require Homebrew."
             )
         }
         return candidate
+    }
+
+    public func bundledHostPython() -> URL? {
+        guard let bundledKitRoot else { return nil }
+        let candidate = bundledKitRoot.appendingPathComponent("host-mac/runtime/bin/python3")
+        return FileManager.default.isExecutableFile(atPath: candidate.path) ? candidate : nil
     }
 
     public static func detectRepositoryRoot(from start: URL = URL(
@@ -224,11 +236,32 @@ public struct BridgePaths: Sendable {
     }
 
     public func python(for profile: DeviceProfile) throws -> URL {
-        let candidate = instanceDirectory(profile).appendingPathComponent("venv/bin/python3")
-        guard FileManager.default.isExecutableFile(atPath: candidate.path) else {
-            throw BridgeCoreError.dependencyMissing(candidate.path)
+        let candidates = [
+            instanceDirectory(profile).appendingPathComponent("venv/bin/python3"),
+            supportRoot.appendingPathComponent("venv/bin/python3"),
+        ]
+        if let candidate = candidates.first(where: managedPythonIsApproved) {
+            return candidate
         }
-        return candidate
+        throw BridgeCoreError.dependencyMissing(
+            "an approved instance Python environment. Open Dependencies, click "
+            + "Install All 0-Sky Requirements, then retry this exact device."
+        )
+    }
+
+    private func managedPythonIsApproved(_ candidate: URL) -> Bool {
+        let fileManager = FileManager.default
+        guard fileManager.isExecutableFile(atPath: candidate.path) else { return false }
+        // Source checkouts can use their explicitly prepared venv. A packaged
+        // release must bind every managed venv to the signed bundled runtime;
+        // otherwise a stale Homebrew/python.org symlink escapes ScriptRunner's
+        // executable allowlist and makes the package machine-dependent.
+        guard let bundledKitRoot else { return true }
+        let runtime = bundledKitRoot
+            .appendingPathComponent("host-mac/runtime", isDirectory: true)
+            .standardizedFileURL.resolvingSymlinksInPath().path
+        let resolved = candidate.standardizedFileURL.resolvingSymlinksInPath().path
+        return resolved == runtime || resolved.hasPrefix(runtime + "/")
     }
 
     public func hostScript(_ name: String, profile: DeviceProfile? = nil) throws -> URL {

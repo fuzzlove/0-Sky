@@ -38,7 +38,24 @@ REQUIRED = {
         "automation/CrypStoreAutomation/crypstore_worker.py",
         "automation/CrypStoreAutomation/device_bridge_supervisor",
     ],
+    "srdssh": [
+        "srdssh/payload-root/Library/LaunchDaemons/dropbear.plist",
+        "srdssh/payload-root/usr/bin/dropbear",
+        "srdssh/payload-root/usr/bin/dropbearkey",
+        "srdssh/payload-root/usr/bin/srdsh-dropbear-start",
+        "srdssh/payload-root/usr/bin/toybox",
+        "srdssh/payload-root/usr/bin/sh",
+    ],
     "zero_sky_link": ["payloads/0-Sky-Link-1.9.0-universal.ipa"],
+    "filza": [
+        "filza/source-manifest.json",
+        "filza/Filza-4.0-permanent.dmg",
+        "filza/Filza-4.0-permanent.trustcache.im4p",
+        "filza/Filza-4.0-permanent.volume-hash",
+        "filza/BuildManifest.plist",
+        "filza/install_cryptex_native.py",
+        "filza/generate_trust_cache.py",
+    ],
     "metadata": ["PORTABILITY.json", "WHEEL_INVENTORY.json", APPROVAL_NAME, HASH_NAME],
 }
 IGNORED = {MANIFEST_NAME, HASH_NAME}
@@ -98,6 +115,30 @@ def required_issues(root: Path) -> list[str]:
         item = root / relative
         if not item.is_file() or not item.stat().st_mode & 0o111:
             issues.append(f"EXECUTABLE_MODE_MISSING:{relative}")
+    shell = root / "srdssh/payload-root/usr/bin/sh"
+    if not shell.is_symlink() or os.readlink(shell) != "toybox":
+        issues.append("SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh")
+    source_manifest = root / "filza/source-manifest.json"
+    try:
+        filza = json.loads(source_manifest.read_text(encoding="utf-8"))
+        expected_identity = {
+            "bundle_id": "com.tigisoftware.Filza",
+            "app_name": "FilzaFixed.6907.app",
+            "cryptex_id": "codes.rambo.research.filza.permanent",
+        }
+        if any(filza.get(key) != value for key, value in expected_identity.items()):
+            issues.append("FILZA_SOURCE_MANIFEST_IDENTITY_INVALID")
+        for key in ("sealed_image_sha256", "sealed_executable_sha256",
+                    "sealed_info_sha256"):
+            if re.fullmatch(r"[0-9a-f]{64}", str(filza.get(key, ""))) is None:
+                issues.append(f"FILZA_SOURCE_MANIFEST_HASH_INVALID:{key}")
+        image = root / "filza/Filza-4.0-permanent.dmg"
+        if (image.is_file()
+                and re.fullmatch(r"[0-9a-f]{64}", str(filza.get("sealed_image_sha256", "")))
+                and digest(image) != filza["sealed_image_sha256"]):
+            issues.append("FILZA_SEALED_IMAGE_HASH_MISMATCH")
+    except (OSError, UnicodeError, ValueError, TypeError):
+        issues.append("FILZA_SOURCE_MANIFEST_INVALID")
     return issues
 
 

@@ -38,6 +38,16 @@ class AsyncTunnel:
         return None
 
 
+class CryptexImageIndexTests(unittest.TestCase):
+    def test_image_type_index_tracks_verified_ios_family(self):
+        self.assertEqual(installer.image_type_index_for("26.0"), 9)
+        self.assertEqual(installer.image_type_index_for("26.3.1"), 9)
+        self.assertEqual(installer.image_type_index_for("26.4"), 10)
+        self.assertEqual(installer.image_type_index_for("27.0"), 10)
+        with self.assertRaisesRegex(RuntimeError, "Unsupported SRD OS"):
+            installer.image_type_index_for("25.7")
+
+
 @unittest.skipUnless(HAS_PYMOBILEDEVICE3, "pinned pymobiledevice3 runtime unavailable")
 class CryptexTransportFallbackTests(unittest.TestCase):
     def fixture(self, root: Path):
@@ -70,6 +80,8 @@ class CryptexTransportFallbackTests(unittest.TestCase):
             with mock.patch.object(installer, "enable_flow_control_accounting"), \
                     mock.patch.object(installer, "assets_from_manifest", return_value=(identity, paths)), \
                     mock.patch.object(installer, "install_with_rsd", install_once), \
+                    mock.patch.dict(installer.os.environ,
+                                    {"ZERO_SKY_CRYPTEX_TRANSPORT": "native"}), \
                     mock.patch("pymobiledevice3.remote.native_tunnel.NativeRemotedTunnel",
                                return_value=AsyncTunnel(native_rsd)), \
                     mock.patch("pymobiledevice3.remote.userspace_tunnel.UserspaceRsdTunnel",
@@ -79,6 +91,35 @@ class CryptexTransportFallbackTests(unittest.TestCase):
                 asyncio.run(installer.install(Path(folder) / "manifest", "codes.example.fixture", udid))
         userspace.assert_called_once_with(serial=udid, autopair=False)
         return install_once, service
+
+    def test_default_uses_existing_paired_userspace_without_native_probe(self):
+        udid = "TEST-SRD-0001"
+        userspace_rsd = types.SimpleNamespace(udid=udid)
+        with tempfile.TemporaryDirectory() as folder:
+            identity, paths = self.fixture(Path(folder))
+            install_once = mock.AsyncMock(return_value=None)
+            with mock.patch.object(installer, "enable_flow_control_accounting"), \
+                    mock.patch.object(installer, "assets_from_manifest",
+                                      return_value=(identity, paths)), \
+                    mock.patch.object(installer, "install_with_rsd", install_once), \
+                    mock.patch.dict(installer.os.environ, {}, clear=True), \
+                    mock.patch(
+                        "pymobiledevice3.remote.userspace_tunnel.UserspaceRsdTunnel",
+                        return_value=AsyncTunnel(userspace_rsd),
+                    ) as userspace, \
+                    mock.patch(
+                        "pymobiledevice3.remote.native_tunnel.NativeRemotedTunnel"
+                    ) as native:
+                asyncio.run(installer.install(
+                    Path(folder) / "manifest", "codes.example.fixture", udid
+                ))
+        userspace.assert_called_once_with(serial=udid, autopair=False)
+        native.assert_not_called()
+        install_once.assert_awaited_once()
+
+    def test_runtime_and_automation_installers_are_transport_identical(self):
+        runtime = (SCRIPT.parents[3] / "runtime-generation/install_cryptex_native.py")
+        self.assertEqual(runtime.read_bytes(), SCRIPT.read_bytes())
 
     def test_uncommitted_native_reset_retries_once_on_userspace(self):
         install_once, service = self.run_fallback(committed=False)

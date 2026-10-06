@@ -85,6 +85,19 @@ class BridgePackageCommandTests(unittest.TestCase):
             self.assertEqual(self.bridge.integrate_package_app_cli(
                 ["/var/jb/Applications/Research.app"])["status"], 126)
 
+    def test_runtime_archive_detection_is_limited_to_tweak_dylibs(self):
+        bridge = self.bridge
+        # dpkg-deb on the paired SRD prints a relative path without a leading
+        # slash or './'; detection must accept that exact output form.
+        tweak = mock.Mock(returncode=0, stderr=b"", stdout=(
+            b"-rwxr-xr-x root/root 1 var/jb/Library/MobileSubstrate/"
+            b"DynamicLibraries/Example.dylib\n"))
+        ordinary = mock.Mock(returncode=0, stderr=b"", stdout=(
+            b"-rw-r--r-- root/root 1 ./var/jb/usr/share/doc/readme\n"))
+        with mock.patch.object(bridge.subprocess, "run", side_effect=[tweak, ordinary]):
+            self.assertTrue(bridge.archive_contains_runtime_code("/tmp/tweak.deb"))
+            self.assertFalse(bridge.archive_contains_runtime_code("/tmp/data.deb"))
+
     def test_crane_binary_transformations_are_exact(self):
         bridge = self.bridge
         expected = [{
@@ -250,13 +263,13 @@ class BridgePackageCommandTests(unittest.TestCase):
         processes = mock.Mock(returncode=0,
                               stdout=b"392 /var/jb/usr/bin/python3 /var/jb/usr/local/libexec/srd-runtime-manager.py daemon\n",
                               stderr=b"")
-        sync = mock.Mock(returncode=0, stdout=b"rescan requested", stderr=b"")
         with (mock.patch.object(bridge, "package_payload", return_value=payload),
               mock.patch.object(bridge.os.path, "isfile", return_value=True),
-              mock.patch.object(bridge.subprocess, "run", side_effect=[processes, sync])):
+              mock.patch.object(bridge.subprocess, "run", return_value=processes)):
             _, messages, failures = bridge.integration_report("org.example.tweak")
         self.assertEqual(failures, [])
         self.assertTrue(any("controlled runtime probe" in item for item in messages))
+        self.assertTrue(any("deferred" in item for item in messages))
 
     def test_runtime_validation_never_passes_with_unregistered_required_dylib(self):
         bridge = self.bridge

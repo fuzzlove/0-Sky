@@ -12,7 +12,22 @@ dist/
 _build/
 __pycache__/
 *.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
 *.log
+*.crash
+*.ips
+*.xcresult/
+core
+core.*
+*.swp
+*~
+*.orig
+*.rej
 *.ipa
 *.deb
 *.dmg
@@ -64,6 +79,11 @@ control/TrollStoreLite/Resources/trollstorehelper
 /addons/PoC/appsync-afc2d-srd-port/recovery/
 /addons/PoC/appsync-afc2d-srd-port/rejected/
 /addons/PoC/appsync-afc2d-srd-port/reports/
+
+# Locally assembled tester deliveries contain signed applications, wheelhouses,
+# device payloads, and machine-specific verification state. They are release
+# outputs, never source inputs.
+/addons/PoC/yoridan/
 
 # Independent repositories restored at pinned revisions by the restore script.
 /addons/PoC/appregistrard/

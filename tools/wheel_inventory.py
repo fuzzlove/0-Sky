@@ -40,6 +40,11 @@ def inspect(wheelhouse: Path) -> dict[str, object]:
                              or next((value.removeprefix("License :: ")
                                       for value in metadata.get_all("Classifier", [])
                                       if value.startswith("License :: ")), "UNDECLARED"))
+            # email.policy compatibility differs between the system Python
+            # bundled with Xcode and the pinned release Python, especially for
+            # folded multiline License headers. Store a canonical textual
+            # value so verification is reproducible across supported hosts.
+            license_value = " ".join(str(license_value).split())
             wheels.append({
                 "source_artifact": path.name,
                 "package": package,
@@ -47,7 +52,8 @@ def inspect(wheelhouse: Path) -> dict[str, object]:
                 "platform_tag": path.stem.split("-")[-1],
                 "sha256": sha256(path),
                 "license_metadata": license_value[:250],
-                "dependencies": metadata.get_all("Requires-Dist", []),
+                "dependencies": [" ".join(str(item).split())
+                                 for item in metadata.get_all("Requires-Dist", [])],
             })
     if not wheels:
         raise ValueError("offline wheelhouse is empty")
@@ -63,6 +69,7 @@ def write(kit: Path) -> int:
         with os.fdopen(fd, "w", encoding="utf-8") as stream:
             json.dump(data, stream, indent=2, sort_keys=True)
             stream.write("\n")
+        os.chmod(temporary, 0o644)
         os.replace(temporary, destination)
     finally:
         if os.path.exists(temporary):

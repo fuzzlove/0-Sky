@@ -17,6 +17,7 @@ def offline_environment() -> dict[str, str]:
         "PIP_NO_INDEX": "1",
         "PIP_DISABLE_PIP_VERSION_CHECK": "1",
         "PIP_REQUIRE_VIRTUALENV": "1",
+        "PYTHONDONTWRITEBYTECODE": "1",
         "HTTP_PROXY": "http://127.0.0.1:9",
         "HTTPS_PROXY": "http://127.0.0.1:9",
         "ALL_PROXY": "http://127.0.0.1:9",
@@ -33,7 +34,8 @@ def verify(kit: Path, python: Path) -> str:
         venv = Path(folder) / "venv"
         try:
             create = subprocess.run([str(python), "-m", "venv", str(venv)],
-                                    capture_output=True, timeout=120, check=False)
+                                    env=offline_environment(), capture_output=True,
+                                    timeout=120, check=False)
             if create.returncode:
                 return "VENV_CREATION_FAILED"
             managed = venv / "bin/python3"
@@ -53,6 +55,25 @@ def verify(kit: Path, python: Path) -> str:
             ], env=offline_environment(), capture_output=True, timeout=30, check=False)
             if import_check.returncode:
                 return "OFFLINE_IMPORT_FAILED"
+            helper = kit / "host-mac/runtime/bin/dpkg-deb"
+            package = kit / "offline-python/libgdbm6_1.23_iphoneos-arm64.deb"
+            if (helper.is_symlink() or not helper.is_file() or package.is_symlink()
+                    or not package.is_file()):
+                return "OFFLINE_ZSTANDARD_PROBE_INPUT_MISSING"
+            extraction = Path(folder) / "zstandard-deb-extraction"
+            zstd_check = subprocess.run(
+                [str(managed), str(helper), "--extract", str(package), str(extraction)],
+                env=offline_environment(), capture_output=True, timeout=120, check=False,
+            )
+            if zstd_check.returncode:
+                detail = zstd_check.stderr.decode("utf-8", "replace").strip()[-2048:]
+                if detail:
+                    print(f"OFFLINE_ZSTANDARD_DETAIL={detail}", file=sys.stderr)
+                return "OFFLINE_ZSTANDARD_DEB_EXTRACT_FAILED"
+            payload = extraction / "var/jb"
+            if not payload.is_dir() or not any(
+                    item.is_file() or item.is_symlink() for item in payload.rglob("*")):
+                return "OFFLINE_ZSTANDARD_DEB_PAYLOAD_MISSING"
         except (OSError, subprocess.TimeoutExpired):
             return "OFFLINE_INSTALL_TIMEOUT_OR_TOOL_ERROR"
     return "PASS"

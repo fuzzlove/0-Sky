@@ -1,29 +1,45 @@
 """Release kit inventory must fail closed on portability and integrity faults."""
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest import mock
 from unittest.mock import patch
 import zipfile
 
 from tools.kit_manifest import APPROVAL_NAME, APPROVAL_STATES, REQUIRED, generate, verify
-from tools.build_release import build as build_release
+from tools.build_release import (build as build_release, preflight_failure_code,
+                                 remediation_for, submit_notarization)
 from tools.release_paths import ReleasePaths, RuntimePaths
 from tools.release_sanitize import audit
-from tools.signing_identities import Identity, parse_identities, require_identity
+from tools.signing_identities import (Identity, parse_identities, require_identity,
+                                      resolve_identity)
 from tools.test_offline_install import verify as verify_offline_install
-from tools.wheel_inventory import write as write_wheel_inventory
+from tools.wheel_inventory import inspect as inspect_wheels, write as write_wheel_inventory
 
 
 def fixture(root: Path) -> None:
     for relative in sorted(set(sum(REQUIRED.values(), [])) - {"SHA256SUMS"}):
+        if relative == "srdssh/payload-root/usr/bin/sh":
+            continue
         path = root / relative
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("fixture", encoding="utf-8")
+    filza_image = root / "filza/Filza-4.0-permanent.dmg"
+    (root / "filza/source-manifest.json").write_text(json.dumps({
+        "bundle_id": "com.tigisoftware.Filza",
+        "app_name": "FilzaFixed.6907.app",
+        "cryptex_id": "codes.rambo.research.filza.permanent",
+        "sealed_image_sha256": hashlib.sha256(filza_image.read_bytes()).hexdigest(),
+        "sealed_executable_sha256": "a" * 64,
+        "sealed_info_sha256": "b" * 64,
+    }), encoding="utf-8")
+    (root / "srdssh/payload-root/usr/bin/sh").symlink_to("toybox")
     for relative in ("automation/CrypStoreAutomation/device_bridge_supervisor.sh",
                      "runtime-generation/build_and_install.sh"):
         script = root / relative
@@ -46,6 +62,49 @@ def fixture(root: Path) -> None:
 
 
 class KitManifestTests(unittest.TestCase):
+
+    def test_wheel_inventory_normalizes_multiline_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            wheelhouse = Path(folder)
+            wheel = wheelhouse / "demo-1.0-py3-none-any.whl"
+            with zipfile.ZipFile(wheel, "w") as archive:
+                archive.writestr(
+                    "demo-1.0.dist-info/METADATA",
+                    "Metadata-Version: 2.3\nName: demo\nVersion: 1.0\n"
+                    "License: first line\n second line\nRequires-Dist: dep >= 1\n\n",
+                )
+            item = inspect_wheels(wheelhouse)["wheels"][0]
+            self.assertEqual(item["license_metadata"], "first line second line")
+            self.assertEqual(item["dependencies"], ["dep >= 1"])
+
+    def test_notary_blocker_prints_exact_credential_setup(self) -> None:
+        action = remediation_for("BLOCKED_MISSING_NOTARY_PROFILE")
+        self.assertIn("xcrun notarytool store-credentials", action)
+        self.assertIn("--notary-profile 0-sky-release", action)
+
+    def test_privacy_blocker_explains_each_artifact_class(self) -> None:
+        action = remediation_for("EXIT_2:FIXED_HOME_PATH,PRIVATE_KEY,PERSONAL_PAYMENT")
+        self.assertIn("kit_pii_report.py", action)
+        self.assertIn("native or signed", action)
+        self.assertIn("wheel/DEB", action)
+        self.assertIn("payment/personal URLs", action)
+        self.assertIn("never globally allowlist", action)
+
+    def test_release_kit_blockers_have_exact_recovery_steps(self) -> None:
+        wheels = remediation_for("OFFLINE_WHEEL_ARCHITECTURE_COVERAGE_FAILED")
+        self.assertIn("wheel_inventory.py", wheels)
+        self.assertIn("arm64", wheels)
+        self.assertIn("x86_64", wheels)
+        script = remediation_for("REQUIRED_PORTABLE_SCRIPT_MISSING")
+        self.assertIn("reported relative path", script)
+        self.assertIn("git status --short", script)
+
+    def test_release_preflight_reports_missing_host_runtime(self) -> None:
+        payload = json.dumps({"host_runtime": {"status": "BLOCKED"},
+                              "kit": {"status": "PASS"},
+                              "toolchain": []}).encode()
+        self.assertEqual(preflight_failure_code(payload),
+                         "BLOCKED_HOST_RUNTIME_MISSING_OR_INVALID")
     @unittest.skipUnless(shutil.which("zsh") and shutil.which("python3.12"),
                          "macOS offline dependency launcher unavailable")
     def test_dependency_launcher_defaults_to_offline(self) -> None:
@@ -60,18 +119,61 @@ class KitManifestTests(unittest.TestCase):
             kit = root / "kit"
             for relative in ("SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
                              "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+                             "host-mac/HOST_RUNTIME_MANIFEST.json",
                              "host-mac/install.py", "host-mac/pair.py",
                              "host-mac/requirements-lock.txt",
                              "payloads/0-Sky-Link-1.9.0-universal.ipa"):
                 item = kit / relative
                 item.parent.mkdir(parents=True, exist_ok=True)
                 item.write_text("fixture", encoding="utf-8")
+            runtime_python = kit / "host-mac/runtime/bin/python3"
+            runtime_python.parent.mkdir(parents=True)
+            runtime_python.write_text(
+                f"#!/bin/sh\nexec {shutil.which('python3.12')} \"$@\"\n", encoding="utf-8")
+            runtime_python.chmod(0o755)
             (kit / "host-mac/wheelhouse").mkdir()
             process = subprocess.run(["/bin/zsh", str(launcher)], input="\n", text=True,
                                      capture_output=True, timeout=30, check=False)
             self.assertEqual(process.returncode, 0)
             self.assertIn("ARGS=--setup-python,--requirements-only", process.stdout)
             self.assertNotIn("--install-homebrew", process.stdout)
+
+    @unittest.skipUnless(shutil.which("zsh") and shutil.which("python3.12"),
+                         "macOS offline dependency launcher unavailable")
+    def test_dependency_launcher_accepts_explicit_relocated_kit(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="0 Sky-ü-") as folder:
+            root = Path(folder)
+            launcher_dir = root / "source scripts"
+            launcher_dir.mkdir()
+            source = Path(__file__).resolve().parents[2] / (
+                "bridge/0SkyBridge/Resources/Scripts/Install 0-Sky Dependencies.command")
+            launcher = launcher_dir / source.name
+            launcher.write_bytes(source.read_bytes())
+            launcher.chmod(0o755)
+            (launcher_dir / "macos_host_setup.py").write_text(
+                "import os,sys; print('SELECTED=' + os.environ['ZERO_SKY_KIT']); "
+                "print('ARGS=' + ','.join(sys.argv[1:]))\n", encoding="utf-8")
+            kit = root / "external verified kit"
+            for relative in ("SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
+                             "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+                             "host-mac/HOST_RUNTIME_MANIFEST.json", "host-mac/install.py",
+                             "host-mac/pair.py", "host-mac/requirements-lock.txt",
+                             "payloads/0-Sky-Link-1.9.0-universal.ipa"):
+                item = kit / relative
+                item.parent.mkdir(parents=True, exist_ok=True)
+                item.write_text("fixture", encoding="utf-8")
+            runtime_python = kit / "host-mac/runtime/bin/python3"
+            runtime_python.parent.mkdir(parents=True)
+            runtime_python.write_text(
+                f"#!/bin/sh\nexec {shutil.which('python3.12')} \"$@\"\n", encoding="utf-8")
+            runtime_python.chmod(0o755)
+            (kit / "host-mac/wheelhouse").mkdir()
+            process = subprocess.run(["/bin/zsh", str(launcher), "--kit", str(kit)],
+                                     input="\n", text=True, capture_output=True,
+                                     timeout=30, check=False)
+            self.assertEqual(process.returncode, 0, process.stderr)
+            self.assertIn(f"SELECTED={kit.resolve()}", process.stdout)
+            self.assertIn("ARGS=--setup-python,--requirements-only", process.stdout)
 
     def test_paths_are_independent_of_working_directory_and_home(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
@@ -99,6 +201,42 @@ class KitManifestTests(unittest.TestCase):
             self.assertIn("KIT_FILE_INVENTORY_MISMATCH", verify(root))
             (root / "host-mac/install.py").unlink()
             self.assertTrue(any("host-mac/install.py" in issue for issue in verify(root)))
+
+    def test_srdssh_shell_link_is_mandatory_and_confined(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            shell = root / "srdssh/payload-root/usr/bin/sh"
+            generate(root)
+            self.assertEqual(verify(root), [])
+
+            shell.unlink()
+            self.assertIn(
+                "SRDSSH_SHELL_LINK_INVALID:srdssh/payload-root/usr/bin/sh",
+                verify(root),
+            )
+
+    def test_filza_sealed_identity_is_mandatory(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            generate(root)
+            manifest = root / "filza/source-manifest.json"
+            data = json.loads(manifest.read_text())
+            data.pop("sealed_executable_sha256")
+            manifest.write_text(json.dumps(data), encoding="utf-8")
+            self.assertIn(
+                "FILZA_SOURCE_MANIFEST_HASH_INVALID:sealed_executable_sha256",
+                verify(root),
+            )
+
+    def test_filza_image_must_match_sealed_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            fixture(root)
+            generate(root)
+            (root / "filza/Filza-4.0-permanent.dmg").write_bytes(b"different")
+            self.assertIn("FILZA_SEALED_IMAGE_HASH_MISMATCH", verify(root))
 
     def test_external_symlink_and_unexpected_file(self) -> None:
         with tempfile.TemporaryDirectory() as folder, tempfile.TemporaryDirectory() as elsewhere:
@@ -142,20 +280,41 @@ class KitManifestTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "BLOCKED_MISSING"):
             require_identity(None, "Developer ID Installer", identities)
 
+    def test_unique_distribution_identity_can_be_selected_automatically(self) -> None:
+        identity = Identity("A" * 40, "Developer ID Application")
+        self.assertEqual(resolve_identity(None, "Developer ID Application", [identity]),
+                         identity.fingerprint)
+        with self.assertRaisesRegex(RuntimeError, "AMBIGUOUS"):
+            resolve_identity(None, "Developer ID Application", [identity, identity])
+
     def test_offline_install_never_uses_network_index(self) -> None:
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             (root / "host-mac/wheelhouse").mkdir(parents=True)
             (root / "host-mac/requirements-lock.txt").write_text(
                 "demo==1.0\n", encoding="utf-8")
+            helper = root / "host-mac/runtime/bin/dpkg-deb"
+            helper.parent.mkdir(parents=True)
+            helper.write_text("#!/usr/bin/env python3\n", encoding="utf-8")
+            package = root / "offline-python/libgdbm6_1.23_iphoneos-arm64.deb"
+            package.parent.mkdir(parents=True)
+            package.write_bytes(b"fixture")
             with patch("tools.test_offline_install.subprocess.run") as run:
-                run.return_value.returncode = 0
+                def completed(argv, **_kwargs):
+                    result = mock.Mock(returncode=0, stdout=b"", stderr=b"")
+                    if "--extract" in argv:
+                        payload = Path(argv[-1]) / "var/jb/usr/lib"
+                        payload.mkdir(parents=True)
+                        (payload / "fixture").write_bytes(b"payload")
+                    return result
+                run.side_effect = completed
                 self.assertEqual(verify_offline_install(root, Path("/usr/bin/python3")), "PASS")
                 install = run.call_args_list[1]
                 argv = install.args[0]
                 self.assertIn("--no-index", argv)
                 self.assertIn("--isolated", argv)
                 self.assertEqual(install.kwargs["env"]["PIP_NO_INDEX"], "1")
+                self.assertEqual(install.kwargs["env"]["PYTHONDONTWRITEBYTECODE"], "1")
                 self.assertNotIn("https://", " ".join(argv))
 
     def test_distribution_mode_blocks_before_build_without_developer_id(self) -> None:
@@ -172,6 +331,16 @@ class KitManifestTests(unittest.TestCase):
             self.assertIn("FINAL_RESULT=BLOCKED", report)
             self.assertIn("FIRST_FAILING_STAGE=SIGNING_PREFLIGHT", report)
             self.assertNotIn("FINAL_RESULT=PASS", report)
+
+    def test_notary_wait_has_explicit_service_sized_timeout(self) -> None:
+        completed = subprocess.CompletedProcess(
+            ["xcrun", "notarytool"], 0,
+            stdout=json.dumps({"status": "Accepted"}).encode(), stderr=b"")
+        with patch("tools.build_release.subprocess.run", return_value=completed) as run:
+            submit_notarization(Path("release.pkg"), "release-profile")
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[argv.index("--timeout") + 1], "50m")
+        self.assertEqual(run.call_args.kwargs["timeout"], 3600)
 
 
 if __name__ == "__main__":

@@ -1,0 +1,12 @@
+0-Sky Bridge v1.0.0-pre.26 signing evidence
+
+Installer signature: PASS — Apple Developer ID Installer with trusted timestamp
+Application signature: PASS — Apple Developer ID Application, deep and strict verification
+Nested-code signatures: PASS
+Hardened runtime: PASS
+Entitlements: PASS
+Signing-team consistency: PASS
+Architectures: arm64 and x86_64 (Universal 2)
+Gatekeeper package assessment: PASS
+
+No certificate subject, certificate fingerprint, private key, credential, token, or personal identifier is retained in this evidence file.

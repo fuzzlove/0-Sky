@@ -10,7 +10,7 @@ CrypStore_FILES = $(wildcard ../TrollStore/*.m) $(wildcard ../Shared/*.m)
 CrypStore_FRAMEWORKS = UIKit CoreGraphics CoreServices CoreTelephony CoreBluetooth Security
 CrypStore_PRIVATE_FRAMEWORKS = Preferences MobileIcons MobileContainerManager
 CrypStore_LIBRARIES = archive
-CrypStore_CFLAGS = -fobjc-arc -I../Shared -I$(shell brew --prefix)/opt/libarchive/include -DTROLLSTORE_LITE
+CrypStore_CFLAGS = -fobjc-arc -I../Shared -I$(LIBARCHIVE_PREFIX)/include -DTROLLSTORE_LITE
 CrypStore_LDFLAGS = -F../build-stubs -Wl,-rpath,@executable_path/Frameworks -Wl,-rpath,/var/jb/usr/lib
 CrypStore_CODESIGN_FLAGS = -Sentitlements.plist
 

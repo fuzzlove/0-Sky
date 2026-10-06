@@ -15,12 +15,44 @@ class StageError(RuntimeError):
     pass
 
 
+# These files have historical ``test_*`` names, but they are not disposable
+# test output.  ``build_poc.py`` compiles them on the Mac during first-device
+# enrollment to produce the trust-cached runtime host and dylib.  Omitting
+# them makes an otherwise valid release fail only after it has modified the
+# device.  Keep this narrow allowlist rather than broadly shipping maintenance
+# tests in the end-user package.
+REQUIRED_RUNTIME_BUILD_INPUTS = frozenset({
+    "automation/tools/srd-runtime-manager/test_host.c",
+    "automation/tools/srd-runtime-manager/test_tweak.c",
+    "automation/tools/srd-runtime-manager/test_tweak.plist",
+})
+
+
 def digest(path: Path) -> str:
     value = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             value.update(chunk)
     return value.hexdigest()
+
+
+def normalize_release_permissions(root: Path) -> None:
+    """Make immutable bundled kit content readable by the installed app user.
+
+    macOS packages install application resources as root:wheel. A mode copied
+    from a private build cache (0600/0700) therefore makes an otherwise complete
+    kit invisible to an ordinary account. Preserve whether a regular file is an
+    executable, but remove all build-host-specific permission restrictions.
+    """
+    root.chmod(0o755)
+    for item in sorted(root.rglob("*")):
+        if item.is_symlink():
+            continue
+        if item.is_dir():
+            item.chmod(0o755)
+        elif item.is_file():
+            executable = bool(item.stat().st_mode & 0o111)
+            item.chmod(0o755 if executable else 0o644)
 
 
 def stage(source: Path, destination: Path, *, release: bool = False,
@@ -43,9 +75,13 @@ def stage(source: Path, destination: Path, *, release: bool = False,
             relative = parts[1].strip().lstrip("*").removeprefix("./")
             if not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
                 raise StageError("kit manifest path escapes its root")
+            is_test_named = (Path(relative).name.startswith("test_")
+                             or "tests" in Path(relative).parts)
+            required_runtime_input = relative in REQUIRED_RUNTIME_BUILD_INPUTS
             if ((release or link_embed) and
-                    (Path(relative).name.startswith("test_")
-                     or "tests" in Path(relative).parts)):
+                    ((is_test_named and not required_runtime_input)
+                     or "__pycache__" in Path(relative).parts
+                     or Path(relative).suffix in {".pyc", ".pyo"})):
                 continue
             if link_embed and relative == "payloads/0-Sky-Link-1.9.0-universal.ipa":
                 continue
@@ -67,12 +103,15 @@ def stage(source: Path, destination: Path, *, release: bool = False,
             staged_lines.append(parts[0] + "  ./" + relative)
         if count < 10:
             raise StageError("kit manifest is incomplete")
+        temporary_resolved = temporary.resolve()
         for link in temporary.rglob("*"):
             if link.is_symlink() and (not link.resolve().exists()
-                                      or temporary not in link.resolve().parents):
+                                      or temporary_resolved not in link.resolve().parents):
                 raise StageError(f"staged kit link is invalid: {link.relative_to(temporary)}")
         (temporary / "SHA256SUMS").write_text(
             "\n".join(staged_lines) + "\n", encoding="utf-8")
+        if release:
+            normalize_release_permissions(temporary)
         previous = destination.with_name(destination.name + f".previous.{os.getpid()}")
         if previous.exists():
             raise StageError("previous kit staging directory is already present")

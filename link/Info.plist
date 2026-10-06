@@ -65,7 +65,7 @@
 	<key>UIRequiresFullScreen</key>
 	<true/>
 	<key>ZeroSkyCompatibilityPolicy</key>
-	<string>Runtime-adaptive iOS 17+; validated on attached iOS 26.7 and 27.0 SRDs</string>
+	<string>Runtime-adaptive iOS 17+; validated on attached iOS 26.0 and 27.0 SRDs</string>
 	<key>ZeroSkyDistributionName</key>
 	<string>0-Sky Link</string>
 	<key>ZeroSkyResearchCredit</key>

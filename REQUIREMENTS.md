@@ -19,6 +19,54 @@
 - Apple Silicon (`arm64`) or Intel (`x86_64`).
 - Swift Package Manager.
 
+Install and select source-build prerequisites on a new Mac as follows. These
+steps are for maintainers compiling from source; users of the compiled package
+do not perform them.
+
+1. Install full **Xcode** from the Mac App Store (not only Command Line Tools),
+   open it once so additional components finish installing, and run:
+
+   ```sh
+   sudo xcode-select -s /Applications/Xcode.app/Contents/Developer
+   sudo xcodebuild -license accept
+   xcodebuild -version
+   xcrun --sdk iphoneos --show-sdk-version
+   ```
+
+2. Install Python 3.12 or later with the universal2 installer from
+   <https://www.python.org/downloads/macos/>, or with an already reviewed
+   Homebrew installation:
+
+   ```sh
+   brew install python@3.12
+   python3 --version
+   ```
+
+3. For the Control/Theos portion, install the locked native build dependencies:
+
+   ```sh
+   brew install libarchive openssl@3 pkgconf ldid dpkg
+   export LIBARCHIVE_PREFIX="$(brew --prefix libarchive)"
+   export PKG_CONFIG_PATH="$(brew --prefix openssl@3)/lib/pkgconfig${PKG_CONFIG_PATH:+:$PKG_CONFIG_PATH}"
+   pkg-config --exists openssl
+   command -v ldid
+   ```
+
+   If `brew` is not installed, obtain it from <https://brew.sh>, review its
+   current installer and privilege request, finish that installation, and then
+   run the commands above. 0-Sky never executes Homebrew's moving bootstrap
+   script automatically.
+
+4. Create a separate locked Theos checkout. Do not reset a checkout that has
+   local work:
+
+   ```sh
+   git clone --recursive https://github.com/theos/theos.git "/absolute/path/to/theos"
+   git -C "/absolute/path/to/theos" checkout dd5c14bb9d91311e221d51b5bfb8c9e5948156db
+   git -C "/absolute/path/to/theos" submodule update --init --recursive
+   python3 tools/theos_preflight.py --theos "/absolute/path/to/theos"
+   ```
+
 Build and test:
 
 ```sh
@@ -42,11 +90,16 @@ building this source tree.
 
 ### Runtime host tools
 
-- Xcode command-line tools: `xcrun`, `clang`, `codesign`, `lipo`, `hdiutil`,
-  `plutil`, and `swift`.
-- Homebrew dependencies: `python@3.12`, `dpkg` (`dpkg` and `dpkg-deb`),
-  `libusbmuxd` (`iproxy`), `zstd`, `ldid`, `autoconf`, `automake`, and
-  `pkgconf`.
+- End-user packages embed pinned arm64 and x86_64 Python 3.12 runtimes and
+  source-controlled `dpkg-deb`, `iproxy`, and `idevice_id` compatibility
+  helpers. Their hashes, licenses, destinations, and architecture payloads are
+  checked by `HOST_RUNTIME_MANIFEST.json`.
+- End users do not install Homebrew, Python, Theos, compilers, or an SDK for the
+  compiled Bridge application. Standard macOS `codesign`, `hdiutil`, `plutil`,
+  `ssh`, `ditto`, and `launchctl` remain operating-system capabilities.
+- Source and release builders require Xcode, the locked Theos checkout,
+  `libarchive`, OpenSSL, `pkg-config`, `ldid`, and standard archive tools. Run
+  `tools/environment_preflight.py --human` for exact remediation.
 - OpenSSH client utilities and standard macOS tools (`ssh`, `ssh-keygen`,
   `nc`, `lsof`, `tar`, `ditto`, `shasum`, and `launchctl`).
 - Python device tooling is installed into a private virtual environment. The
@@ -59,11 +112,29 @@ building this source tree.
   `SHA256SUMS` manifest.
 
 Binary-release users should select **Install All 0-Sky Requirements** in
-0-Sky Bridge. The guided installer detects Apple Silicon and Intel Homebrew,
-can invoke Homebrew's official interactive bootstrap, explicitly installs
-Python 3.12 and dpkg, and creates the isolated pinned environment from the
-release wheelhouse. Apple's `/usr/bin/python3` may start the bootstrap but is
-not accepted as the completed 0-Sky runtime.
+0-Sky Bridge. The guided installer selects the embedded architecture payload
+and creates the isolated pinned environment from the release wheelhouse. It
+does not download or execute Homebrew and does not accept Apple's
+`/usr/bin/python3` as the completed 0-Sky runtime.
+
+Apple SRD host assets are the one end-user requirement that 0-Sky cannot
+redistribute or install from a public package manager. The authorized
+participant must sign in to the
+[Apple Security Research Device Program](https://security.apple.com/research-device/),
+follow the host-tool instructions issued for that SRD/OS build, restart when
+Apple's installer requests it, and verify the two expected capabilities:
+
+```sh
+test -x /System/Library/SecurityResearch/usr/bin/cryptexctl \
+  && echo "cryptexctl ready" || echo "cryptexctl missing"
+test -x /System/Library/Filesystems/apfs.fs/Contents/Resources/apfs_prepare_cryptex \
+  && echo "APFS Cryptex preparation ready" || echo "APFS Cryptex preparation missing"
+```
+
+There is no repository-provided substitute for a missing Apple asset. If either
+check prints `missing`, use the private installation instructions attached to
+the authorized SRD program account or contact Apple program support; do not
+copy these files from another Mac or a different device/build.
 
 ### Device OS compatibility
 

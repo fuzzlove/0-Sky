@@ -110,14 +110,9 @@ struct BridgeCoreTestRunner {
     }
 
     private static func completeDependencyRequirements() async throws {
-        let formulae = Set(DependencyManager.requiredHomebrewFormulae)
-        try expect(formulae.contains("python@3.12"),
-                   "the guided installer omitted the required Python runtime")
-        try expect(formulae.contains("dpkg"),
-                   "the guided installer omitted dpkg")
-        try expect(DependencyManager.hostPythonCandidates.allSatisfy {
-            $0.contains("3.12")
-        }, "a non-3.12 interpreter was accepted as the 0-Sky host runtime")
+        let components = Set(DependencyManager.bundledRuntimeComponents)
+        try expect(components == Set(["python3", "dpkg-deb", "iproxy", "idevice_id"]),
+                   "the guided installer omitted a self-contained runtime component")
     }
 
     private static func licenseAgreementMetadata() async throws {
@@ -247,6 +242,9 @@ struct BridgeCoreTestRunner {
         try expectThrows("unsafe instance accepted") {
             _ = try BridgeValidation.validateInstance("../other")
         }
+        let environment = try BridgeValidation.safeEnvironment()
+        try expect(environment["PYTHONDONTWRITEBYTECODE"] == "1",
+                   "approved Python processes may mutate the signed app bundle")
         let profile = DeviceProfile(
             udid: "00000000-0000000000000001", instanceName: "research-ipad",
             localPort: 2231, sshHostAlias: "0sky-device-aaaaaaaaaaaaaaaaaaaaaaaa",
@@ -425,6 +423,28 @@ struct BridgeCoreTestRunner {
         let port = try DeviceEnrollmentManager.nextAvailablePort(profiles: [profile])
         try expect(port == 2223,
                    "port allocator reused an existing device port")
+        let reservedPort = try DeviceEnrollmentManager.nextAvailablePort(
+            profiles: [profile], reservedPorts: [2223]
+        )
+        try expect(reservedPort == 2224,
+                   "port allocator reused a port from an incomplete duplicate profile")
+        let resumeRoot = FileManager.default.temporaryDirectory
+            .appendingPathComponent("0sky-enrollment-resume-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: resumeRoot) }
+        let resumeDirectory = resumeRoot.appendingPathComponent("instances/\(instanceName)")
+        try FileManager.default.createDirectory(at: resumeDirectory, withIntermediateDirectories: true)
+        let resumeConfig: [String: Any] = [
+            "udid": device.udid, "instance": instanceName, "ssh_port": "2237",
+        ]
+        try JSONSerialization.data(withJSONObject: resumeConfig)
+            .write(to: resumeDirectory.appendingPathComponent("config.json"))
+        let resume = try DeviceEnrollmentManager.canonicalResumeCandidate(
+            supportURL: resumeRoot, device: device
+        )
+        try expect(resume?.instance == instanceName && resume?.port == 2237,
+                   "interrupted deterministic setup was not resumed")
+        try expect(DeviceEnrollmentManager.configuredPorts(supportURL: resumeRoot) == [2237],
+                   "incomplete profile port was not reserved")
         let complete = IOSComponentSetupManager.plan(.completeProject)
         try expect(complete.tier == .highRisk
                    && complete.components.contains("0-Sky Link")
@@ -436,6 +456,23 @@ struct BridgeCoreTestRunner {
                    "complete iOS Project plan omitted a required component")
         try expect(complete.preservesNewerPackages,
                    "complete iOS Project plan would replace newer packages")
+        let ios27Arguments = try IOSComponentSetupManager.completeProjectControllerArguments(
+            device: SkyDevice(
+                udid: "00000000-0000000000000001", osVersion: "27.0",
+                usbConnected: true
+            )
+        )
+        try expect(ios27Arguments == ["--udid", "00000000-0000000000000001",
+                                      "--pair-remotexpc"],
+                   "iOS 27 setup omitted the guided Paired Macs fallback")
+        let ios26Arguments = try IOSComponentSetupManager.completeProjectControllerArguments(
+            device: SkyDevice(
+                udid: "00000000-0000000000000001", osVersion: "26.0",
+                usbConnected: true
+            )
+        )
+        try expect(ios26Arguments == ["--udid", "00000000-0000000000000001"],
+                   "iOS 26 setup incorrectly enabled the iOS 27 Paired Macs flow")
         // The public repository is deliberately source-only. Distribution
         // payload resolution is covered by installer verification; here we
         // assert that a source checkout fails closed instead of inventing or
@@ -453,6 +490,9 @@ struct BridgeCoreTestRunner {
         defer { try? FileManager.default.removeItem(at: kit) }
         for relative in ["SHA256SUMS", "PORTABILITY.json", "RELEASE_KIT_APPROVAL.json",
                          "RELEASE_KIT_MANIFEST.json", "WHEEL_INVENTORY.json",
+                         "host-mac/HOST_RUNTIME_MANIFEST.json",
+                         "host-mac/runtime/bin/python3", "host-mac/runtime/bin/dpkg-deb",
+                         "host-mac/runtime/bin/iproxy", "host-mac/runtime/bin/idevice_id",
                          "host-mac/install.py", "host-mac/pair.py",
                          "host-mac/requirements-lock.txt",
                          "payloads/0-Sky-Link-1.9.0-universal.ipa"] {
@@ -467,8 +507,35 @@ struct BridgeCoreTestRunner {
             withIntermediateDirectories: true
         )
         try expect(BridgePaths.hasCompleteKit(at: kit), "complete bundled kit rejected")
-        let resolved = try BridgePaths(repositoryRoot: nil, bundledKitRoot: kit).projectSetupKit()
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: kit.appendingPathComponent("host-mac/runtime/bin/python3").path
+        )
+        let stalePython = resumeRoot.appendingPathComponent("venv/bin/python3")
+        try FileManager.default.createDirectory(
+            at: stalePython.deletingLastPathComponent(), withIntermediateDirectories: true
+        )
+        try Data("#!/bin/sh\nexit 0\n".utf8).write(to: stalePython)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755], ofItemAtPath: stalePython.path
+        )
+        let releasePaths = BridgePaths(
+            repositoryRoot: nil, supportRoot: resumeRoot, bundledKitRoot: kit
+        )
+        let resolved = try releasePaths.projectSetupKit()
         try expect(resolved == kit, "bundled kit was not preferred")
+        do {
+            _ = try releasePaths.projectPython()
+            throw TestFailure.failed("release accepted a stale machine-local Python")
+        } catch BridgeCoreError.dependencyMissing { /* expected repair requirement */ }
+        try FileManager.default.removeItem(at: stalePython)
+        try FileManager.default.createSymbolicLink(
+            at: stalePython,
+            withDestinationURL: kit.appendingPathComponent("host-mac/runtime/bin/python3")
+        )
+        let releasePython = try releasePaths.projectPython()
+        try expect(releasePython == stalePython,
+                   "release rejected its bundled-runtime-bound managed environment")
         try FileManager.default.removeItem(
             at: kit.appendingPathComponent("host-mac/requirements-lock.txt")
         )
@@ -1215,6 +1282,38 @@ struct BridgeCoreTestRunner {
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: pinURL.path)
         let valid = HostProfileInspector.inspect(supportURL: root, udid: udid)
         try expect(valid.ready, "complete exact-device profile was rejected: \(valid.code ?? "none") \(valid.detail)")
+        try expect(valid.selectedInstance == "iphonese-srd", "valid instance was not selected explicitly")
+
+        // An interrupted deterministic setup may coexist with a complete
+        // legacy enrollment. It must not block the one complete exact-device
+        // profile or win by directory enumeration order.
+        let interrupted = root.appendingPathComponent("instances/iphone-srd-00000001", isDirectory: true)
+        try FileManager.default.createDirectory(at: interrupted, withIntermediateDirectories: true)
+        var interruptedConfig = complete
+        interruptedConfig["instance"] = "iphone-srd-00000001"
+        interruptedConfig["ssh_known_hosts"] = interrupted.appendingPathComponent("device-known-hosts").path
+        let interruptedConfigURL = interrupted.appendingPathComponent("config.json")
+        try JSONSerialization.data(withJSONObject: interruptedConfig).write(to: interruptedConfigURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: interruptedConfigURL.path)
+        let resumable = HostProfileInspector.inspect(supportURL: root, udid: udid)
+        try expect(resumable.ready && resumable.selectedInstance == "iphonese-srd",
+                   "incomplete duplicate blocked the complete profile: \(resumable.detail)")
+        let resumedRegistry = try await DeviceRegistry(supportURL: root).reload()
+        try expect(resumedRegistry.count == 1
+                   && resumedRegistry.first?.instanceName == "iphonese-srd",
+                   "registry selected an incomplete duplicate by directory order")
+
+        let interruptedPin = interrupted.appendingPathComponent("device-known-hosts")
+        try Data("\(alias) ssh-ed25519 \(String(repeating: "A", count: 44))\n".utf8).write(to: interruptedPin)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: interruptedPin.path)
+        let conflict = HostProfileInspector.inspect(supportURL: root, udid: udid)
+        try expect(conflict.code == "ERR_PROFILE_CONFLICT" && conflict.selectedInstance == nil,
+                   "two complete profiles were selected implicitly")
+        let conflictedRegistry = try await DeviceRegistry(supportURL: root).reload()
+        try expect(conflictedRegistry.isEmpty,
+                   "registry silently selected one of two complete profiles")
+        try FileManager.default.removeItem(at: interrupted)
+
         try FileManager.default.setAttributes([.posixPermissions: 0o644], ofItemAtPath: pinURL.path)
         let unsafe = HostProfileInspector.inspect(supportURL: root, udid: udid)
         try expect(unsafe.code == "ERR_PROFILE_PERMISSION", "broad host-key pin mode was accepted")

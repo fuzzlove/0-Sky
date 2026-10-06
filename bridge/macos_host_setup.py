@@ -9,9 +9,9 @@ The macOS companion consists of three per-device LaunchAgents:
 
 By default this program is read-only. Use ``--fix-missing`` for host
 dependencies without a connected device, or ``--setup`` to also install/repair
-the per-device companion. Homebrew itself is installed only with the explicit
-``--install-homebrew`` opt-in. Nothing here installs to an iPhone or iPad or
-bypasses Apple's SRD, pairing, Cryptex, nonce, or TSS checks.
+the per-device companion. It never downloads and executes a moving, unverified
+Homebrew installer. Nothing here installs to an iPhone or iPad or bypasses
+Apple's SRD, pairing, Cryptex, nonce, or TSS checks.
 """
 from __future__ import annotations
 
@@ -29,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 
 from zero_sky_user_config import (
     UserConfigError,
@@ -55,13 +56,9 @@ REQUIREMENTS_LOCK = KIT / "host-mac/requirements-lock.txt"
 FRIDA_REQUIREMENTS_LOCK = KIT / "host-mac/frida-requirements-lock.txt"
 FRIDA_WHEELHOUSE_HASHES = KIT / "host-mac/frida-wheelhouse.sha256"
 WHEELHOUSE = KIT / "host-mac/wheelhouse"
+BUNDLED_BIN = KIT / "host-mac/runtime/bin"
 FRIDA_VERSION = "17.18.0"
 FRIDA_TOOLS_VERSION = "14.10.4"
-FRIDA_COMMANDS = (
-    "frida", "frida-apk", "frida-compile", "frida-create", "frida-discover",
-    "frida-join", "frida-kill", "frida-ls", "frida-ls-devices", "frida-pm",
-    "frida-ps", "frida-pull", "frida-push", "frida-rm", "frida-trace",
-)
 INITIAL_CONFIG = user_config_defaults(ROOT)
 DEFAULT_SUPPORT = Path(INITIAL_CONFIG["paths"]["support"])
 DEFAULT_IDENTITY = Path(INITIAL_CONFIG["paths"]["ssh_identity"])
@@ -73,21 +70,22 @@ BREW_FORMULAS = {
     # Keep the versioned interpreter explicit.  Apple's /usr/bin/python3 is
     # only a bootstrap convenience and is not the runtime used by 0-Sky.
     "python3.12": "python@3.12",
-    "dpkg": "dpkg",
     "iproxy": "libusbmuxd",
-    "zstd": "zstd",
     "dpkg-deb": "dpkg",
-    "ldid": "ldid",
-    "autoreconf": "autoconf",
-    "automake": "automake",
-    "pkg-config": "pkgconf",
+    "idevice_id": "libimobiledevice",
 }
 
+BUNDLED_RUNTIME_REPAIR = (
+    "Downloaded app: delete the incomplete 0SkyBridge.app, re-download the complete "
+    "four-file release, verify SHA256SUMS, and reinstall its .pkg. Do not install "
+    "Homebrew as a substitute. Source kit: from the repository run `python3 "
+    "tools/build_host_runtime.py '/absolute/path/to/a-writable-kit-copy'`, then "
+    "rebuild the app; never modify a signed app bundle in place."
+)
+
 COMMANDS = (
-    "python3", "python3.12", "shasum", "ssh", "ssh-keygen", "iproxy", "nc", "lsof",
-    "tar", "zstd", "make", "xcrun", "clang", "codesign", "lipo",
-    "hdiutil", "plutil", "launchctl", "ditto", "dpkg", "dpkg-deb", "ldid",
-    "autoreconf", "automake", "pkg-config",
+    "shasum", "ssh", "ssh-keygen", "iproxy", "idevice_id", "nc", "lsof",
+    "tar", "codesign", "hdiutil", "plutil", "launchctl", "ditto", "dpkg-deb",
 )
 
 APPLE_TOOLS = (
@@ -148,10 +146,14 @@ try:
  imports=True
 except Exception: imports=False
 print(json.dumps(found,sort_keys=True));raise SystemExit(0 if imports else 2)'''
-    result = subprocess.run(
-        [str(python), "-c", probe, json.dumps(wanted_packages())],
-        text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
-    )
+    try:
+        result = subprocess.run(
+            [str(python), "-c", probe, json.dumps(wanted_packages())],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False, {}
     try:
         found = json.loads(result.stdout)
     except Exception:
@@ -185,6 +187,74 @@ def verify_sha256_manifest(manifest: Path, root: Path) -> tuple[bool, str]:
     return (checked > 0, f"{checked} pinned files")
 
 
+def file_sha256(path: Path) -> str:
+    value = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            value.update(block)
+    return value.hexdigest()
+
+
+def activate_bundled_runtime() -> bool:
+    """Admit only manifest-hashed tools from the immutable application kit."""
+    manifest = KIT / "host-mac/HOST_RUNTIME_MANIFEST.json"
+    if not BUNDLED_BIN.exists() and not manifest.exists():
+        return False
+    if manifest.is_symlink() or not manifest.is_file() or BUNDLED_BIN.is_symlink():
+        raise SystemExit("the bundled host runtime is incomplete or unsafe")
+    try:
+        value = json.loads(manifest.read_text(encoding="utf-8"))
+        if value.get("schema") != 2 or value.get("platform") != "macOS":
+            raise ValueError("unsupported manifest schema")
+        components = value["components"]
+        required = {"python3", "dpkg-deb", "iproxy", "idevice_id"}
+        seen: set[str] = set()
+        kit_root = KIT.resolve(strict=True)
+
+        def confined(relative: str, *, executable: bool = False) -> Path:
+            candidate = Path(relative)
+            path = KIT / candidate
+            resolved = path.resolve(strict=True)
+            if (candidate.is_absolute() or ".." in candidate.parts or path.is_symlink()
+                    or kit_root not in resolved.parents or not path.is_file()
+                    or (executable and not os.access(path, os.X_OK))):
+                raise ValueError("unsafe runtime path")
+            return path
+
+        for component in components:
+            name = str(component["name"])
+            path = confined(str(component["path"]), executable=True)
+            architectures = set(component["architectures"])
+            license_path = confined(str(component["license"]))
+            notices = component.get("notices", [])
+            if not isinstance(notices, list):
+                raise ValueError("invalid component")
+            for notice in notices:
+                confined(str(notice))
+            if (name in seen or file_sha256(path) != component["sha256"]
+                    or architectures != {"arm64", "x86_64"}
+                    or not license_path.is_file()):
+                raise ValueError("invalid component")
+            payloads = component.get("payloads")
+            if name == "python3":
+                if not isinstance(payloads, dict) or set(payloads) != {"arm64", "x86_64"}:
+                    raise ValueError("Python architecture payloads are incomplete")
+                for architecture, payload in payloads.items():
+                    binary = confined(str(payload["path"]), executable=True)
+                    if file_sha256(binary) != payload.get("sha256"):
+                        raise ValueError(f"invalid Python payload: {architecture}")
+            seen.add(name)
+        if not required.issubset(seen):
+            raise ValueError("missing component")
+    except (KeyError, OSError, TypeError, ValueError, json.JSONDecodeError) as error:
+        raise SystemExit("The bundled host runtime failed manifest validation. "
+                         + BUNDLED_RUNTIME_REPAIR) from error
+    os.environ["PATH"] = os.pathsep.join(
+        [str(BUNDLED_BIN), *os.environ.get("PATH", "").split(os.pathsep)]
+    )
+    return True
+
+
 def frida_probe(support: Path) -> tuple[bool, str]:
     root = support / "tools/frida-current"
     python = root / "bin/python"
@@ -214,36 +284,10 @@ def frida_probe(support: Path) -> tuple[bool, str]:
 
 
 def expose_frida_cli(support: Path, directories: tuple[Path, ...] | None = None) -> int:
-    """Expose managed commands in an existing writable Homebrew bin safely."""
-    directories = directories or (Path("/opt/homebrew/bin"), Path("/usr/local/bin"))
-    destination_root = next((path for path in directories
-                             if path.is_dir() and os.access(path, os.W_OK)), None)
-    if destination_root is None:
-        log("Managed Frida is ready; no writable command directory was available")
-        return 0
-    managed_root = (support / "tools").resolve()
-    current_bin = support / "tools/frida-current/bin"
-    created = 0
-    for name in FRIDA_COMMANDS:
-        source = current_bin / name
-        if not source.is_file():
-            continue
-        destination = destination_root / name
-        if destination.is_symlink():
-            try:
-                owned = managed_root in destination.resolve(strict=False).parents
-            except OSError:
-                owned = False
-            if not owned:
-                log(f"Preserving non-0-Sky command link: {destination}")
-                continue
-            destination.unlink()
-        elif destination.exists():
-            log(f"Preserving existing command: {destination}")
-            continue
-        destination.symlink_to(source)
-        created += 1
-    return created
+    """Keep managed commands private instead of modifying a global bin directory."""
+    del directories  # retained for source compatibility with older callers/tests
+    log(f"Managed Frida commands are ready below {support / 'tools/frida-current/bin'}")
+    return 0
 
 
 def python_candidates(requested: Path | None, support: Path) -> list[Path]:
@@ -254,6 +298,7 @@ def python_candidates(requested: Path | None, support: Path) -> list[Path]:
         values.append(Path(os.environ["SRD_PYTHON"]).expanduser())
     values.extend([
         support / "venv/bin/python3",
+        BUNDLED_BIN / "python3",
         Path("/opt/homebrew/bin/python3.13"),
         Path("/opt/homebrew/bin/python3"),
         Path("/usr/local/bin/python3"),
@@ -284,6 +329,7 @@ def select_python(requested: Path | None, support: Path) -> Path | None:
 
 def bootstrap_python() -> Path | None:
     candidates = [
+        BUNDLED_BIN / "python3",
         Path("/Library/Frameworks/Python.framework/Versions/3.12/bin/python3"),
         Path("/opt/homebrew/bin/python3.12"),
         Path("/usr/local/bin/python3.12"),
@@ -295,10 +341,14 @@ def bootstrap_python() -> Path | None:
     for candidate in candidates:
         if not candidate.is_file():
             continue
-        result = subprocess.run(
-            [str(candidate), "-c", "import sys;raise SystemExit(sys.version_info[:2]!=(3,12))"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        )
+        try:
+            result = subprocess.run(
+                [str(candidate), "-c", "import sys;raise SystemExit(sys.version_info[:2]!=(3,12))"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=10, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
         if result.returncode == 0:
             return candidate.resolve()
     return None
@@ -314,10 +364,14 @@ def xcode_environment(sdk: str) -> tuple[dict[str, str] | None, str]:
         env = dict(os.environ)
         if developer is not None:
             env["DEVELOPER_DIR"] = str(developer)
-        result = subprocess.run(
-            ["/usr/bin/xcrun", "--sdk", sdk, "--show-sdk-path"],
-            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
-        )
+        try:
+            result = subprocess.run(
+                ["/usr/bin/xcrun", "--sdk", sdk, "--show-sdk-path"],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, env=env,
+                timeout=20, check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired):
+            continue
         if result.returncode == 0 and Path(result.stdout.strip()).is_dir():
             return env, result.stdout.strip()
     return None, ""
@@ -389,7 +443,7 @@ def visible_usb_devices(python: Path | None) -> list[str]:
 
 
 def agent_checks(instance: str, support: Path, udid: str, port: int,
-                 identity: Path) -> list[Check]:
+                 remote_port: int, identity: Path) -> list[Check]:
     checks: list[Check] = []
     agents = Path.home() / "Library/LaunchAgents"
     domain = f"gui/{os.getuid()}"
@@ -414,17 +468,25 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
                 and environment.get("CRYPSTORE_DEVICE_KEY") == str(identity)
             )
             if role == "usbmux":
-                valid = valid and "-u" in arguments and udid in arguments and f"{port}:{environment.get("CRYPSTORE_DEVICE_REMOTE_PORT", "22")}" in arguments
+                forwarded = f"{port}:{remote_port}"
+                valid = (valid and "-u" in arguments and udid in arguments
+                         and forwarded in arguments
+                         and environment.get("CRYPSTORE_DEVICE_REMOTE_PORT", "22")
+                         == str(remote_port))
             elif role == "worker":
                 valid = valid and any(item.endswith("/crypstore_worker.py") for item in arguments)
             else:
                 valid = valid and any(item.endswith("/device_bridge_supervisor.sh") for item in arguments)
         except Exception:
             valid = False
-        loaded = subprocess.run(
-            ["/bin/launchctl", "print", f"{domain}/{label}"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-        ).returncode == 0
+        try:
+            loaded = subprocess.run(
+                ["/bin/launchctl", "print", f"{domain}/{label}"],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                timeout=15, check=False,
+            ).returncode == 0
+        except (OSError, subprocess.TimeoutExpired):
+            loaded = False
         status = "PASS" if valid and loaded else "FAIL"
         detail = f"definition={'valid' if valid else 'invalid'}, service={'loaded' if loaded else 'not loaded'}"
         checks.append(Check(status, f"LaunchAgent {role}", detail,
@@ -453,17 +515,25 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
         f"{python}: {packages}", "rerun this script with --setup",
     ))
     if python_ok and pair.is_file():
-        proof = subprocess.run([
-            str(python), str(pair), "--udid", udid, "--ssh-key", str(identity),
-            "--host", "127.0.0.1", "--port", str(port),
-            "--instance-name", instance, "--support", str(support),
-            "--pymobile-python", str(python), "--verify-only", "--require-worker",
-        ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        try:
+            proof = subprocess.run([
+                str(python), str(pair), "--udid", udid, "--ssh-key", str(identity),
+                "--host", "127.0.0.1", "--port", str(port),
+                "--remote-port", str(remote_port),
+                "--instance-name", instance, "--support", str(support),
+                "--pymobile-python", str(python), "--verify-only", "--require-worker",
+            ], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                timeout=90, check=False)
+            proof_ok, proof_detail = proof.returncode == 0, proof.stdout.strip()[-1200:]
+        except subprocess.TimeoutExpired:
+            proof_ok, proof_detail = False, "verification timed out after 90 seconds"
+        except OSError:
+            proof_ok, proof_detail = False, "verification process could not be started"
         checks.append(Check(
-            "PASS" if proof.returncode == 0 else "FAIL",
+            "PASS" if proof_ok else "FAIL",
             "paired bridge and worker proof",
             "exact-UDID HMAC marker and fresh worker heartbeat verified"
-            if proof.returncode == 0 else proof.stdout.strip()[-1200:],
+            if proof_ok else proof_detail,
             "unlock/connect the SRD, then rerun this script with --setup",
         ))
     else:
@@ -476,7 +546,7 @@ def agent_checks(instance: str, support: Path, udid: str, port: int,
 
 def host_checks(sdk: str, requested_python: Path | None, support: Path,
                 identity: Path, instance: str | None, udid: str | None,
-                port: int) -> tuple[list[Check], Path | None]:
+                port: int, remote_port: int) -> tuple[list[Check], Path | None]:
     checks: list[Check] = []
     checks.append(Check(
         "PASS" if sys.platform == "darwin" else "FAIL",
@@ -486,21 +556,21 @@ def host_checks(sdk: str, requested_python: Path | None, support: Path,
     for name in COMMANDS:
         path = find_command(name)
         formula = BREW_FORMULAS.get(name)
-        fix = f"brew install {formula}" if formula else "install Xcode or the macOS command-line tools"
+        fix = (BUNDLED_RUNTIME_REPAIR
+               if formula else
+               (f"Required macOS command /usr/bin/{name} is unavailable. Install all pending "
+                "macOS updates in System Settings > General > Software Update. If it remains "
+                "missing, reinstall the current macOS release from macOS Recovery, then rerun "
+                "this check; 0-Sky will not download a replacement system binary."))
         checks.append(Check("PASS" if path else "FAIL", f"command {name}", path or "not found", fix))
     for path in APPLE_TOOLS:
         checks.append(Check(
             "PASS" if path.is_file() else "FAIL", path.name, str(path),
-            "install/enable Apple's Security Research Device host tools",
+            ("Install the Apple Security Research Device host tools issued for this authorized "
+             "SRD and exact OS build, then restart the Mac and rerun setup. Obtain them only "
+             "from the Apple Security Research Device program portal/instructions associated "
+             "with this device; 0-Sky cannot redistribute or synthesize these Apple files."),
         ))
-    xcode_env, sdk_path = xcode_environment(sdk)
-    detail = sdk_path
-    if xcode_env and xcode_env.get("DEVELOPER_DIR"):
-        detail += f" (DEVELOPER_DIR={xcode_env['DEVELOPER_DIR']})"
-    checks.append(Check(
-        "PASS" if xcode_env else "FAIL", f"Xcode SDK {sdk}", detail or "not found",
-        "install full Xcode containing the requested iPhoneOS SDK",
-    ))
     free = shutil.disk_usage(ROOT).free
     free_gib = free / (1024 ** 3)
     checks.append(Check(
@@ -521,7 +591,7 @@ def host_checks(sdk: str, requested_python: Path | None, support: Path,
     checks.append(Check(
         "PASS" if base_python else "FAIL", "offline Python runtime",
         str(base_python) if base_python else "Python 3.12 not found",
-        "brew install python@3.12",
+        BUNDLED_RUNTIME_REPAIR,
     ))
     wheel_count = len(list(WHEELHOUSE.glob("*.whl"))) if WHEELHOUSE.is_dir() else 0
     checks.append(Check(
@@ -554,7 +624,9 @@ def host_checks(sdk: str, requested_python: Path | None, support: Path,
             "rerun this script with --setup-python or create an ed25519 key",
         ))
     if instance and udid:
-        checks.extend(agent_checks(instance, support, udid, port, identity))
+        checks.extend(agent_checks(
+            instance, support, udid, port, remote_port, identity
+        ))
     return checks, selected
 
 
@@ -562,6 +634,7 @@ def find_command(name: str) -> str | None:
     """Find a command even before a fresh Homebrew install updates PATH."""
     candidates = [
         shutil.which(name),
+        str(BUNDLED_BIN / name) if (BUNDLED_BIN / name).is_file() else None,
         f"/opt/homebrew/bin/{name}",
         f"/usr/local/bin/{name}",
     ]
@@ -577,41 +650,32 @@ def locate_brew() -> Path | None:
 
 
 def install_homebrew() -> Path:
-    """Run Homebrew's official interactive installer after explicit opt-in."""
+    """Refuse moving remote bootstrap scripts; accept an existing brew only."""
     existing = locate_brew()
     if existing:
         return existing
-    curl = Path("/usr/bin/curl")
-    bash = Path("/bin/bash")
-    if not curl.is_file() or not bash.is_file():
-        raise SystemExit("macOS curl and bash are required to install Homebrew")
-    with tempfile.TemporaryDirectory(prefix="0sky-homebrew-") as directory:
-        installer = Path(directory) / "install.sh"
-        log("Downloading the official interactive Homebrew installer over HTTPS")
-        run([
-            curl, "--fail", "--location", "--show-error", "--silent",
-            "--proto", "=https", "--tlsv1.2",
-            "https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh",
-            "--output", installer,
-        ])
-        installer.chmod(0o700)
-        run([bash, installer])
-    brew = locate_brew()
-    if brew is None:
-        raise SystemExit(
-            "Homebrew installation did not expose brew in /opt/homebrew or /usr/local"
-        )
-    return brew
+    raise SystemExit(
+        "Automatic Homebrew installation is disabled because its moving remote "
+        "bootstrap script cannot be verified reproducibly. Install Homebrew "
+        "separately from https://brew.sh, review its requested privileges, then "
+        "rerun this command."
+    )
 
 
 def request_command_line_tools() -> None:
     if find_command("xcrun") and find_command("clang"):
         return
     log("Requesting Apple's Command Line Tools installer")
-    result = subprocess.run(
-        ["/usr/bin/xcode-select", "--install"], text=True,
-        stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-    )
+    try:
+        result = subprocess.run(
+            ["/usr/bin/xcode-select", "--install"], text=True,
+            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            timeout=30, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        raise SystemExit(
+            "Could not open Apple's Command Line Tools installer; run 'xcode-select --install' manually"
+        )
     detail = result.stdout.strip()
     if detail:
         log(detail)
@@ -635,8 +699,8 @@ def install_tools(*, allow_homebrew_install: bool = False) -> None:
             brew = install_homebrew()
         else:
             raise SystemExit(
-                "Homebrew is missing. Double-click 'Install 0-Sky Dependencies.command' "
-                "or rerun with --fix-missing --install-homebrew."
+                "Homebrew is missing. Install it separately from https://brew.sh, "
+                "review its requested privileges, then rerun with --fix-missing."
             )
     brew_bin = str(brew.parent)
     path_parts = os.environ.get("PATH", "").split(os.pathsep)
@@ -696,22 +760,63 @@ def setup_frida_host(base_python: Path, support: Path) -> Path:
 def setup_python(identity: Path, support: Path) -> Path:
     base_python = bootstrap_python()
     if base_python is None:
-        raise SystemExit("Python 3.12 is required (Homebrew: brew install python@3.12)")
+        raise SystemExit("Required component missing: bundled Python 3.12 runtime. "
+                         + BUNDLED_RUNTIME_REPAIR)
     if not REQUIREMENTS_LOCK.is_file() or len(list(WHEELHOUSE.glob("*.whl"))) < 100:
-        raise SystemExit("the bundled offline Python dependency set is incomplete")
+        raise SystemExit(
+            "Required component missing: the offline Python wheelhouse or its lockfile is "
+            "incomplete. Downloaded app: reinstall the complete verified four-file release. "
+            "Source build: supply the authorized kit containing host-mac/wheelhouse and "
+            "host-mac/requirements-lock.txt; these proprietary release assets are not fetched "
+            "from PyPI during installation."
+        )
     venv = support / "venv"
     venv.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
     python = venv / "bin/python3"
-    if not python_probe(python)[0]:
-        if venv.exists():
-            raise SystemExit("existing Python environment is incomplete; preserve it for review before repair")
-        run([base_python, "-m", "venv", venv])
-        run([
-            python, "-m", "pip", "install", "--no-index", "--find-links", WHEELHOUSE,
-            "--requirement", REQUIREMENTS_LOCK,
-        ])
+    existing_ok = python_probe(python)[0]
+    expected_base = python_base_executable(base_python)
+    existing_base = python_base_executable(python) if existing_ok else None
+    bound_to_bundle = expected_base is not None and existing_base == expected_base
+    backup: Path | None = None
+    if existing_ok and bound_to_bundle:
+        log("reusing the pinned Python environment bound to the bundled runtime")
     else:
-        log("reusing the pinned Python environment")
+        if venv.exists():
+            if venv.is_symlink() or not venv.is_dir():
+                raise SystemExit(
+                    "Existing Python environment path is unsafe. Expected a private "
+                    f"directory at {venv}. Export Diagnostics and move that path aside "
+                    "manually before retrying; 0-Sky did not change it."
+                )
+            recovery = support / "recovery"
+            recovery.mkdir(parents=True, exist_ok=True, mode=0o700)
+            os.chmod(recovery, 0o700)
+            backup = recovery / f"venv-before-bundled-runtime-{time.time_ns()}"
+            if backup.exists():
+                raise SystemExit(f"Recovery path already exists: {backup}")
+            os.replace(venv, backup)
+            reason = ("used a Python outside the signed bundled runtime"
+                      if existing_ok else "was incomplete")
+            log(f"preserved the previous Python environment at {backup} because it {reason}")
+        try:
+            run([base_python, "-m", "venv", venv])
+            run([
+                python, "-m", "pip", "install", "--no-index", "--find-links", WHEELHOUSE,
+                "--requirement", REQUIREMENTS_LOCK,
+            ])
+            if not python_probe(python)[0]:
+                raise RuntimeError("new pinned Python environment failed its dependency probe")
+            if python_base_executable(python) != expected_base:
+                raise RuntimeError(
+                    "new pinned Python environment is not bound to the signed bundled runtime"
+                )
+        except Exception:
+            if venv.exists() and not venv.is_symlink():
+                shutil.rmtree(venv, ignore_errors=True)
+            if backup is not None and backup.exists():
+                os.replace(backup, venv)
+                log("restored the previous Python environment after repair failed")
+            raise
     venv.chmod(0o700)
     setup_frida_host(base_python, support)
     identity.parent.mkdir(parents=True, exist_ok=True)
@@ -722,6 +827,28 @@ def setup_python(identity: Path, support: Path) -> Path:
         ])
     identity.chmod(0o600)
     return python
+
+
+def python_base_executable(python: Path) -> Path | None:
+    """Return the interpreter that created a base Python or virtualenv."""
+    if not python.is_file():
+        return None
+    try:
+        result = subprocess.run(
+            [str(python), "-c",
+             "import pathlib,sys; print(pathlib.Path(getattr(sys, '_base_executable', sys.executable)).resolve())"],
+            text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+            timeout=15, check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    value = result.stdout.strip()
+    if result.returncode != 0 or not value.startswith("/"):
+        return None
+    try:
+        return Path(value).resolve(strict=True)
+    except (OSError, RuntimeError):
+        return None
 
 
 def choose_target(requested: str | None, python: Path | None) -> str | None:
@@ -748,8 +875,12 @@ def choose_target(requested: str | None, python: Path | None) -> str | None:
         "if picked is false then error number -128\n"
         "return item 1 of picked"
     )
-    picked = subprocess.run(["/usr/bin/osascript", "-e", script], text=True,
-                            stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
+    try:
+        picked = subprocess.run(["/usr/bin/osascript", "-e", script], text=True,
+                                stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                                timeout=600, check=False)
+    except subprocess.TimeoutExpired:
+        raise SystemExit("device selection timed out; rerun setup when the SRD is connected")
     if picked.returncode:
         raise SystemExit("device selection was cancelled")
     selected = picked.stdout.strip()
@@ -778,10 +909,13 @@ def print_checks(checks: list[Check], as_json: bool) -> None:
     for item in checks:
         print(f"[{item.status:4}] {item.name}: {item.detail}")
         if item.fix and item.status == "FAIL":
-            print(f"       fix: {item.fix}")
+            print("       required action:")
+            for line in item.fix.splitlines():
+                print(f"         {line}")
 
 
 def main() -> int:
+    bundled_runtime = activate_bundled_runtime()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, help="per-user 0-Sky configuration file")
     parser.add_argument("--init-config", action="store_true", help="create or refresh secure configuration for the current user")
@@ -789,11 +923,11 @@ def main() -> int:
     parser.add_argument("--setup", action="store_true",
                         help="install tools/Python and install or repair all three per-device LaunchAgents")
     parser.add_argument("--install-tools", action="store_true",
-                        help="install only missing Homebrew command dependencies")
+                        help="source-developer compatibility only: install missing tools with an existing Homebrew")
     parser.add_argument("--fix-missing", action="store_true",
-                        help="install missing host tools and the pinned offline Python environment; no device required")
+                        help="verify the bundled host runtime and repair the pinned per-user Python environment; no device required")
     parser.add_argument("--install-homebrew", action="store_true",
-                        help="allow the official interactive Homebrew installer when brew is absent")
+                        help="deprecated compatibility flag; moving remote bootstrap scripts are refused")
     parser.add_argument("--setup-python", action="store_true",
                         help="create the exact pinned Python environment and SSH key")
     parser.add_argument("--install-companion", action="store_true",
@@ -803,6 +937,8 @@ def main() -> int:
     parser.add_argument("--udid", help="exact authorized SRD USB UDID; auto-detected when possible")
     parser.add_argument("--instance-name", help="stable per-device LaunchAgent suffix")
     parser.add_argument("--port", type=int)
+    parser.add_argument("--remote-port", type=int, default=22,
+                        help="device-side SSH port behind the exact-UDID USB tunnel")
     parser.add_argument("--identity", type=Path)
     parser.add_argument("--python", type=Path, help="candidate Python interpreter")
     parser.add_argument("--support", type=Path)
@@ -838,12 +974,17 @@ def main() -> int:
         print(json.dumps(public_user_config(config, config_file), indent=2, sort_keys=True))
         return 0
 
-    if not 1 <= args.port <= 65535:
-        raise SystemExit("--port must be between 1 and 65535")
+    if not 1 <= args.port <= 65535 or not 1 <= args.remote_port <= 65535:
+        raise SystemExit("--port and --remote-port must be between 1 and 65535")
 
-    if args.setup or args.install_tools or args.fix_missing:
+    if args.install_tools:
+        # Compatibility path for source developers only. Packaged releases use
+        # the hash-verified embedded runtime and never require Homebrew or CLT.
         request_command_line_tools()
         install_tools(allow_homebrew_install=args.install_homebrew)
+    elif (args.setup or args.fix_missing) and not bundled_runtime:
+        raise SystemExit("Required component missing: bundled host runtime. "
+                         + BUNDLED_RUNTIME_REPAIR)
     selected = select_python(args.python, support)
     if args.setup or args.setup_python or args.fix_missing:
         selected = setup_python(identity, support)
@@ -862,6 +1003,7 @@ def main() -> int:
             selected, INSTALLER, "--udid", target,
             "--ssh-key", identity, "--host", "127.0.0.1",
             "--port", str(args.port), "--instance-name", instance,
+            "--remote-port", str(args.remote_port),
             "--support", support,
         ])
 
@@ -869,7 +1011,7 @@ def main() -> int:
         args.sdk, args.python, support, identity,
         None if args.requirements_only else instance,
         None if args.requirements_only else target,
-        args.port,
+        args.port, args.remote_port,
     )
     if target:
         checks.append(Check("PASS", "USB target", target))

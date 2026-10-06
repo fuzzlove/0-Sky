@@ -1385,6 +1385,107 @@ print(json.dumps({'stopped':len(pids)}))'''
         raise RuntimeError("first-party foreground stop result is invalid")
 
 
+def resolve_devicectl() -> pathlib.Path:
+    """Return Xcode's supported CoreDevice client or fail actionably."""
+    discovered = run(["/usr/bin/xcrun", "--find", "devicectl"],
+                     timeout=30, check=False)
+    candidate = pathlib.Path(discovered.stdout.decode("utf-8", "replace").strip())
+    if (discovered.returncode or not candidate.is_absolute()
+            or candidate.name != "devicectl"):
+        raise RuntimeError(
+            "Apple devicectl is unavailable. Install the complete supported "
+            "Xcode release, open Xcode once to install its required components, "
+            "then select it with `sudo xcode-select --switch "
+            "/Applications/Xcode.app/Contents/Developer` and press Resume."
+        )
+    return candidate
+
+
+def install_app_with_devicectl(app: pathlib.Path, job_dir: pathlib.Path) -> None:
+    """Install one reviewed app through Apple's exact-device native service.
+
+    Do not enter pymobiledevice3's ctypes-backed CoreDevice client here. On
+    Intel macOS 26 its libffi callback allocator can loop before it opens a
+    device session, which defeats the caller's bounded operation timeout.
+    ``devicectl`` is already a declared Xcode prerequisite for SRD setup,
+    accepts an argv-safe app path, applies its own deadline, and writes a
+    machine-readable result. The caller then verifies the installed bytes over
+    the independently host-key-pinned SRD channel.
+    """
+    if not DEVICE_UDID:
+        raise RuntimeError("native app installation has no explicitly selected device UDID")
+    candidate = resolve_devicectl()
+    result_path = job_dir / "devicectl-install-result.json"
+    log_path = job_dir / "devicectl-install.log"
+    result_path.unlink(missing_ok=True)
+    log_path.unlink(missing_ok=True)
+    completed = run([
+        candidate, "device", "install", "app",
+        "--device", DEVICE_UDID, str(app),
+        "--timeout", "240",
+        "--json-output", result_path,
+        "--log-output", log_path,
+    ], timeout=270, check=False)
+    try:
+        report = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            "Apple devicectl did not produce its required JSON result. "
+            f"Inspect the private install log at {log_path}."
+        ) from error
+    installed = report.get("result", {}).get("installedApplications")
+    if completed.returncode or not isinstance(installed, list) or not installed:
+        raise RuntimeError(
+            "Apple devicectl did not confirm native app installation "
+            f"(exit {completed.returncode}). Inspect the private install log at "
+            f"{log_path}, keep the selected SRD unlocked and connected by USB, "
+            "then press Resume."
+        )
+
+
+def launch_app_with_devicectl(bundle_id: str, job_dir: pathlib.Path) -> None:
+    """Launch a newly installed first-party app on the exact selected SRD.
+
+    ``uiopen`` can return success while SpringBoard discards the first launch
+    request immediately after a native replacement. CoreDevice reports the
+    actual process launch and is already the supported, exact-device transport
+    used for the corresponding install.
+    """
+    if not DEVICE_UDID:
+        raise RuntimeError("native app launch has no explicitly selected device UDID")
+    candidate = resolve_devicectl()
+    result_path = job_dir / "devicectl-launch-result.json"
+    log_path = job_dir / "devicectl-launch.log"
+    result_path.unlink(missing_ok=True)
+    log_path.unlink(missing_ok=True)
+    completed = run([
+        candidate, "device", "process", "launch",
+        "--device", DEVICE_UDID,
+        "--terminate-existing",
+        "--timeout", "30",
+        "--json-output", result_path,
+        "--log-output", log_path,
+        bundle_id,
+    ], timeout=45, check=False)
+    try:
+        report = json.loads(result_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError, json.JSONDecodeError) as error:
+        raise RuntimeError(
+            "Apple devicectl did not produce its required launch result. "
+            f"Inspect the private launch log at {log_path}."
+        ) from error
+    process = report.get("result", {}).get("process", {})
+    if (completed.returncode or not isinstance(process, dict)
+            or not isinstance(process.get("processIdentifier"), int)
+            or process["processIdentifier"] <= 0):
+        raise RuntimeError(
+            "Apple devicectl did not confirm native app launch "
+            f"(exit {completed.returncode}). Inspect the private launch log at "
+            f"{log_path}, keep the selected SRD unlocked and connected by USB, "
+            "then press Resume."
+        )
+
+
 def install_native_control(app: pathlib.Path, bundle_id: str,
                            executable: str, job_dir: pathlib.Path) -> str:
     """Register reviewed 0-Sky code with Apple's native service and launch it."""
@@ -1392,13 +1493,7 @@ def install_native_control(app: pathlib.Path, bundle_id: str,
     if expected is None or (app.name, executable) != expected:
         raise RuntimeError("native first-party installer received another application")
     stop_running_control(bundle_id)
-    payload = job_dir / "native" / "Payload"
-    payload.mkdir(parents=True)
-    shutil.copytree(app, payload / app.name, symlinks=True)
-    ipa = job_dir / "native-control.ipa"
-    run(["/usr/bin/ditto", "-c", "-k", "--keepParent", payload, ipa], timeout=300)
-    run([PYMOBILE, "-m", "pymobiledevice3", "apps", "install", ipa,
-         "--native", "--udid", DEVICE_UDID], timeout=900)
+    install_app_with_devicectl(app, job_dir)
     listing = ssh("/var/jb/usr/bin/uicache -i " + shlex.quote(bundle_id), timeout=30).stdout.decode("utf-8", "replace")
     paths = [line.partition(": ")[2].strip() for line in listing.splitlines()
              if line.startswith("Path: ")]
@@ -1411,7 +1506,9 @@ def install_native_control(app: pathlib.Path, bundle_id: str,
     expected = [file_sha256(app / "Info.plist"), file_sha256(app / executable)]
     if observed != expected:
         raise RuntimeError("native first-party code differs from the signed Cryptex payload")
-    verify_foreground_launch(bundle_id, paths[0], executable)
+    launch_app_with_devicectl(bundle_id, job_dir)
+    verify_foreground_launch(bundle_id, paths[0], executable,
+                             launch_already_requested=True)
     return paths[0]
 
 
@@ -1535,8 +1632,20 @@ def rollback_native_control(previous: pathlib.Path | None, job_dir: pathlib.Path
         marker = previous / ".appregistrard"
         if not marker.is_file():
             prepare_native_control(previous, bundle_id)
-        build_install_cryptex(previous, bundle_id, job_dir / "rollback-restore")
-        install_native_control(previous, bundle_id, expected[1], job_dir / "rollback-restore")
+        restore = job_dir / "rollback-restore"
+        identifier, _ = build_install_cryptex(previous, bundle_id, restore)
+        if bundle_id == "codes.liquidsky.research.zerosky":
+            mount = locate_mount(identifier, previous.name)
+            registration_bytes = sum(
+                path.stat().st_size for path in previous.rglob("*")
+                if path.is_file() and not path.is_symlink()
+            )
+            register_and_link(
+                bundle_id, expected[1], previous.name, mount,
+                registration_bytes,
+                launch_policy=foreground_launch_policy(previous))
+        else:
+            install_native_control(previous, bundle_id, expected[1], restore)
         return "VERIFIED"
     run([PYMOBILE, "-m", "pymobiledevice3", "apps", "uninstall", bundle_id,
          "--native", "--udid", DEVICE_UDID], timeout=300, check=False)
@@ -1647,8 +1756,21 @@ def process_link_install(job_id: str, request: dict) -> None:
         set_status("Installing Link Cryptex", job_id)
         mutated = True
         identifier, _ = build_install_cryptex(app, bundle_id, job_dir)
-        set_status("Registering Link natively", job_id)
-        registered = install_native_control(app, bundle_id, executable, job_dir)
+        mount = locate_mount(identifier, app.name)
+        registration_bytes = sum(
+            path.stat().st_size for path in app.rglob("*")
+            if path.is_file() and not path.is_symlink()
+        )
+        set_status("Registering Link from its verified Cryptex", job_id)
+        # A first Link install has no existing MCM application for devicectl to
+        # update. On the Intel/iPhone hardware matrix, devicectl waited for its
+        # entire 240-second deadline without committing that initial bundle.
+        # Use the already mounted, hash-verified Cryptex with the dedicated
+        # appregistrard transaction; this is the same bounded MCM path used by
+        # all other fresh imports and it independently verifies installed bytes.
+        registered = register_and_link(
+            bundle_id, executable, app.name, mount, registration_bytes,
+            launch_policy=foreground_launch_policy(app))
         state = {"bundle_id": bundle_id, "cryptex_identifier": identifier,
                  "registered_path": registered, "installed_at": int(time.time()),
                  "embedded_components": components,
@@ -1755,8 +1877,14 @@ def build_install_cryptex(app: pathlib.Path, bundle_id: str, job_dir: pathlib.Pa
         f"image={image_mebibytes} MiB")
     timed_out = False
     try:
+        # The app Cryptex contains a fixed 384 MiB image. The paired userspace
+        # USB transfer completed in about three minutes on a warm Intel test
+        # host, but a cold SRD reinstall can legitimately exceed five minutes
+        # while cryptexd retires the prior generation. Match the installer's
+        # own bounded 900-second transfer deadline and leave two minutes for
+        # image creation and exact post-install verification.
         completed = run_process_group(
-            [cryptex_dir / "build_and_install.sh"], timeout=300,
+            [cryptex_dir / "build_and_install.sh"], timeout=1020,
             cwd=cryptex_dir, env=env,
         )
         build_output = completed.stdout + completed.stderr
@@ -1961,7 +2089,8 @@ for path in sorted(glob.glob('/var/mobile/Library/Logs/CrashReporter/*.ips'),
 
 def verify_foreground_launch(bundle_id: str, registered_app: str,
                              executable: str, *, observation_seconds: float = 8.0,
-                             launch_validation: str | None = None) -> None:
+                             launch_validation: str | None = None,
+                             launch_already_requested: bool = False) -> None:
     """Require an imported foreground app to survive its startup window.
 
     Registration is not a launch postcondition.  The former three-second
@@ -1970,14 +2099,15 @@ def verify_foreground_launch(bundle_id: str, registered_app: str,
     broken imports fail with the device's concise crash reason.
     """
     started_at = int(time.time())
-    opened = ssh(
-        f"/var/jb/usr/bin/uiopen --bundleid {shlex.quote(bundle_id)}",
-        timeout=30, check=False,
-    )
-    if opened.returncode:
-        detail = (opened.stderr or opened.stdout).decode(
-            "utf-8", "replace").strip()
-        raise RuntimeError("installed app could not be launched: " + detail)
+    if not launch_already_requested:
+        opened = ssh(
+            f"/var/jb/usr/bin/uiopen --bundleid {shlex.quote(bundle_id)}",
+            timeout=30, check=False,
+        )
+        if opened.returncode:
+            detail = (opened.stderr or opened.stdout).decode(
+                "utf-8", "replace").strip()
+            raise RuntimeError("installed app could not be launched: " + detail)
 
     if launch_validation == "controlled-exit-v1":
         time.sleep(1.0)
@@ -2611,8 +2741,12 @@ def process(job_id: str, request: dict) -> None:
     )
     staged_tombstone = suspend_removal_tombstone(bundle_id, job_id)
     try:
+        # devicectl is reliable for replacing the already installed Control
+        # application, while a fresh Link bundle has no MCM target to update
+        # and can wait until devicectl's full deadline. Register Link from its
+        # mounted, verified Cryptex through appregistrard instead.
         registered = (install_native_control(app, bundle_id, executable, job_dir)
-                      if bundle_id in NATIVE_FIRST_PARTY else
+                      if bundle_id == "com.liquidsky.CrypStore" else
                       register_and_link(bundle_id, executable, app_name, mount,
                                         registration_bytes,
                                         launch_policy=launch_policy))

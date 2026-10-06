@@ -10,6 +10,14 @@ as stated below.
 The vendored `control/ChOma/src` source retains its own upstream notices and
 license in `control/ChOma/LICENSE`.
 
+The compiled Bridge runtime uses pinned CPython archives produced by
+`astral-sh/python-build-standalone`. CPython is distributed under the Python
+Software Foundation License; the build system is under MPL-2.0. The runtime
+builder retains CPython, pip/vendor, and build-system license material inside
+the packaged runtime. Source provenance and archive hashes are locked in
+`manifests/host-runtime-sources.json`; the MPL-2.0 text used by the builder is
+retained in `bridge/HostRuntime/LICENSE.python-build-standalone.txt`.
+
 Third-party framework names, SDK interfaces, and dependencies remain the
 property of their respective owners and are not relicensed by this repository.
 No Apple SDK, Apple SRD binary, provisioning profile, certificate, pairing

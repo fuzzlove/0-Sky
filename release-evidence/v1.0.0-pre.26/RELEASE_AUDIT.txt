@@ -1,0 +1,65 @@
+RELEASE_AUDIT
+
+Product: 0-Sky Bridge
+Version: 1.0.0
+Build: 1
+Build mode: distribution
+Signing identities: Apple Development,Developer ID Application,Developer ID Installer
+
+ARCHITECTURE
+Main executable: PASS
+arm64: PASS
+x86_64: PASS
+Universal 2: PASS
+Nested binaries checked: 27 macOS; 24 device
+Python wheel coverage: PASS (147 native files)
+Bundled host runtime: PASS
+
+PACKAGING
+Application: PASS
+Installer: PASS
+Dependency kit: PASS
+EULA: PASS
+Permissions: PASS
+
+SECURITY
+Code signature: PASS
+Hardened runtime: PASS
+Entitlements: PASS
+Entitlements 0SkyBridge: PASS
+Entitlements 0SkyBridgeHelper: PASS
+Entitlements 0SkyBridgeService: PASS
+Entitlements device_bridge_supervisor: PASS
+Entitlements zero-sky-bluetooth-tunnel: PASS
+Signing team consistency: PASS
+Gatekeeper assessment: PASS
+Notarization: PASS
+Stapling: PASS
+
+PRIVACY
+Developer username leak: PASS
+Developer HOME leak: PASS
+Hostname leak: PASS
+Repository-path leak: PASS
+UDID leak: PASS
+Email leak: PASS
+Credential scan: PASS
+Private-key scan: PASS
+Debug artifact scan: PASS
+
+PORTABILITY
+Hard-coded path scan: PASS
+Tool discovery: PASS
+Architecture discovery: PASS
+Runtime paths: PASS
+Clean-build verification: PASS
+
+TESTING
+Apple Silicon: NOT_EXECUTED
+Intel: NOT_EXECUTED
+Fresh installation: NOT_EXECUTED
+Upgrade: NOT_EXECUTED
+Launch: NOT_EXECUTED
+
+FAILURES: NONE
+FINAL_RESULT=PASS

@@ -1,0 +1,21 @@
+{
+  "build": "1",
+  "files": [
+    {
+      "path": "0-Sky-Bridge-1.0.0-distribution-universal.pkg",
+      "role": "installer",
+      "sha256": "7eab748c43fcc1789944ba6590ab083004e711d829d8acf44d11ec2dcc4cd68f",
+      "size": 290051970
+    },
+    {
+      "path": "RELEASE_AUDIT.txt",
+      "role": "audit-report",
+      "sha256": "ea10c0ad5b0ce690852c97b158ae9b09111e926b0148c75fe10360ae3bcca5b0",
+      "size": 1347
+    }
+  ],
+  "mode": "distribution",
+  "product": "0-Sky Bridge",
+  "schema": 1,
+  "version": "1.0.0"
+}
