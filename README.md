@@ -1,3 +1,6 @@
+
+![0-Sky | Apple SRD Security Research](https://raw.githubusercontent.com/fuzzlove/0-Sky/refs/heads/main/0-Sky%20Secure%20Boot%20Research.png)
+
 # 0-Sky
 
 Note: This is a work in progress and the building blocks for where the project is currently.
