@@ -2,7 +2,18 @@
 ![0-Sky | Apple SRD Security Research](https://raw.githubusercontent.com/fuzzlove/0-Sky/refs/heads/main/0-Sky%20Secure%20Boot%20Research.png)
 
 # 0-Sky
+Independent iOS Security Research & Apple SRD Instrumentation Platform
 
+0-Sky is an independently developed security research platform designed to support reproducible vulnerability investigations across Apple's iOS security architecture.
+
+The project integrates macOS-hosted research management, device instrumentation, Cryptex lifecycle analysis, and structured evidence collection.
+
+Research areas include XNU kernel security, Cryptex and Image4 trust boundaries, TSS authorization workflows, AMFI/CoreTrust, and differential vulnerability analysis across iOS releases.
+
+The project distinguishes verified capabilities, experimental findings, and research objectives. It does not claim a consumer-device jailbreak or a vulnerability bypass without supporting evidence.
+
+Developed independently for authorized security research. Not affiliated with or endorsed by Apple.
+--
 Note: This is a work in progress and the building blocks for where the project is currently.
 
 ## Current Supported Release
